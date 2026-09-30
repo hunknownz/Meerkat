@@ -1,0 +1,20 @@
+{
+  "name": "meerkat",
+  "version": "0.1.0+codex.20260930123938",
+  "description": "Meerkat monitors active coding agents and runs bounded Pi tasks with token and time limits.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Meerkat",
+    "shortDescription": "Watch active coding agents and run bounded Pi development tasks.",
+    "longDescription": "Meerkat shows how many coding agents are active and what they are doing. Its first developer runtime is Pi: Codex prepares a clean linked worktree and task brief, the runner enforces token and time limits, Pi codes and commits, and Codex reviews the local result. The read-only monitor shows task, model, worktree, and elapsed time. An optional, non-official desktop adapter shows that monitor inside Codex when launched with a loopback debugging port.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "logo": "./assets/meerkat.png",
+    "composerIcon": "./assets/meerkat.png",
+    "defaultPrompt": "Prepare a clean linked worktree and task brief for this task, run it once with the Pi one-task runner, and review the resulting local commit."
+  }
+}
