@@ -1,6 +1,6 @@
 {
   "name": "meerkat",
-  "version": "0.1.0+codex.20260930144525",
+  "version": "0.1.0+codex.20260930155648",
   "description": "Meerkat monitors active coding agents and runs bounded Pi tasks with token and time limits.",
   "author": {
     "name": "Local developer"
