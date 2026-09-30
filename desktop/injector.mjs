@@ -19,7 +19,7 @@ export const DEFAULT_STATUS_URL = 'http://127.0.0.1:47824/';
 export const POLL_MS = 4000;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 const SHELL_SOURCE = readFileSync(new URL('./shell.js', import.meta.url), 'utf8');
-const ICON_DATA = `data:image/png;base64,${readFileSync(new URL('../assets/meerkat.png', import.meta.url)).toString('base64')}`;
+const ICON_DATA = `data:image/png;base64,${readFileSync(new URL('../assets/meerkat-sidebar.png', import.meta.url)).toString('base64')}`;
 
 export class UsageError extends Error {}
 

@@ -21,6 +21,18 @@
   const STRIP = ['id', 'href', 'aria-current', 'aria-selected', 'data-state', 'data-active', 'data-selected',
     'data-sidebar-destination'];
 
+  const lineIcon = (size) => {
+    const icon = document.createElement('span');
+    icon.setAttribute('data-meerkat-icon', '');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.style.cssText = `display:inline-block;width:${size}px;height:${size}px;flex:none;background:currentColor;`
+      + 'mask-position:center;mask-size:contain;mask-repeat:no-repeat;'
+      + '-webkit-mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;';
+    icon.style.maskImage = `url("${iconSrc}")`;
+    icon.style.webkitMaskImage = `url("${iconSrc}")`;
+    return icon;
+  };
+
   let monitor = window.__meerkat;
   if (!monitor) {
     monitor = window.__meerkat = { state: null, open: false, observer: null, timer: 0, savedPosition: null };
@@ -43,12 +55,7 @@
         if (!done && t.nodeValue.trim()) { t.nodeValue = 'Meerkat'; done = true; } else if (t.nodeValue.trim()) t.nodeValue = '';
       }
       if (!done) node.textContent = 'Meerkat';
-      const icon = document.createElement('img');
-      icon.setAttribute('data-meerkat-icon', '');
-      icon.src = iconSrc;
-      icon.alt = '';
-      icon.setAttribute('aria-hidden', 'true');
-      icon.style.cssText = 'width:18px;height:18px;flex:none;';
+      const icon = lineIcon(18);
       if (iconParent) iconParent.prepend(icon);
       else node.prepend(icon);
     };
@@ -128,10 +135,7 @@
       };
       const muted = 'opacity:.7;';
       const heading = el('div', undefined, 'display:flex;align-items:center;gap:10px;margin:0 0 4px;');
-      const brandmark = el('img');
-      brandmark.src = iconSrc;
-      brandmark.alt = '';
-      brandmark.style.cssText = 'width:28px;height:28px;flex:none;';
+      const brandmark = lineIcon(28);
       heading.append(brandmark, el('h2', 'Meerkat', 'margin:0;font-size:18px;font-weight:600;'));
       const nodes = [heading];
       const status = el('p', '', 'margin:0 0 16px;' + muted);
