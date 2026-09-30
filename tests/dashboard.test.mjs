@@ -70,7 +70,7 @@ test('starts on port 0, binds loopback, and serves the control-panel UI', async 
     assert.match(res.headers.get('content-type') || '', /text\/html/);
     const body = await res.text();
     assert.match(body, /<title>Meerkat · Agent 状态<\/title>/);
-    assert.match(body, /<h1><img class="brandmark" src="\/meerkat\.svg" alt="">Meerkat/);
+    assert.match(body, /<h1><img class="brandmark" src="\/meerkat\.png" alt="">Meerkat/);
     assert.match(body, /src="\/app\.js"/);
 
     const css = await fetch(new URL('/app.css', base));
@@ -79,16 +79,16 @@ test('starts on port 0, binds loopback, and serves the control-panel UI', async 
     const js = await fetch(new URL('/app.js', base));
     assert.equal(js.status, 200);
     assert.match(js.headers.get('content-type') || '', /javascript/);
-    const icon = await fetch(new URL('/meerkat.svg', base));
+    const icon = await fetch(new URL('/meerkat.png', base));
     assert.equal(icon.status, 200);
-    assert.match(icon.headers.get('content-type') || '', /image\/svg\+xml/);
-    assert.match(await icon.text(), /viewBox="0 0 128 128"/);
+    assert.match(icon.headers.get('content-type') || '', /image\/png/);
+    assert.ok((await icon.arrayBuffer()).byteLength > 0);
   });
 });
 
 test('non-GET methods on UI assets return 405 JSON with Allow: GET', async () => {
   await withServer(async (base) => {
-    for (const path of ['/', '/app.css', '/app.js', '/meerkat.svg']) {
+    for (const path of ['/', '/app.css', '/app.js', '/meerkat.png']) {
       for (const method of ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']) {
         const res = await fetch(new URL(path, base), { method });
         assert.equal(res.status, 405, `${method} ${path}`);

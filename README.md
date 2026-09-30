@@ -1,6 +1,6 @@
 # Meerkat
 
-![Meerkat icon](./assets/meerkat.svg)
+![Meerkat icon](./assets/meerkat.png)
 
 Meerkat shows which coding agents are running and what they are doing. Its first developer runtime is Pi: the runner handles one Pi CLI coding task in a clean linked Git worktree, enforces wall-time/token caps, and writes a small private run summary. Codex reviews the resulting commit. No dependencies; needs Node 22+ and the `pi` CLI.
 

@@ -20,7 +20,7 @@ const ASSETS = {
   '/': { file: 'index.html', type: 'text/html' },
   '/app.css': { file: 'app.css', type: 'text/css' },
   '/app.js': { file: 'app.js', type: 'text/javascript' },
-  '/meerkat.svg': { file: '../../assets/meerkat.svg', type: 'image/svg+xml' },
+  '/meerkat.png': { file: '../../assets/meerkat.png', type: 'image/png' },
 };
 const COLLECTIONS = ['workspaces', 'repositories', 'agents', 'tasks'];
 
