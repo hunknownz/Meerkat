@@ -3,7 +3,7 @@
 ![Meerkat icon](./assets/meerkat.png)
 
 The high-resolution artwork is `assets/meerkat-artwork.png`; `assets/meerkat.png` is the 512px plugin export.
-The Codex sidebar uses a separate, transparent upright meerkat line icon (`assets/meerkat-sidebar.svg`). Its compact vector drawing uses a consistent stroke and appears at 30px in the navigation rail. The sidebar colors the line art with the UI text color. Earlier raster studies remain in `assets/meerkat-sidebar.png` and `assets/meerkat-sidebar-artwork.png`.
+The Codex sidebar uses a separate, transparent upright meerkat line icon (`assets/meerkat-sidebar.svg`). Its compact vector drawing uses a consistent stroke and appears at 22px in the navigation rail. The sidebar colors the line art with the UI text color. Earlier raster studies remain in `assets/meerkat-sidebar.png` and `assets/meerkat-sidebar-artwork.png`.
 
 Meerkat shows which coding agents are running and what they are doing. Its first developer runtime is Pi: the runner handles one Pi CLI coding task in a clean linked Git worktree, enforces wall-time/token caps, and writes a small private run summary. Codex reviews the resulting commit. No dependencies; needs Node 22+ and the `pi` CLI.
 

@@ -55,7 +55,7 @@
         if (!done && t.nodeValue.trim()) { t.nodeValue = 'Meerkat'; done = true; } else if (t.nodeValue.trim()) t.nodeValue = '';
       }
       if (!done) node.textContent = 'Meerkat';
-      const icon = lineIcon(30);
+      const icon = lineIcon(22);
       if (iconParent) iconParent.prepend(icon);
       else node.prepend(icon);
     };
