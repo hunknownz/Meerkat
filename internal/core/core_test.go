@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -305,6 +306,16 @@ func TestReviewFixAndCap(t *testing.T) {
 	if got := strings.Join(e.fx.roles, ","); got != "developer,reviewer,developer,reviewer,polisher,reviewer" {
 		t.Fatal(got)
 	}
+	var rounds []int
+	for _, r := range runsOf(e.state(), task.ID) {
+		if r.Metrics == nil || r.Metrics.FixRound == nil {
+			t.Fatalf("fixRound unknown for run %s", r.Role)
+		}
+		rounds = append(rounds, *r.Metrics.FixRound)
+	}
+	if fmt.Sprint(rounds) != "[0 0 1 0 0 0]" {
+		t.Fatalf("fix rounds %v", rounds)
+	}
 	if !strings.Contains(e.fx.reqs[2].TaskBrief, "fix it") {
 		t.Fatal("fix brief lacks findings")
 	}
@@ -418,6 +429,105 @@ func TestSchedulingParallelQueueDependencies(t *testing.T) {
 	res = e.exec(up.ID, down.ID)
 	want(t, res, 0, model.TaskFailed, "scope_violation")
 	want(t, res, 1, model.TaskBlocked, "dependency_failed")
+}
+
+// runsOf returns the task's runs in start order.
+func runsOf(s *model.State, taskID string) []model.Run {
+	var out []model.Run
+	for _, r := range s.Runs {
+		if r.TaskID == taskID {
+			out = append(out, r)
+		}
+	}
+	at := func(r model.Run) time.Time { v, _ := time.Parse(time.RFC3339Nano, r.StartedAt); return v }
+	slices.SortStableFunc(out, func(a, b model.Run) int { return at(a).Compare(at(b)) })
+	return out
+}
+
+func TestQueueMetricsOneSlot(t *testing.T) {
+	e := setup(t)
+	one := 1
+	if _, err := e.c.Settings(model.SettingsPatch{MaxConcurrency: &one}); err != nil {
+		t.Fatal(err)
+	}
+	a := e.prepare(e.worktree("qa"), nil)
+	b := e.prepare(e.worktree("qb"), nil)
+	res := e.exec(a.ID, b.ID)
+	want(t, res, 0, model.TaskDelivered, "")
+	want(t, res, 1, model.TaskDelivered, "")
+	st := e.state()
+	ra, rb := runsOf(st, a.ID), runsOf(st, b.ID)
+	if len(ra) == 0 || len(rb) == 0 {
+		t.Fatal("missing runs")
+	}
+	ts := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	first, waited := ra, rb
+	if ts(rb[0].StartedAt).Before(ts(ra[0].StartedAt)) {
+		first, waited = rb, ra
+	}
+	w := waited[0].Metrics
+	if w == nil || w.QueueSeconds == nil || w.QueuedAt == nil || *w.QueueSeconds <= 0 {
+		t.Fatalf("queued task has no positive queue wait: %+v", w)
+	}
+	// The single slot was held by the other task's whole pipeline: the wait covers it, and starts no
+	// later than the first task's first run (both were queued together).
+	lastEnd := ts(*first[len(first)-1].EndedAt)
+	if q := ts(*w.QueuedAt); q.After(ts(first[0].StartedAt)) || q.Add(time.Duration(*w.QueueSeconds*float64(time.Second))).Before(lastEnd) {
+		t.Fatalf("queue wait %v from %s does not cover slot holder ending %s", *w.QueueSeconds, *w.QueuedAt, lastEnd)
+	}
+	if fq := first[0].Metrics; fq == nil || fq.QueueSeconds == nil || *fq.QueueSeconds < 0 || *fq.QueueSeconds >= *w.QueueSeconds {
+		t.Fatalf("first task queue %+v", fq)
+	}
+	for _, runs := range [][]model.Run{first, waited} {
+		for i, r := range runs {
+			m := r.Metrics
+			if m == nil || m.FixRound == nil || *m.FixRound != 0 || m.ModelSeconds != nil || m.TestSeconds != nil || m.WallSeconds == nil {
+				t.Fatalf("run %d metrics %+v", i, m)
+			}
+			if i > 0 && (m.QueueSeconds == nil || *m.QueueSeconds != 0 || m.QueuedAt == nil || *m.QueuedAt != r.StartedAt) {
+				t.Fatalf("later role queue %+v", m)
+			}
+		}
+	}
+}
+
+func TestInspectPreservesUnknown(t *testing.T) {
+	e := setup(t)
+	wt := e.worktree("insp")
+	f := inspect(wt)
+	if f.Err != nil || !f.Exists || f.Branch != "insp" || !f.Clean {
+		t.Fatalf("facts %+v", f)
+	}
+	// A tag with the same name must not change the branch reading (no --short disambiguation).
+	sh(t, e.repo, "tag", "insp")
+	if f := inspect(wt); f.Err != nil || f.Branch != "insp" {
+		t.Fatalf("ambiguous facts %+v", f)
+	}
+	sh(t, wt, "checkout", "-q", "--detach")
+	if f := inspect(wt); f.Err != nil || !f.Exists || f.Branch != "" {
+		t.Fatalf("detached facts %+v", f)
+	}
+	if f := inspect(filepath.Join(e.root, "nope")); f.Err != nil || f.Exists {
+		t.Fatalf("missing facts %+v", f)
+	}
+	// Git failing to answer is unknown (Err), never a determined branch/dirty fact.
+	plain := filepath.Join(e.root, "plain")
+	os.Mkdir(plain, 0o755)
+	t.Setenv("GIT_CEILING_DIRECTORIES", e.root)
+	f = inspect(plain)
+	var ge *gitError
+	if f.Exists || !errors.As(f.Err, &ge) || ge.Code != 128 || ge.Stderr == "" {
+		t.Fatalf("unknown facts %+v", f)
+	}
+	if _, why := verifyRole("developer", model.Task{}, "", f, executor.Result{Report: &executor.Report{Summary: "s", Checks: []executor.Check{}, KnownGaps: []string{}}}); why != inspectFailed {
+		t.Fatalf("verify reason %q", why)
+	}
 }
 
 func waitRun(t *testing.T, e *env, state string) model.Run {
