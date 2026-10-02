@@ -33,6 +33,8 @@ Profile fields: `projectId`, `provider`, `model`, `authEnv` (env var name), rela
 
 ## Architecture (current)
 
+The next architecture direction is Go with React + TypeScript; SQLite and an executor interface are recommended in the [migration proposal](design/architecture-go-sqlite-react-20261002.md). This is a design decision record, not an implemented runtime change. The current stack remains as described below.
+
 - **Runtime:** Node 22, native ES modules, only Node built-ins; no npm dependencies. State is JSON files in a private filesystem data dir (no database).
 - **UI:** vanilla HTML/CSS/JS. One shared DOM factory (`dashboard/public/ui.js`) renders both the browser monitor and the desktop overlay.
 - **Monitor server:** loopback-only `node:http` server; the page polls a workflow snapshot every 4 seconds.
