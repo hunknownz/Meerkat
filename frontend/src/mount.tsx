@@ -55,6 +55,7 @@ export function mount(container: Element, initialState: InitialState = {}, optio
   const style = document.createElement('style');
   style.textContent = css;
   const host = document.createElement('div');
+  host.className = 'meerkat-mount-host';
   shadow.replaceChildren(style, host);
 
   const store = new Store();

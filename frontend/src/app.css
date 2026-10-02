@@ -385,7 +385,11 @@
 
 /* ---- live additions ---- */
 html, body { margin: 0; padding: 0; }
-body > #meerkat-ui { min-height: 100vh; }
+/* browser page: fill the viewport with the theme background */
+#root > #meerkat-ui { min-height: 100vh; min-height: 100dvh; }
+/* embedded mount: fill the bounded container, never the whole window */
+.meerkat-mount-host { display: block; height: 100%; }
+.meerkat-mount-host > #meerkat-ui { min-height: 100%; }
 #meerkat-ui .notice.live { color: var(--green); background: var(--green-soft); }
 #meerkat-ui .notice.stale { color: var(--red); background: var(--red-soft); }
 #meerkat-ui .btn:disabled, #meerkat-ui .ctl select:disabled, #meerkat-ui .ctl input:disabled { opacity: .55; cursor: not-allowed; }
