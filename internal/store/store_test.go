@@ -1,12 +1,14 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
 )
@@ -267,5 +269,99 @@ func TestBackupRestoreAfterWAL(t *testing.T) {
 	os.WriteFile(bad, []byte("garbage"), 0o600)
 	if ValidateBackup(bad) == nil {
 		t.Fatal("garbage validated")
+	}
+}
+
+func TestOpenDataDirWithURISpecialChars(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "my data ?x=1 #frag %20")
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Update(func(st *model.State) error { seed(st); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, dbName)); err != nil || fi.Size() == 0 {
+		t.Fatalf("database not created inside data dir: %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(dir))
+	for _, e := range entries {
+		if e.Name() != filepath.Base(dir) {
+			t.Fatalf("stray file created outside data dir: %q", e.Name())
+		}
+	}
+	st, err := s.Read()
+	if err != nil || len(st.Tasks) != 3 {
+		t.Fatalf("read back: %v", err)
+	}
+	if err := s.Backup(filepath.Join(dir, "b ?#.db")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReadSnapshotNotBlockedByWriter(t *testing.T) {
+	s, _ := openTemp(t)
+	if err := s.Update(func(st *model.State) error { seed(st); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- s.tx(func(tx *sql.Tx) error {
+			st, err := readState(tx)
+			if err != nil {
+				return err
+			}
+			st.Projects[0].Name = "CHANGED"
+			st.Tasks = st.Tasks[:2]
+			st.Tasks[1].Dependencies = nil
+			if err := writeState(tx, st); err != nil {
+				return err
+			}
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-held:
+	case err := <-done:
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 4)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st, err := s.Read()
+			if err != nil {
+				errs <- err
+				return
+			}
+			if st.Projects[0].Name != "P" || len(st.Tasks) != 3 || len(st.Tasks[1].Dependencies) != 1 {
+				errs <- fmt.Errorf("reader saw uncommitted state")
+			}
+		}()
+	}
+	finished := make(chan struct{})
+	go func() { wg.Wait(); close(finished) }()
+	select {
+	case <-finished:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("reads blocked behind writer")
+	}
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Read()
+	if err != nil || st.Projects[0].Name != "CHANGED" || len(st.Tasks) != 2 {
+		t.Fatalf("committed state not visible: %v", err)
 	}
 }

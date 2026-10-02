@@ -195,8 +195,10 @@ func Aggregate(runs []Run) AggregateUsage {
 		if u.UsageCompleteness != UsageComplete {
 			complete = false
 		}
-		if u.EstimatedCostUsd != nil && *u.EstimatedCostUsd > 0 {
-			cost += *u.EstimatedCostUsd
+		// A provider-reported cost of exactly 0 is a legitimate known value; nil, negative,
+		// NaN or infinite costs are unknown and keep the aggregate cost null.
+		if c := u.EstimatedCostUsd; c != nil && *c >= 0 && !math.IsNaN(*c) && !math.IsInf(*c, 0) {
+			cost += *c
 		} else {
 			costKnown = false
 		}
@@ -224,7 +226,7 @@ func Aggregate(runs []Run) AggregateUsage {
 		v := knownSubtotal
 		out.Tokens.Total = &v
 	}
-	if out.Completeness == UsageComplete && costKnown && spawned > 0 {
+	if out.Completeness == UsageComplete && costKnown && spawned > 0 && !math.IsInf(cost, 0) && !math.IsNaN(cost) {
 		c := math.Round(cost*1e6) / 1e6
 		out.EstimatedCostUsd = &c
 	}
