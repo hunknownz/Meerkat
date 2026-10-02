@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseWorkflow, parseLegacy, POLL_MS, TIMEOUT_MS } from '../dashboard/public/app.js';
+import { parseWorkflow, parseLegacy, startDashboard, POLL_MS, TIMEOUT_MS } from '../dashboard/public/app.js';
 import {
   createMeerkatUI, esc, elapsedSeconds, formatDuration, formatLocalTime, safeHref,
-  modelLabel, runUsage, runCost, summarizeUsage, taskCategory,
+  modelLabel, runUsage, runCost, summarizeUsage, taskCategory, liveRunSummary,
 } from '../dashboard/public/ui.js';
 
 const read = (p) => readFileSync(new URL(`../dashboard/public/${p}`, import.meta.url), 'utf8');
@@ -21,6 +21,17 @@ test('parseWorkflow accepts the API shape and rejects malformed payloads', () =>
     assert.throws(() => parseWorkflow(bad), /malformed/);
   }
   assert.throws(() => parseLegacy({}), /malformed/);
+  // optional link metadata survives, bounded; blanks and non-strings are dropped
+  const [linked, bare] = parseLegacy([
+    { id: 'b', task: 't', runId: ` ${'r'.repeat(100)} `, taskId: 'task-1', role: 'developer', extra: 'x' },
+    { id: 'c', runId: '  ', taskId: 7, role: null },
+  ]);
+  assert.equal(linked.runId, 'r'.repeat(64));
+  assert.equal(linked.taskId, 'task-1');
+  assert.equal(linked.role, 'developer');
+  assert.equal('extra' in linked, false);
+  assert.deepEqual(Object.keys(bare).sort(), ['id', 'model', 'startedAt', 'task', 'worktree']);
+  assert.equal(parseLegacy(Array.from({ length: 80 }, () => ({}))).length, 50);
   assert.equal(POLL_MS, 4000);
   assert.ok(TIMEOUT_MS < POLL_MS);
 });
@@ -99,16 +110,33 @@ test('ui.js is a host-neutral factory scoped to its root', () => {
 });
 
 test('ui.js carries no sample data, demo toggles or config/key inputs', () => {
-  assert.doesNotMatch(UI, /示例|data-demo|data-sim|sim-stop|DeepSeek|Opus|¥|NOW = '|apiKey|api_key|configPath|password/i);
-  assert.doesNotMatch(UI, /type="(password|file|text)"/);
+  // no sample/demo constants or fixed clocks (explanatory copy may mention any word)
+  assert.doesNotMatch(UI, /\b(?:const|let|var)\s+(?:SAMPLE|DEMO|MOCK|FAKE|FIXTURE|EXAMPLE)\w*\s*=/i);
+  assert.doesNotMatch(UI, /\b(?:const|let|var)\s+NOW\s*=/);
+  assert.doesNotMatch(UI, /data-(?:demo|sim)\b|sim-stop|示例数据/);
+  // no hard-coded provider/model names or currency amounts inside string literals
+  for (const m of UI.matchAll(/(['"`])((?:(?!\1)[^\\\n]|\\.)*)\1/g)) assert.doesNotMatch(m[2], /DeepSeek|Opus|¥\s*\d/i, m[0]);
+  // form controls: only search + bounded selects; no credential/config/path inputs
+  const controls = [...UI.matchAll(/<(input|textarea|select)\b[^>]*>/g)].map((m) => m[0]);
+  assert.ok(controls.length >= 3);
+  for (const c of controls) {
+    assert.doesNotMatch(c, /^<textarea/, c);
+    if (c.startsWith('<input')) assert.match(c, /\btype="search"/, c);
+    const names = [...c.matchAll(/\b(?:id|name|data-setting|data-profile|data-ref)="([^"]*)"/g)].map((m) => m[1]).join(' ');
+    assert.doesNotMatch(names, /key|token|secret|passw|credential|config|path|file/i, c);
+  }
+  const settings = [...UI.matchAll(/data-setting="([^"]*)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(settings, ['maxConcurrency', 'maxFixRounds']);
   // stop acknowledgement must not claim the run stopped
   assert.match(UI, /不代表进程已停止/);
   assert.match(UI, /requestId: prev\?\.requestId \|\| uuid\(\)/);
   // stale snapshot is labelled and the run count becomes unknown
   assert.match(UI, /运行数未知/);
   assert.match(UI, /data-act="reconnect"/);
-  // legacy single-run executions live in their own compatibility section
-  assert.match(UI, /兼容 · 单次 Pi 执行/);
+  // workflow runs and not-yet-linked independent Pi runs are labelled per category
+  assert.match(UI, /<b>工作流运行<\/b>/);
+  assert.match(UI, /<b>独立运行，尚未关联任务<\/b>/);
+  assert.doesNotMatch(UI, /兼容|run\.mjs|单次 Pi/);
   // escape + validated hrefs for every link
   for (const m of UI.matchAll(/href="\$\{([^}]+)\}"/g)) assert.match(m[1], /^esc\(href\)$/);
   // accessibility: dialog semantics, Escape, tabs, focus return
@@ -128,7 +156,13 @@ test('standalone bootstrap only reads/writes the workflow API with the session t
 test('index.html mounts #meerkat-ui with a module script and no inline code', () => {
   assert.match(HTML, /<div id="meerkat-ui">/);
   assert.match(HTML, /<script type="module" src="\/app\.js"><\/script>/);
-  assert.doesNotMatch(HTML, /<script>|<script(?![^>]*src=)[^>]*>|style=|on[a-z]+="|https?:\/\//);
+  assert.doesNotMatch(HTML, /<script>|<script(?![^>]*src=)[^>]*>|https?:\/\//);
+  // inline styles / event handlers only count as real attributes inside a tag
+  for (const tag of HTML.match(/<[a-z][^>]*>/gi) || []) {
+    assert.doesNotMatch(tag, /\sstyle\s*=/i, tag);
+    assert.doesNotMatch(tag, /\son[a-z]+\s*=/i, tag);
+  }
+  assert.match(HTML, /content=/); // attributes like content= must not trip the event check
   assert.match(HTML, /role="status"/);
 });
 
@@ -141,4 +175,98 @@ test('app.css stays scoped to #meerkat-ui and keeps the MIT notice', () => {
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /max-width: 420px/);
   assert.doesNotMatch(css, /@import|url\(\s*['"]?https?:/);
+});
+
+test('live counts: managed runs are never counted twice and unknown is never zero', () => {
+  const snap = {
+    runs: [{ id: 'AAA', state: 'starting' }, { id: 'bbb', state: 'stopping' }, { id: 'ccc', state: 'unknown' }, { id: 'ddd', state: 'succeeded' }],
+    counts: { running: 1, queued: 0, unknown: 1 },
+  };
+  const legacy = [
+    { id: '1', runId: 'aaa' }, { id: '2', runId: 'bbb' }, { id: '3', runId: 'ccc' }, { id: '4', runId: 'ddd' },
+    { id: '5' }, { id: '6', runId: 'zzz' }, null,
+  ];
+  const s = liveRunSummary(snap, legacy);
+  assert.deepEqual(s.list.map((a) => a.id), ['5', '6']);
+  assert.deepEqual({ managed: s.managed, independent: s.independent, total: s.total, queued: s.queued, unknown: s.unknown },
+    { managed: 1, independent: 2, total: 3, queued: 0, unknown: 1 });
+  // one independent Pi with no managed runs is "1 running", not 0
+  const solo = liveRunSummary({ runs: [], counts: { running: 0, queued: 0 } }, [{ id: 'x' }]);
+  assert.equal(solo.total, 1);
+  assert.equal(solo.unknown, 0);
+  // malformed counts stay unknown (null), never a fake 0
+  for (const counts of [undefined, null, [], { running: -1 }, { running: '2' }, { running: 1.5 }]) {
+    const m = liveRunSummary({ runs: [], counts }, [{ id: 'x' }]);
+    assert.equal(m.managed, null);
+    assert.equal(m.total, null);
+    assert.equal(m.independent, 1);
+  }
+  assert.equal(liveRunSummary({ counts: { running: 0, queued: 'x', unknown: -2 } }).queued, null);
+  assert.equal(liveRunSummary({ counts: { running: 0, unknown: -2 } }).unknown, null);
+  assert.equal(liveRunSummary(null).total, null);
+  assert.equal(liveRunSummary({ runs: [], counts: { running: 0 } }, Array.from({ length: 80 }, (_, i) => ({ id: String(i) }))).independent, 50);
+});
+
+function fakeDashboard() {
+  const calls = { update: 0, disconnected: 0, destroy: 0 };
+  let onAction = null;
+  const createUI = (_root, opts) => {
+    onAction = opts.onAction;
+    return { update() { calls.update += 1; }, setDisconnected() { calls.disconnected += 1; }, destroy() { calls.destroy += 1; } };
+  };
+  return { calls, createUI, act: (a) => onAction(a) };
+}
+
+function deferredFetch() {
+  const pending = [];
+  const fetch = (url, init) => new Promise((resolve, reject) => {
+    pending.push({ url, resolve, reject });
+    init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+  });
+  return { pending, fetch };
+}
+
+const okBody = { ok: true, data: { schemaVersion: 1, runs: [] }, legacyActive: [], sessionToken: 't' };
+const okResponse = { ok: true, status: 200, json: async () => okBody };
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('startDashboard: destroy stops in-flight polls from updating or retrying', async (t) => {
+  const real = globalThis.fetch;
+  t.after(() => { globalThis.fetch = real; });
+  const f = deferredFetch();
+  globalThis.fetch = f.fetch;
+  const d = fakeDashboard();
+  const stop = startDashboard({}, { createUI: d.createUI });
+  assert.equal(f.pending.length, 1);
+  const first = f.pending[0];
+  stop();
+  stop(); // idempotent
+  first.resolve(okResponse); // late response after teardown (or abort already rejected it)
+  await tick(); await tick();
+  assert.equal(d.calls.update, 0);
+  assert.equal(d.calls.disconnected, 0);
+  assert.equal(d.calls.destroy, 1);
+  assert.equal(f.pending.length, 1, 'no retry after teardown');
+  await assert.rejects(d.act({ type: 'reconnect' }), /已关闭/);
+  assert.equal(f.pending.length, 1);
+});
+
+test('startDashboard: repeated manual reconnects share one request', async (t) => {
+  const real = globalThis.fetch;
+  t.after(() => { globalThis.fetch = real; });
+  const f = deferredFetch();
+  globalThis.fetch = f.fetch;
+  const d = fakeDashboard();
+  const stop = startDashboard({}, { createUI: d.createUI });
+  f.pending[0].resolve({ ok: false, status: 500, json: async () => ({ ok: false, error: 'down' }) });
+  await tick(); await tick();
+  assert.equal(d.calls.disconnected, 1);
+  const a = d.act({ type: 'reconnect' });
+  const b = d.act({ type: 'reconnect' });
+  assert.equal(f.pending.length, 2, 'second reconnect reuses the in-flight poll');
+  f.pending[1].resolve(okResponse);
+  await Promise.all([a, b]);
+  assert.equal(d.calls.update, 1);
+  stop();
+  assert.equal(f.pending.length, 2, 'scheduled retry cleared on teardown');
 });

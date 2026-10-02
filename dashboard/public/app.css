@@ -391,7 +391,18 @@ body > #meerkat-ui { min-height: 100vh; }
 #meerkat-ui .btn:disabled, #meerkat-ui .ctl select:disabled, #meerkat-ui .ctl input:disabled { opacity: .55; cursor: not-allowed; }
 #meerkat-ui .btn.primary { background: var(--accent); color: var(--accent-fg); }
 #meerkat-ui .ctx-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; max-height: 320px; overflow: auto; }
-#meerkat-ui .compat .badge { flex: none; }
+/* independent (not yet task-linked) Pi rows: right cell never wraps, long paths truncate on their own line */
+#meerkat-ui .independent .row { align-items: flex-start; }
+#meerkat-ui .independent .badge { flex: none; margin-top: 2px; }
+#meerkat-ui .independent .who { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+#meerkat-ui .independent .num { display: flex; flex-direction: column; align-items: flex-end; flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#meerkat-ui .independent .num b { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#meerkat-ui .independent .num small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+#meerkat-ui .independent .row .sub.path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@media (max-width: 680px) {
+  #meerkat-ui .independent .row { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  #meerkat-ui .independent .row .sub.path { white-space: nowrap; }
+}
 #meerkat-ui .err { color: var(--red); }
 #meerkat-ui h1 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
 #meerkat-ui .brandmark { width: 18px; height: 18px; }

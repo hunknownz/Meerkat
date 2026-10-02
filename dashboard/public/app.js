@@ -10,12 +10,20 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const text = (v) => (typeof v === 'string' ? v.slice(0, MAX_TEXT) : '');
 
-/** Validates one legacy single-run entry list (GET /api/active agent shape). */
+const MAX_LEGACY = 50;
+// Optional link metadata, kept only when it is a non-empty bounded string.
+const OPTIONAL = { runId: 64, taskId: 128, role: 40 };
+
+/** Validates the independent Pi heartbeat list (GET /api/active agent shape). */
 export function parseLegacy(list) {
   if (!Array.isArray(list)) throw new Error('malformed');
-  return list.map((a) => {
+  return list.slice(0, MAX_LEGACY).map((a) => {
     if (!a || typeof a !== 'object') throw new Error('malformed');
-    return { id: text(a.id), task: text(a.task), model: text(a.model), worktree: text(a.worktree), startedAt: text(a.startedAt) };
+    const out = { id: text(a.id), task: text(a.task), model: text(a.model), worktree: text(a.worktree), startedAt: text(a.startedAt) };
+    for (const [k, max] of Object.entries(OPTIONAL)) {
+      if (typeof a[k] === 'string' && a[k].trim()) out[k] = a[k].trim().slice(0, max);
+    }
+    return out;
   });
 }
 
@@ -31,9 +39,11 @@ export function parseWorkflow(payload) {
   return { data, legacyActive: parseLegacy(payload.legacyActive ?? []), sessionToken };
 }
 
-async function fetchJson(url, init = {}) {
+async function fetchJson(url, init = {}, outer = null) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const cancel = () => ctl.abort();
+  if (outer) { if (outer.aborted) ctl.abort(); else outer.addEventListener('abort', cancel, { once: true }); }
   try {
     const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin', ...init, signal: ctl.signal });
     let body = null;
@@ -44,22 +54,31 @@ async function fetchJson(url, init = {}) {
     throw new Error(e?.name === 'AbortError' ? '请求超时' : (text(e?.message) || '网络错误'));
   } finally {
     clearTimeout(timer);
+    outer?.removeEventListener('abort', cancel);
   }
 }
 
-/** Starts polling into `root`; returns a stop function. `fetchImpl`-free so tests can stub global fetch. */
-export function startDashboard(root) {
+/**
+ * Starts polling into `root`; returns a stop function. Uses global fetch so
+ * tests can stub it; `deps.createUI` lets tests replace the DOM factory.
+ * After stop, no in-flight response may update the UI or schedule a retry.
+ */
+export function startDashboard(root, deps = {}) {
+  const createUI = typeof deps.createUI === 'function' ? deps.createUI : createMeerkatUI;
   let token = '';
   let timer = 0;
   let inFlight = null;
   let stopped = false;
+  const life = new AbortController();
 
   const write = (method, path, body) => {
+    if (stopped) return Promise.reject(new Error('已关闭'));
     if (!token) return Promise.reject(new Error('尚未取得会话令牌，请先重新连接'));
-    return fetchJson(path, { method, headers: { 'Content-Type': 'application/json', 'X-Meerkat-Token': token }, body: JSON.stringify(body) });
+    return fetchJson(path, { method, headers: { 'Content-Type': 'application/json', 'X-Meerkat-Token': token }, body: JSON.stringify(body) }, life.signal);
   };
 
   async function onAction(action) {
+    if (stopped) throw new Error('已关闭');
     if (action?.type === 'reconnect') {
       const ok = await poll();
       if (!ok) throw new Error('重连失败');
@@ -79,22 +98,26 @@ export function startDashboard(root) {
     throw new Error('不支持的操作');
   }
 
-  const ui = createMeerkatUI(root, { onAction });
+  const ui = createUI(root, { onAction });
 
   // One request at a time; on failure the last snapshot is marked stale and
   // polling stops until the user reconnects manually.
   function poll() {
+    if (stopped) return Promise.resolve(false);
     if (inFlight) return inFlight;
     clearTimeout(timer);
     inFlight = (async () => {
       try {
-        const { data, legacyActive, sessionToken } = parseWorkflow(await fetchJson('/api/workflow'));
+        const body = await fetchJson('/api/workflow', {}, life.signal);
+        if (stopped) return false;
+        const { data, legacyActive, sessionToken } = parseWorkflow(body);
         token = sessionToken;
         ui.update(data, legacyActive);
         if (!stopped) timer = setTimeout(poll, POLL_MS);
         return true;
       } catch (e) {
         token = '';
+        if (stopped) return false;
         ui.setDisconnected(e?.message === 'malformed' ? '工作流数据格式无效' : text(e?.message) || '无法连接');
         return false;
       } finally {
@@ -105,7 +128,13 @@ export function startDashboard(root) {
   }
 
   poll();
-  return () => { stopped = true; clearTimeout(timer); ui.destroy(); };
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(timer);
+    life.abort();
+    ui.destroy();
+  };
 }
 
 if (typeof document !== 'undefined') {

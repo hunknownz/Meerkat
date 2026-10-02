@@ -149,6 +149,28 @@ export function summarizeUsage(runs, now = Date.now()) {
 }
 
 const isActiveRun = (r) => ACTIVE_RUN.has(r?.state);
+const MAX_INDEPENDENT = 50;
+const count = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+
+/**
+ * Live run counts for the header. Independent Pi heartbeats whose runId is
+ * already a snapshot run (in any state) are dropped so a managed job never
+ * appears twice. Counts that are missing or malformed stay null (unknown),
+ * never 0. Returns { managed, independent, total, queued, unknown, list }.
+ */
+export function liveRunSummary(snapshot, legacyActive = []) {
+  const s = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const ids = new Set();
+  for (const r of arr(s.runs)) if (r && typeof r.id === 'string' && r.id) ids.add(r.id.toLowerCase());
+  const list = arr(legacyActive)
+    .filter((a) => a && typeof a === 'object' && !(typeof a.runId === 'string' && ids.has(a.runId.toLowerCase())))
+    .slice(0, MAX_INDEPENDENT);
+  const c = s.counts && typeof s.counts === 'object' && !Array.isArray(s.counts) ? s.counts : {};
+  const managed = count(c.running);
+  // `unknown` is optional in the snapshot; when absent derive it from runs, when malformed keep it unknown.
+  const unknown = c.unknown === undefined ? arr(s.runs).filter((r) => r?.state === 'unknown').length : count(c.unknown);
+  return { managed, independent: list.length, total: managed === null ? null : managed + list.length, queued: count(c.queued), unknown, list };
+}
 /** Task category for filters. Delivered means final code only. */
 export function taskCategory(t) {
   const st = str(t?.state);
@@ -271,7 +293,7 @@ export function createMeerkatUI(root, options = {}) {
   const state = {
     view: 'agents', project: 'all', query: '', filter: 'all', expanded: new Set(),
     drawer: null, drawerTab: 'overview', returnFocus: null,
-    loaded: false, disconnected: null, idx: indexSnapshot(null), legacy: [],
+    loaded: false, disconnected: null, idx: indexSnapshot(null), live: liveRunSummary(null), legacy: [],
     stop: new Map(), // runId → { requestId, status: 'pending'|'acked'|'error', message }
     settingsMsg: '', settingsBusy: false, reconnecting: false,
   };
@@ -355,11 +377,16 @@ export function createMeerkatUI(root, options = {}) {
     }
     if (!state.loaded) { conn.textContent = '正在加载…'; el.textContent = ''; return; }
     conn.textContent = `实时 · 更新于 ${formatLocalTime(I().observedAt)}`;
-    const c = I().counts;
-    const n = (v) => (Number.isInteger(v) && v >= 0 ? `<b>${v}</b>` : '<b>未知</b>');
-    const unknown = Number.isInteger(c.unknown) && c.unknown > 0 ? ` · ${n(c.unknown)} 未知` : '';
     const limit = I().settings && Number.isInteger(I().settings.maxConcurrency) ? ` · 并发上限 ${I().settings.maxConcurrency}` : '';
-    el.innerHTML = `${n(c.running)} 运行 · ${n(c.queued)} 排队${unknown}${limit}`;
+    el.innerHTML = `${liveCountText((v) => `<b>${v === null ? '未知' : v}</b>`)}${limit}`;
+  }
+
+  // "N 运行中（工作流 M · 独立 K）· Q 排队 · U 状态未知"; unknown values stay 未知, never 0.
+  function liveCountText(fmt) {
+    const l = state.live;
+    const total = l.total === null ? `运行数 ${fmt(null)}` : `${fmt(l.total)} 运行中`;
+    const unknown = l.unknown === 0 ? '' : ` · ${fmt(l.unknown)} 状态未知`;
+    return `${total}（工作流 ${fmt(l.managed)} · 独立 ${fmt(l.independent)}）· ${fmt(l.queued)} 排队${unknown}`;
   }
 
   function renderProjects() {
@@ -429,17 +456,22 @@ export function createMeerkatUI(root, options = {}) {
     </div>`;
   }
 
-  function compatRows() {
+  function independentRows() {
     const list = state.legacy;
     if (!list.length) return '';
     return `
-      <div class="sec-h"><b>兼容 · 单次 Pi 执行</b><span>旧版 run.mjs 启动的进程，不属于工作流任务，无上下文 / 阶段信息</span></div>
-      <div class="list compat">${list.map((a) => `<div class="row">
-        <span class="badge">兼容</span>
+      <div class="sec-h"><b>独立运行，尚未关联任务</b><span>${list.length} 个 · 直接启动的 Pi，暂无任务上下文 / 阶段信息</span></div>
+      <div class="list independent">${list.map((a) => {
+        const path = str(a.worktree, 500);
+        const meta = [a.role ? roleLabel(str(a.role, 40)) : '', a.runId ? `运行 ${short(a.runId)}` : ''].filter(Boolean).map(esc).join(' · ');
+        return `<div class="row">
+        <span class="badge">独立</span>
         <span class="who"><span class="name">${esc(str(a.task, 300) || '未命名')}</span>
-        <span class="sub">${esc(str(a.model, 120) || '模型未记录')} · <code>${esc(str(a.worktree, 500))}</code> · 开始 ${timeEl(a.startedAt)}</span></span>
+        <span class="sub">${esc(str(a.model, 120) || '模型未记录')}${meta ? ` · ${meta}` : ''} · 开始 ${timeEl(a.startedAt)}</span>
+        ${path ? `<span class="sub path" title="${esc(path)}"><code>${esc(path)}</code></span>` : ''}</span>
         <span class="num"><b>${state.disconnected ? esc(formatDuration(elapsedSeconds(a.startedAt, null, now()))) : since(a.startedAt, null)}</b><small>用时</small></span>
-      </div>`).join('')}</div>`;
+      </div>`;
+      }).join('')}</div>`;
   }
 
   function renderAgents() {
@@ -453,10 +485,8 @@ export function createMeerkatUI(root, options = {}) {
     const c = I().controller;
     const ctl = { running: '运行中', idle: '空闲', unknown: '未知' }[c.state] || '未知';
     const runs = managedActive();
-    const counts = I().counts;
-    const n = (v) => (Number.isInteger(v) && v >= 0 ? v : '未知');
-    const headCount = stale ? '运行数未知' : `${n(counts.running)} 运行 / ${n(counts.queued)} 排队${Number.isInteger(counts.unknown) && counts.unknown ? ` / ${counts.unknown} 未知` : ''}`;
-    const list = runs.length ? runs.map(agentRow).join('') : `<div class="empty">0 个受管的 Pi 运行。<br>${I().tasks.length ? '新任务分派后会出现在这里；当前没有排队记录。' : '还没有工作流任务。用 coordinator CLI 准备任务后会出现在这里。'}</div>`;
+    const headCount = stale ? '运行数未知' : liveCountText((v) => (v === null ? '未知' : String(v)));
+    const list = runs.length ? runs.map(agentRow).join('') : `<div class="empty">当前没有工作流运行${state.legacy.length ? '（独立运行见下方）' : ''}。<br>${I().tasks.length ? '新任务分派后会出现在这里；当前没有排队记录。' : '还没有工作流任务。用 coordinator CLI 准备任务后会出现在这里。'}</div>`;
     const dl = I().deliveries.filter((d) => inProject(I().task.get(d.taskId)?.projectId))
       .sort((a, b) => (parseTime(b.updatedAt || b.createdAt) ?? 0) - (parseTime(a.updatedAt || a.createdAt) ?? 0)).slice(0, 5);
     const dRows = dl.length ? dl.map((d) => {
@@ -473,8 +503,9 @@ export function createMeerkatUI(root, options = {}) {
       ${banner}
       <div class="host"><span class="badge accent">宿主</span><span><b>Codex · 外部协调</b> — 由你所在的 Codex 会话协调，不计入本地运行数。本地控制器：${esc(ctl)}${c.heartbeatAt ? `（心跳 ${esc(formatLocalTime(c.heartbeatAt, now()))}）` : ''}</span></div>
       <div class="sec-h"><b>本地 Pi 实例</b><span>${esc(headCount)}</span><span class="end">${stale ? `快照 ${esc(formatLocalTime(I().observedAt))}` : `更新于 ${esc(formatLocalTime(I().observedAt))}`}</span></div>
+      <div class="sec-h"><b>工作流运行</b><span>由工作流任务分派的 Pi</span></div>
       <div class="list">${list}</div>
-      ${compatRows()}
+      ${independentRows()}
       <div class="sec-h"><b>最近交付</b><span>最终代码交付仅指代码，不代表已发布或客户验收</span></div>
       <div class="list">${dRows}</div>`;
   }
@@ -906,7 +937,8 @@ export function createMeerkatUI(root, options = {}) {
     /** Renders a fresh snapshot (core readWorkflow shape) plus the separate legacy single-run list. */
     update(snapshot, legacyActive = []) {
       state.idx = indexSnapshot(snapshot);
-      state.legacy = arr(legacyActive).filter((a) => a && typeof a === 'object').slice(0, 50);
+      state.live = liveRunSummary(snapshot, legacyActive);
+      state.legacy = state.live.list;
       state.loaded = true;
       state.disconnected = null;
       for (const [id] of state.stop) { const r = state.idx.runs.find((x) => x.id === id); if (!r || !isActiveRun(r)) state.stop.delete(id); }
