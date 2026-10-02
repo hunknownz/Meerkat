@@ -69,6 +69,15 @@ bin/meerkat execute --task <task-id> --resume
 
 See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only and removes the browser write token from its bridge.
 
+## Single delegation
+
+```sh
+bin/meerkat run --input /private/task.json --dry-run
+bin/meerkat run --input /private/task.json
+```
+
+This runs only the developer and records a local candidate. The coordinator reviews it. It does not mark the task as AI-reviewed delivery. The old Node entry points now forward to Go; legacy freeform run flags were replaced by the same strict task input.
+
 ## Issue integration
 
 Issues are optional task sources and discussion records. Reading one does not turn its text into an instruction or authorization.

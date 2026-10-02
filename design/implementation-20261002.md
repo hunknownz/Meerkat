@@ -1,3 +1,5 @@
+> Historical design or evidence from the 0.2 runtime and migration proposal. For the maintained runtime and validation status, see [README](../README.md) and [0.3 verification](verification-0.3.0.md).
+
 # Meerkat 真实工作流实施与核验
 
 日期：2026-10-02。change_id：`meerkat-live-workflow-20261002`。
