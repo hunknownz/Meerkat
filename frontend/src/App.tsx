@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LegacyActive, Run, SettingsInput, Snapshot, Task } from './generated/workflow';
 import {
-  DELIVERY_LABEL, ROLES, ROLE_LABEL, agentLabel, dedupLegacy, formatDuration, formatTime, isActiveRun, lastEvent,
+  DELIVERY_LABEL, ROLES, ROLE_LABEL, agentLabel, checkView, type CheckEntry, dedupLegacy, formatDuration, formatTime, isActiveRun, lastEvent,
   modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory,
 } from './model';
 import { newRequestId } from './transport';
@@ -269,7 +269,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
     const tRuns = runs.filter((r) => r.taskId === task.id);
     const deliveries = snapshot?.deliveries.filter((d) => d.taskId === task.id) ?? [];
     const reviews = snapshot?.reviews.filter((d) => d.taskId === task.id) ?? [];
-    const checksOf = (c: unknown) => (Array.isArray(c) ? c : c && typeof c === 'object' ? [c] : []) as { command?: string; result?: string; exitCode?: number | null; summary?: string }[];
+    const checksOf = (c: unknown) => (Array.isArray(c) ? c : c && typeof c === 'object' ? [c] : []).filter((x): x is CheckEntry => !!x && typeof x === 'object').map(checkView);
     return (
       <div className="scrim" onClick={(e) => { if (e.target === e.currentTarget) setOpenTask(null); }}>
         <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="mk-drawer-title" tabIndex={-1} ref={(el) => el?.focus()}>
@@ -293,7 +293,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               <div className="card" key={d.id}><h3>{DELIVERY_LABEL[d.state] ?? d.state}</h3><dl className="concl">
                 <dt>候选 SHA</dt><dd><code>{d.candidateSha}</code></dd>
                 <dt>上下文</dt><dd><code>{d.contextRef?.digest ?? '—'}</code></dd>
-                <dt>检查</dt><dd>{checksOf(d.checks).length ? checksOf(d.checks).map((c, i) => <div key={i}><code>{c.command ?? '—'}</code> → {c.result ?? (c.exitCode === undefined || c.exitCode === null ? '未知' : `exit ${c.exitCode}`)}</div>) : '未记录'}</dd>
+                <dt>检查</dt><dd>{checksOf(d.checks).length ? checksOf(d.checks).map((c, i) => <div key={i} data-check={c.kind}>{c.kind === 'harness' ? <>{c.label} → {c.outcome}</> : <>{c.kind === 'reported' ? 'Agent 报告: ' : ''}<code>{c.label}</code> → {c.outcome}</>}</div>) : '未记录'}</dd>
                 <dt>已知缺口</dt><dd>{d.knownGaps?.length ? <ul>{d.knownGaps.map((g, i) => <li key={i}>{g}</li>)}</ul> : '无'}</dd>
               </dl></div>
             ))}

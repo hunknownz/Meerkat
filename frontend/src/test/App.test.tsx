@@ -68,6 +68,31 @@ describe('App', () => {
     return waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('renders named harness checks, Agent-reported evidence, unknown values and legacy checks', () => {
+    const checks = [
+      { name: 'git_head_matches_candidate', status: 'pass' }, { name: 'worktree_clean', status: 'pass' },
+      { name: 'changed_paths_in_scope', status: 'pass' }, { name: 'context_digest_matches', status: 'pass' }, { name: 'review_verdict', status: 'pass' },
+      { name: 'reported', status: 'reported', command: 'wc -w docs/pilot.md', result: '141 words (<150)' },
+      { name: 'reported', status: 'reported', command: 'npm test' },
+      { name: 'custom_probe', status: 'flaky' }, { name: 'mystery' },
+      { command: 'go test ./...', exitCode: 1 }, { command: 'npm run lint', result: 'ok' }, { command: 'make' },
+    ];
+    const s = snapshot();
+    s.deliveries = [{ ...s.deliveries[0]!, checks }];
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({ readonly: true })} />);
+    view('Tasks');
+    fireEvent.click(screen.getByText('Fix parser'));
+    const rows = [...screen.getByRole('dialog').querySelectorAll('[data-check]')].map((e) => [e.getAttribute('data-check'), e.textContent]);
+    expect(rows).toEqual([
+      ['harness', 'HEAD 与候选一致 → 通过'], ['harness', '工作区干净 → 通过'], ['harness', '改动路径在范围内 → 通过'],
+      ['harness', '上下文摘要一致 → 通过'], ['harness', '审查结论 → 通过'],
+      ['reported', 'Agent 报告: wc -w docs/pilot.md → 141 words (<150)'], ['reported', 'Agent 报告: npm test → 未知'],
+      ['harness', 'custom_probe → flaky'], ['harness', 'mystery → 未知'],
+      ['legacy', 'go test ./... → exit 1'], ['legacy', 'npm run lint → ok'], ['legacy', 'make → 未知'],
+    ]);
+    expect(screen.getByRole('dialog').textContent).not.toContain('— → 未知');
+  });
+
   it('renders readable empty and error states', () => {
     render(<App snapshot={null} legacyActive={[]} connected={false} stale="HTTP 500" actions={actions()} />);
     expect(screen.getByText('无法读取工作流状态。')).toBeTruthy();

@@ -129,3 +129,23 @@ export function taskCategory(t: Task): 'delivered' | 'attention' | 'active' {
   if (/block|fail|stop|unknown|error|attention|needs|timeout|cancel/.test(t.state)) return 'attention';
   return 'active';
 }
+
+// Delivery checks: harness deterministic checks are {name,status}; Agent-reported evidence is
+// {name:'reported',status:'reported',command,result}; legacy entries carry command/result/exitCode.
+export const CHECK_LABEL: Record<string, string> = {
+  git_head_matches_candidate: 'HEAD 与候选一致', worktree_clean: '工作区干净', changed_paths_in_scope: '改动路径在范围内',
+  context_digest_matches: '上下文摘要一致', review_verdict: '审查结论',
+};
+export const CHECK_STATUS_LABEL: Record<string, string> = { pass: '通过', fail: '失败' };
+export type CheckEntry = { name?: unknown; status?: unknown; command?: unknown; result?: unknown; exitCode?: unknown };
+export type CheckView = { kind: 'harness' | 'reported' | 'legacy'; label: string; outcome: string };
+const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined);
+export function checkView(c: CheckEntry): CheckView {
+  const name = str(c.name), status = str(c.status), command = str(c.command), result = str(c.result);
+  if (name === 'reported' || status === 'reported') return { kind: 'reported', label: command ?? '—', outcome: result ?? '未知' };
+  if (name !== undefined && command === undefined) {
+    return { kind: 'harness', label: CHECK_LABEL[name] ?? name, outcome: status === undefined ? '未知' : CHECK_STATUS_LABEL[status] ?? status };
+  }
+  const exit = typeof c.exitCode === 'number' ? `exit ${c.exitCode}` : undefined;
+  return { kind: 'legacy', label: command ?? name ?? '—', outcome: result ?? exit ?? '未知' };
+}
