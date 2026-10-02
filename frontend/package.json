@@ -11,12 +11,15 @@
     "types": "npm run generate",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "build": "npm run generate && npm run check && vite build && vite build --config vite.mount.config.ts && node scripts/copy-assets.mjs"
+    "build": "npm run generate && npm run check && vite build && vite build --config vite.mount.config.ts && vite build --config vite.mcp.config.ts && node scripts/copy-assets.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
     "ajv": "8.20.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.2",

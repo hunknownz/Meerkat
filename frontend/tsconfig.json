@@ -4,5 +4,5 @@
     "jsx": "react-jsx", "strict": true, "noUncheckedIndexedAccess": true, "noEmit": true, "skipLibCheck": true,
     "allowJs": false, "isolatedModules": true, "types": ["vite/client", "node"]
   },
-  "include": ["src", "vite.config.ts", "vite.mount.config.ts", "vitest.config.ts"]
+  "include": ["src", "vite.config.ts", "vite.mount.config.ts", "vite.mcp.config.ts", "vitest.config.ts"]
 }
