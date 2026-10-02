@@ -5,7 +5,7 @@ import { parseWorkflow, parseLegacy, startDashboard, POLL_MS, TIMEOUT_MS } from 
 import {
   createMeerkatUI, esc, elapsedSeconds, formatDuration, formatLocalTime, safeHref,
   modelLabel, runUsage, runCost, summarizeUsage, taskCategory, liveRunSummary,
-  phaseIndex, eventText, eventTime, pendingResume, itemText,
+  phaseIndex, eventText, eventTime, pendingResume, itemText, agentLabel,
 } from '../dashboard/public/ui.js';
 
 const read = (p) => readFileSync(new URL(`../dashboard/public/${p}`, import.meta.url), 'utf8');
@@ -320,7 +320,7 @@ test('startDashboard: repeated manual reconnects share one request', async (t) =
 
 test('itemText shows agent-reported command + result, distinct from controller checks', () => {
   const reported = itemText({ status: 'reported', command: 'npm test -- <x>', result: '12 passed' });
-  assert.match(reported, /^Agent 上报（非控制器验证） · 命令：npm test -- <x> · 结果：12 passed$/);
+  assert.match(reported, /^Agent 上报（非调度器验证） · 命令：npm test -- <x> · 结果：12 passed$/);
   assert.doesNotMatch(reported, /reported/);
   assert.equal(esc(reported).includes('&lt;x&gt;'), true, 'escaped by caller');
   // controller check stays name · status with no agent label
@@ -332,4 +332,13 @@ test('itemText shows agent-reported command + result, distinct from controller c
   const long = itemText({ status: 'reported', command: 'c'.repeat(1000), result: 'r'.repeat(1000) });
   assert.ok(long.length < 700);
   assert.equal(itemText(null), '');
+});
+
+test('agentLabel: historical Pi-NN slots render as Agent-NN keeping the original; custom IDs stay intact', () => {
+  assert.deepEqual(agentLabel('Pi-01'), { label: 'Agent-01', legacy: 'Pi-01' });
+  assert.deepEqual(agentLabel('Pi-12'), { label: 'Agent-12', legacy: 'Pi-12' });
+  // new slot IDs and arbitrary/custom IDs are shown as stored
+  for (const id of ['Agent-02', 'reviewer-alpha', 'pi-01', 'Pi-1', 'Pi-01x', 'XPi-01', 'Pi-']) assert.deepEqual(agentLabel(id), { label: id, legacy: null }, id);
+  assert.deepEqual(agentLabel(undefined), { label: '', legacy: null });
+  assert.equal(agentLabel('x'.repeat(100)).label.length, 40);
 });

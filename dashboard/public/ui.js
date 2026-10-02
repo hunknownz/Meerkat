@@ -5,17 +5,18 @@
 // escaped and every link is validated before it is rendered.
 // Layout, icons and copy are adapted from design/ui/app.js (the prototype).
 
-const ROLE = { developer: '开发', reviewer: '检查', polisher: '最终精修', fixer: '定向修复' };
+// Roles shown in the UI. Fix rounds are developer runs; there is no separate fixer role.
+const ROLE = { developer: '开发', reviewer: '审查', polisher: '精修' };
 const ROLES = ['developer', 'reviewer', 'polisher'];
-const PHASES = ['任务', '开发', '初次交付', '检查', '最终候选', '精修与复验'];
-const TABS = [['overview', '概览'], ['context', '共享上下文'], ['delivery', '交付与检查'], ['runs', '运行记录']];
+const PHASES = ['任务', '开发', '初次交付', '审查', '交付候选', '精修与复验'];
+const TABS = [['overview', '概览'], ['context', '共享上下文'], ['delivery', '交付与审查'], ['runs', '运行记录']];
 const FILTERS = [['all', '全部'], ['active', '进行中'], ['delivered', '已交付'], ['attention', '需处理']];
 const ACTIVE_RUN = new Set(['queued', 'pending', 'starting', 'running', 'stopping', 'unknown']);
 const RUN_LABEL = {
   queued: '排队', pending: '排队', starting: '启动中', running: '运行中', stopping: '停止中', unknown: '状态未知',
   succeeded: '已完成', completed: '已完成', failed: '失败', stopped: '已停止', cancelled: '已取消', timeout: '超时', blocked: '已阻塞',
 };
-const DELIVERY_LABEL = { first: '初次交付', final_candidate: '最终候选', delivered: '最终代码交付' };
+const DELIVERY_LABEL = { first: '初次交付', final_candidate: '交付候选', delivered: '最终代码交付' };
 const MAX_TEXT = 4000;
 const MAX_EVENTS = 5;
 
@@ -162,7 +163,7 @@ const MAX_INDEPENDENT = 50;
 const count = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
 
 /**
- * Live run counts for the header. Independent Pi heartbeats whose runId is
+ * Live run counts for the header. Independent run heartbeats whose runId is
  * already a snapshot run (in any state) are dropped so a managed job never
  * appears twice. Counts that are missing or malformed stay null (unknown),
  * never 0. Returns { managed, independent, total, queued, unknown, list }.
@@ -179,6 +180,16 @@ export function liveRunSummary(snapshot, legacyActive = []) {
   // `unknown` is optional in the snapshot; when absent derive it from runs, when malformed keep it unknown.
   const unknown = c.unknown === undefined ? arr(s.runs).filter((r) => r?.state === 'unknown').length : count(c.unknown);
   return { managed, independent: list.length, total: managed === null ? null : managed + list.length, queued: count(c.queued), unknown, list };
+}
+/**
+ * Display label for an agent ID. Agent IDs are reusable execution slots; runId is what is unique.
+ * Historical records keep their stored Pi-NN IDs; only those are shown as Agent-NN, with the
+ * original kept as `legacy`. Any other (custom) ID is shown unchanged. Bounded; callers escape.
+ */
+export function agentLabel(id) {
+  const raw = str(id, 40);
+  const m = /^Pi-(\d{2,4})$/.exec(raw);
+  return m ? { label: `Agent-${m[1]}`, legacy: raw } : { label: raw, legacy: null };
 }
 /** Task category for filters. Delivered means final code only. */
 export function taskCategory(t) {
@@ -229,7 +240,7 @@ export function itemText(x) {
   const result = str(x.result || x.message || x.summary || x.detail, 400);
   const status = reported ? '' : str(x.status, 60);
   return [
-    reported ? 'Agent 上报（非控制器验证）' : '',
+    reported ? 'Agent 上报（非调度器验证）' : '',
     head,
     command ? `命令：${command}` : '',
     status,
@@ -393,6 +404,11 @@ export function createMeerkatUI(root, options = {}) {
   };
   const runLabel = (st) => RUN_LABEL[st] || str(st) || '未知';
   const roleLabel = (r) => ROLE[r] || str(r) || '—';
+  const agentHtml = (id, empty = '') => {
+    const a = agentLabel(id);
+    if (!a.label) return esc(empty);
+    return a.legacy ? `<span title="${esc(`历史 ID ${a.legacy}`)}">${esc(a.label)}</span>` : esc(a.label);
+  };
   const lastEvent = (r) => { const e = arr(r.events); return e.length ? e[e.length - 1] : null; };
   const timeEl = (iso) => (parseTime(iso) === null ? '<time>—</time>' : `<time datetime="${esc(iso)}" title="${esc(new Date(parseTime(iso)).toLocaleString())}">${esc(formatLocalTime(iso, now()))}</time>`);
   const since = (start, end) => {
@@ -461,7 +477,7 @@ export function createMeerkatUI(root, options = {}) {
       <button type="button" class="row-btn" data-agent="${esc(key)}" aria-expanded="${open}" aria-controls="mk-more-${esc(key)}">
         <span class="dot ${dot}" title="${esc(stale ? '快照（已过期）' : runLabel(r.state))}"></span>
         <span class="who">
-          <span class="line1"><span class="role">${esc(str(r.agentId, 40) || '—')} · ${esc(roleLabel(r.role))}</span><span class="task">${esc(str(t.title, 200) || '未知任务')}</span></span>
+          <span class="line1"><span class="role">${agentHtml(r.agentId, '—')} · ${esc(roleLabel(r.role))}</span><span class="task">${esc(str(t.title, 200) || '未知任务')}</span></span>
           <span class="sub">${esc(projName(t.projectId))} · ${esc(issueText(t))}${ev ? ` · <span class="act">${esc(eventText(ev))}</span> · ${esc(formatLocalTime(eventTime(ev), now()))}` : ''}${stale ? ' · 快照' : ''}</span>
         </span>
         <span class="fields">
@@ -474,11 +490,12 @@ export function createMeerkatUI(root, options = {}) {
         <div>
           <h4>最近 ${events.length} 条结构化事件${stale ? '（快照）' : ''}</h4>
           ${events.length ? `<ul class="events">${events.map((e) => `<li>${timeEl(eventTime(e))}<span class="ek">${esc(str(e.type || e.kind, 60))}</span><span>${esc(str(e.summary || e.message || e.detail || e.reason, 200))}</span></li>`).join('')}</ul>` : '<p class="k small">尚无事件。</p>'}
-          ${r.state === 'unknown' ? '<p class="local-note mt">状态未知：控制器心跳过期或重启后未能核实，不会自动重放。</p>' : ''}
+          ${r.state === 'unknown' ? '<p class="local-note mt">状态未知：调度器心跳过期或重启后未能核实，不会自动重放。</p>' : ''}
         </div>
         <div>
           <h4>上下文</h4>
           <dl class="kv">
+            ${agentLabel(r.agentId).legacy ? `<dt>历史 ID</dt><dd><code>${esc(agentLabel(r.agentId).legacy)}</code></dd>` : ''}
             <dt>工作目录</dt><dd><code>${esc(str(t.worktree, 500) || '—')}</code></dd>
             <dt>仓库</dt><dd><code>${esc(str(t.repository, 500) || '—')}</code></dd>
             <dt>上下文</dt><dd>${esc(ctxLabel(r.contextRef || t.contextRef))}</dd>
@@ -498,7 +515,7 @@ export function createMeerkatUI(root, options = {}) {
     const list = state.legacy;
     if (!list.length) return '';
     return `
-      <div class="sec-h"><b>独立运行，尚未关联任务</b><span>${list.length} 个 · 直接启动的 Pi，暂无任务上下文 / 阶段信息</span></div>
+      <div class="sec-h"><b>独立运行，尚未关联任务</b><span>${list.length} 个 · 直接启动的单次运行，暂无任务上下文 / 阶段信息</span></div>
       <div class="list independent">${list.map((a) => {
         const path = str(a.worktree, 500);
         const meta = [a.role ? roleLabel(str(a.role, 40)) : '', a.runId ? `运行 ${short(a.runId)}` : ''].filter(Boolean).map(esc).join(' · ');
@@ -539,9 +556,9 @@ export function createMeerkatUI(root, options = {}) {
     }).join('') : '<div class="empty">暂无交付。</div>';
     sec.innerHTML = `
       ${banner}
-      <div class="host"><span class="badge accent">宿主</span><span><b>Codex · 外部协调</b> — 由你所在的 Codex 会话协调，不计入本地运行数。本地控制器：${esc(ctl)}${c.heartbeatAt ? `（心跳 ${esc(formatLocalTime(c.heartbeatAt, now()))}）` : ''}</span></div>
-      <div class="sec-h"><b>本地 Pi 实例</b><span>${esc(headCount)}</span><span class="end">${stale ? `快照 ${esc(formatLocalTime(I().observedAt))}` : `更新于 ${esc(formatLocalTime(I().observedAt))}`}</span></div>
-      <div class="sec-h"><b>工作流运行</b><span>由工作流任务分派的 Pi</span></div>
+      <div class="host"><span class="badge accent">宿主</span><span><b>Codex · 协调者</b> — 由你所在的 Codex 会话协调，不计入本地运行数。本地调度器：${esc(ctl)}${c.heartbeatAt ? `（心跳 ${esc(formatLocalTime(c.heartbeatAt, now()))}）` : ''}</span></div>
+      <div class="sec-h"><b>本地 Agent 实例</b><span>${esc(headCount)} · 执行器：Pi</span><span class="end">${stale ? `快照 ${esc(formatLocalTime(I().observedAt))}` : `更新于 ${esc(formatLocalTime(I().observedAt))}`}</span></div>
+      <div class="sec-h"><b>工作流运行</b><span>由本地调度器按工作流任务分派</span></div>
       <div class="list">${list}</div>
       ${independentRows()}
       <div class="sec-h"><b>最近交付</b><span>最终代码交付仅指代码，不代表已发布或客户验收</span></div>
@@ -555,7 +572,7 @@ export function createMeerkatUI(root, options = {}) {
     if (!state.loaded) { sec.innerHTML = `<div class="list"><div class="empty">${state.disconnected ? '无法读取任务。' : '正在读取任务…'}</div></div>`; return; }
     const scoped = I().tasks.filter((t) => inProject(t.projectId));
     const q = state.query.trim().toLowerCase();
-    const matched = scoped.filter((t) => !q || [t.title, t.goal, t.id, issueText(t), projName(t.projectId), latestRun(t)?.agentId].map((x) => str(x, 500)).join(' ').toLowerCase().includes(q));
+    const matched = scoped.filter((t) => !q || [t.title, t.goal, t.id, issueText(t), projName(t.projectId), latestRun(t)?.agentId, agentLabel(latestRun(t)?.agentId).label].map((x) => str(x, 500)).join(' ').toLowerCase().includes(q));
     const inFilter = (t, f) => f === 'all' || taskCategory(t) === f;
     const shown = matched.filter((t) => inFilter(t, state.filter));
     const count = (f) => matched.filter((t) => inFilter(t, f)).length;
@@ -565,7 +582,7 @@ export function createMeerkatUI(root, options = {}) {
       return `<button type="button" class="row task-row" data-open-task="${esc(t.id)}">
         <span class="who"><span class="name">${esc(str(t.title, 200) || '未命名任务')}</span>
         <span class="sub"><code>${esc(short(t.id))}</code> · ${esc(projName(t.projectId))} · ${esc(issueText(t))} · 更新 ${esc(formatLocalTime(t.updatedAt, now()))}</span></span>
-        <span class="meta"><span class="badge ${cat === 'delivered' ? 'green' : (cat === 'attention' ? 'red' : '')}">${esc(str(t.state, 40) || '未知')}</span>${r ? `<span class="badge">${esc(roleLabel(r.role))} · ${esc(runLabel(r.state))}</span><span class="owner">${esc(str(r.agentId, 40))}</span>` : ''}</span>
+        <span class="meta"><span class="badge ${cat === 'delivered' ? 'green' : (cat === 'attention' ? 'red' : '')}">${esc(str(t.state, 40) || '未知')}</span>${r ? `<span class="badge">${esc(roleLabel(r.role))} · ${esc(runLabel(r.state))}</span><span class="owner">${agentHtml(r.agentId)}</span>` : ''}</span>
       </button>`;
     }).join('') : `<div class="empty">${I().tasks.length ? '没有匹配的任务。' : '还没有工作流任务。'}</div>`;
     sec.innerHTML = `
@@ -615,7 +632,7 @@ export function createMeerkatUI(root, options = {}) {
     const reviewed = tasks.filter((t) => arr(I().reviewsByTask.get(t.id)).length);
     const passWord = /^(pass|passed|approve|approved|ok|lgtm|no[_-]?findings)$/i;
     const firstPass = reviewed.filter((t) => passWord.test(str(arr(I().reviewsByTask.get(t.id))[0].verdict))).length;
-    const fixRuns = reviewed.reduce((a, t) => a + Math.max(0, arr(I().runsByTask.get(t.id)).filter((r) => r.role === 'developer' || r.role === 'fixer').length - 1), 0);
+    const fixRuns = reviewed.reduce((a, t) => a + Math.max(0, arr(I().runsByTask.get(t.id)).filter((r) => r.role === 'developer').length - 1), 0);
     const reviewSec = summarizeUsage(runs.filter((r) => r.role === 'reviewer'), t0).agentSeconds;
     const fixCap = I().settings && Number.isInteger(I().settings.maxFixRounds) ? `（未来运行上限 ${I().settings.maxFixRounds} 轮）` : '';
 
@@ -624,7 +641,7 @@ export function createMeerkatUI(root, options = {}) {
       const c = runCost(r);
       const full = u?.completeness === 'complete';
       return `<div class="row stat-row">
-        <span class="who"><span class="name"><code>${esc(short(r.id))}</code> · ${esc(str(r.agentId, 40))} · ${esc(roleLabel(r.role))} · ${esc(runLabel(r.state))}</span>
+        <span class="who"><span class="name"><code>${esc(short(r.id))}</code> · ${agentHtml(r.agentId)} · ${esc(roleLabel(r.role))} · ${esc(runLabel(r.state))}</span>
         <span class="sub">${esc(modelLabel(r.modelSnapshot) || '模型未记录')} · ${esc(tokTxt(u, r))}</span></span>
         <span class="num"><b>${since(r.startedAt, r.endedAt)}${r.endedAt ? '' : '+'}</b><small>${esc(formatLocalTime(r.startedAt, t0))}–${r.endedAt ? esc(formatLocalTime(r.endedAt, t0)) : '进行中'}</small></span>
         <span class="num"><b>${esc(feeTxt(c))}</b><small>${full ? '用量完整' : (u ? '用量部分' : '用量未返回')}</small></span>
@@ -644,11 +661,11 @@ export function createMeerkatUI(root, options = {}) {
       </div>
       <div class="sec-h"><b>按角色 / 模型</b><span>“≥” 表示有运行未返回用量；缓存读 / 写单独列出，不计入输入 + 输出小计</span></div>
       <div class="list">${groupRows}</div>
-      <div class="sec-h"><b>流程指标</b><span>仅基于已有检查记录</span></div>
+      <div class="sec-h"><b>流程指标</b><span>仅基于已有审查记录</span></div>
       <div class="list">
-        <div class="row stat-row"><span class="who"><span class="name">初次交付一次通过</span><span class="sub">首次检查结论为通过的任务 / 已有检查记录的任务</span></span><span class="num"><b>${reviewed.length ? `${firstPass} / ${reviewed.length}` : '—'}</b><small>任务</small></span></div>
-        <div class="row stat-row"><span class="who"><span class="name">定向修复次数</span><span class="sub">首轮之后的开发运行数 / 已检查任务数${esc(fixCap)}</span></span><span class="num"><b>${reviewed.length ? `${fixRuns} / ${reviewed.length}` : '—'}</b><small>次 / 任务</small></span></div>
-        <div class="row stat-row"><span class="who"><span class="name">检查耗时占比</span><span class="sub">检查运行耗时 / Agent 耗时合计</span></span><span class="num"><b>${esc(formatDuration(reviewSec))} / ${esc(formatDuration(s.agentSeconds))}</b><small>${s.agentSeconds ? `${Math.round((reviewSec / s.agentSeconds) * 100)}%` : '—'}</small></span></div>
+        <div class="row stat-row"><span class="who"><span class="name">初次交付一次通过</span><span class="sub">首次审查结论为通过的任务 / 已有审查记录的任务</span></span><span class="num"><b>${reviewed.length ? `${firstPass} / ${reviewed.length}` : '—'}</b><small>任务</small></span></div>
+        <div class="row stat-row"><span class="who"><span class="name">定向修复次数</span><span class="sub">首轮之后的开发运行数 / 已审查任务数${esc(fixCap)}</span></span><span class="num"><b>${reviewed.length ? `${fixRuns} / ${reviewed.length}` : '—'}</b><small>次 / 任务</small></span></div>
+        <div class="row stat-row"><span class="who"><span class="name">审查耗时占比</span><span class="sub">审查运行耗时 / Agent 耗时合计</span></span><span class="num"><b>${esc(formatDuration(reviewSec))} / ${esc(formatDuration(s.agentSeconds))}</b><small>${s.agentSeconds ? `${Math.round((reviewSec / s.agentSeconds) * 100)}%` : '—'}</small></span></div>
       </div>
       <div class="sec-h"><b>逐次运行</b><span>${runs.length} 次</span></div>
       <div class="list">${runRows}</div>`;
@@ -695,7 +712,7 @@ export function createMeerkatUI(root, options = {}) {
         <div class="card"><h3>运行使用的上下文版本</h3>${used.length ? `<ul>${used.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="k">尚无运行接收。</p>'}</div>`;
     }
     if (state.drawerTab === 'delivery') {
-      if (!deliveries.length && !reviews.length) return '<div class="card"><p class="k">尚无交付。开发完成后会在此显示基线、候选与检查结论。</p></div>';
+      if (!deliveries.length && !reviews.length) return '<div class="card"><p class="k">尚无交付。开发完成后会在此显示基线、候选与审查结论。</p></div>';
       const polish = runs.filter((r) => r.role === 'polisher');
       return `
         <div class="card"><h3>版本</h3><dl class="concl">
@@ -713,14 +730,14 @@ export function createMeerkatUI(root, options = {}) {
           <dt>上下文摘要</dt><dd><code>${esc(short(rv.contextDigest, 12) || '—')}</code></dd></dl>
           <h3 class="mt">发现</h3>${listOr(rv.findings, '无发现。')}
           <h3 class="mt">检查</h3>${listOr(rv.checks, '未记录检查。')}</div>`).join('')}
-        ${polish.length ? `<div class="card"><h3>精修与复验</h3>${polish.map((r) => `<dl class="concl"><dt>精修运行</dt><dd><code>${esc(short(r.id))}</code> · ${esc(runLabel(r.state))}</dd>${summaryFields(r.summary)}</dl>`).join('')}<p class="k mt small">精修后必须再经检查（复验）才成为最终代码交付。</p></div>` : ''}
+        ${polish.length ? `<div class="card"><h3>精修与复验</h3>${polish.map((r) => `<dl class="concl"><dt>精修运行</dt><dd><code>${esc(short(r.id))}</code> · ${esc(runLabel(r.state))}</dd>${summaryFields(r.summary)}</dl>`).join('')}<p class="k mt small">精修后必须再经审查（复验）才成为最终代码交付。</p></div>` : ''}
         <p class="k small">“最终代码交付”只代表代码，不代表已发布、Preview 已验证或客户验收。</p>`;
     }
     if (!runs.length) return '<div class="card"><p class="k">尚无运行记录。</p></div>';
     return `<div class="card"><div class="run-table">${runs.map((r) => {
       const u = runUsage(r);
       return `<div class="run">
-        <span><span class="rid">${esc(short(r.id))}</span> · <span class="rt">${esc(str(r.agentId, 40))} · ${esc(roleLabel(r.role))}</span></span>
+        <span><span class="rid">${esc(short(r.id))}</span> · <span class="rt">${agentHtml(r.agentId)} · ${esc(roleLabel(r.role))}</span></span>
         <span class="rr">${esc(runLabel(r.state))}</span>
         <span class="rm">${esc(modelLabel(r.modelSnapshot) || '模型未记录')} · ${timeEl(r.startedAt)}–${r.endedAt ? timeEl(r.endedAt) : '进行中'} · ${r.startedAt ? `${since(r.startedAt, r.endedAt)}${r.endedAt ? '' : '+'}` : '未开始'} · 用量 ${u ? esc(tokTxt(u, r)) : UNK} · 费用 ${runCost(r).kind === 'unknown' ? UNK : esc(feeTxt(runCost(r)))}</span>
         ${r.summary ? `<dl class="concl">${summaryFields(r.summary)}</dl>` : ''}
@@ -809,7 +826,7 @@ export function createMeerkatUI(root, options = {}) {
         ${why ? `<p class="local-note">${esc(why)}</p>` : ''}
         <div class="sec-h"><b>调度</b></div>
         <div class="list">
-          <div class="set-row"><label class="lbl" for="mk-set-conc">本地并发<small>同时运行的 Pi 实例数（1–4）</small></label><span class="ctl"><select id="mk-set-conc" data-setting="maxConcurrency"${dis}>${[1, 2, 3, 4].map((v) => `<option${v === conc ? ' selected' : ''}>${v}</option>`).join('')}</select></span></div>
+          <div class="set-row"><label class="lbl" for="mk-set-conc">本地并发<small>同时运行的 Agent 实例数（1–4）</small></label><span class="ctl"><select id="mk-set-conc" data-setting="maxConcurrency"${dis}>${[1, 2, 3, 4].map((v) => `<option${v === conc ? ' selected' : ''}>${v}</option>`).join('')}</select></span></div>
           <div class="set-row"><label class="lbl" for="mk-set-rounds">最大修复轮数<small>达到后停止并交给 Codex（0–2）</small></label><span class="ctl"><select id="mk-set-rounds" data-setting="maxFixRounds"${dis}>${[0, 1, 2].map((v) => `<option${v === rounds ? ' selected' : ''}>${v}</option>`).join('')}</select></span></div>
         </div>
         <div class="sec-h"><b>默认角色配置</b><span>${pid === 'all' ? '' : esc(projName(pid))}</span></div>

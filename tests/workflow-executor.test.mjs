@@ -143,7 +143,7 @@ test('full path: developer -> changes_requested -> fix -> pass -> polish (change
   assert.match(fr.log[2].brief, /F1: tighten a\.js/, 'fix brief carries findings');
   assert.match(fr.log[0].brief, /Shared frozen context v1/);
   assert.doesNotMatch(fr.log[0].brief, /F1/);
-  for (const l of fr.log) assert.equal(l.agentId, 'Pi-01');
+  for (const l of fr.log) assert.equal(l.agentId, 'Agent-01');
   for (const l of fr.log) assert.ok(!l.reportFile.startsWith(ctx.wt), 'report outside worktree');
   const snap = await readWorkflow(ctx.data);
   const t = snap.tasks[0];
@@ -233,7 +233,7 @@ test('parallel max 2, queued reasons, same-worktree serialization', async () => 
   assert.ok(reasons.includes('concurrency') || reasons.includes('worktree'), JSON.stringify(reasons));
   assert.equal(queuedSeen.controller.state, 'running');
   assert.ok(queuedSeen.counts.queued >= 1);
-  assert.deepEqual([...new Set(fr.log.map((l) => l.agentId))].sort(), ['Pi-01', 'Pi-02']);
+  assert.deepEqual([...new Set(fr.log.map((l) => l.agentId))].sort(), ['Agent-01', 'Agent-02']);
   // The serialized shared-worktree task started from the delivered candidate of its predecessor.
   const snap = await readWorkflow(ctx.data);
   const first = snap.deliveries.find((d) => d.taskId === ids[0] && d.state === 'delivered');

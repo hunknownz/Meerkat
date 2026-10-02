@@ -1047,7 +1047,9 @@ export async function executeTasks({
         pending.splice(pending.indexOf(t), 1);
         let slot = slots.findIndex((x) => !x); if (slot < 0) slot = slots.length;
         slots[slot] = true;
-        const agentId = `Pi-${String(slot + 1).padStart(2, '0')}`;
+        // Agent IDs name reusable execution slots, not durable personalities; runId stays unique.
+        // Older stored runs keep their historical Pi-NN IDs (no migration).
+        const agentId = `Agent-${String(slot + 1).padStart(2, '0')}`;
         const entry = { worktree: t.worktree, promise: null };
         active.set(t.id, entry);
         entry.promise = runTask(t, agentId).finally(() => { active.delete(t.id); slots[slot] = false; wake(); });
