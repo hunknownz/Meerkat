@@ -3,8 +3,11 @@
 // `hang` spawns a grandchild, writes both pids to FAKE_PI_PID_FILE and waits to be killed.
 // Role report behaviour (FAKE_PI_REPORT): none | pass | changes | changed | no_change | stale | invalid | symlink.
 // FAKE_PI_USAGE: ok | missing (assistant message lacks some counters) | none (no usage) | error (provider error).
+// `chain` picks behaviour from the prompt role: developer commits FAKE_PI_FILE (default src/a.js) + "changed" report;
+// reviewer reports the next verdict from FAKE_PI_REVIEWS (comma list, default "pass"; counter in FAKE_PI_COUNTER);
+// polisher commits ("changed") or not ("no_change") per FAKE_PI_POLISH.
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 
 if (process.argv.includes('--version')) { console.log('fake-pi 0.0.0'); process.exit(0); }
 if (process.env.FAKE_PI_ARGS_FILE) writeFileSync(process.env.FAKE_PI_ARGS_FILE, JSON.stringify(process.argv.slice(2)));
@@ -18,7 +21,7 @@ const prompt = process.argv[process.argv.length - 1];
 const reportFile = /^Report file: (.+)$/m.exec(prompt)?.[1];
 const ctxRaw = /^Context digest: (.+)$/m.exec(prompt)?.[1];
 const ctx = process.env.FAKE_PI_CTX ?? (ctxRaw && !ctxRaw.startsWith('(') ? ctxRaw : null);
-const reportMode = process.env.FAKE_PI_REPORT || 'none';
+let reportMode = process.env.FAKE_PI_REPORT || 'none';
 const usageMode = process.env.FAKE_PI_USAGE || 'ok';
 const commit = (file, text) => {
   writeFileSync(file, text);
@@ -43,7 +46,29 @@ const writeReport = () => {
   } else writeFileSync(reportFile, JSON.stringify(body));
 };
 
-if (scenario === 'hang') {
+if (scenario === 'chain') {
+  const role = /^You are the (developer|reviewer|polisher)/m.exec(prompt)?.[1];
+  const file = process.env.FAKE_PI_FILE || 'src/a.js';
+  emit({ type: 'agent_start' });
+  emit({ type: 'tool_execution_start', toolName: 'read', args: { path: '/etc/secret' } });
+  if (role === 'developer') {
+    commit(file, `dev ${Date.now()} ${Math.random()}\n`);
+    reportMode = 'changed';
+  } else if (role === 'reviewer') {
+    const seq = (process.env.FAKE_PI_REVIEWS || 'pass').split(',');
+    const counter = process.env.FAKE_PI_COUNTER;
+    const n = counter && existsSync(counter) ? Number(readFileSync(counter, 'utf8')) : 0;
+    if (counter) writeFileSync(counter, String(n + 1));
+    reportMode = (seq[Math.min(n, seq.length - 1)] === 'changes') ? 'changes' : 'pass';
+  } else if (process.env.FAKE_PI_POLISH === 'changed') {
+    commit(file, `polished ${Date.now()}\n`);
+    reportMode = 'changed';
+  } else reportMode = 'no_change';
+  writeReport();
+  emit({ type: 'message_end', message: { role: 'assistant', usage: usage(100, 10, 5, 1, 0.001), stopReason: 'stop' } });
+  emit({ type: 'agent_settled' });
+  process.exitCode = 0;
+} else if (scenario === 'hang') {
   const kid = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
   writeFileSync(process.env.FAKE_PI_PID_FILE, JSON.stringify({ pid: process.pid, grandchild: kid.pid }));
   emit({ type: 'agent_start' });
