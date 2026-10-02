@@ -30,3 +30,22 @@ Optional:
 - `budget`: `{ "maxTokens": 500000, "maxWallSeconds": 1800, "maxFixRounds": 2 }` (defaults shown; fix rounds 0–2).
 
 Optional `changeId` links task and run metrics to one change. Profiles must be private files owned by the current user. Old configs default to executor pi; new ones should declare it explicitly.
+
+## Private Profile example
+
+All roles may use the same file, or separate models and limits. Store it outside Git with mode 0600.
+
+```json
+{
+  "projectId": "myproject",
+  "executor": "pi",
+  "provider": "configured-provider-id",
+  "model": "configured-model-id",
+  "authEnv": "PROJECT_API_KEY",
+  "instructions": [],
+  "piCommand": ["pi"],
+  "limits": { "maxTokens": 200000, "maxWallSeconds": 300 }
+}
+```
+
+The service inherits the API key environment. The profile freezes the environment-variable name and configuration digest, never the credential. Configure the provider in the executor before running. A single-delegation input currently includes all three profile references for schema consistency, but only its developer runs.
