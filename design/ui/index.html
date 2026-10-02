@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; font-src 'none'">
+<title>Meerkat · 交互原型</title>
+<link rel="icon" href="../../assets/meerkat-sidebar.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <!-- Inlined from plugins/meerkat/assets/meerkat-sidebar.svg (approved Meerkat icon) so it follows the text colour. -->
+    <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><g transform="translate(2.179 1) scale(.03944194)"><g transform="translate(-475 829.791944) scale(.1 -.1)"><path d="M7212 8289c-377-63-605-456-473-817 29-81 100-200 140-236 21-19 21-19 21-1910 0-1678-2-1899-16-1951-30-118-108-216-213-268-66-32-66-32-993-35l-928-2v-350h928c892 0 932 1 1006 20 201 51 381 201 476 395 81 166 74-34 77 2222 3 2012 3 2012-39 2041-282 196-179 581 152 574 138-3 300-39 635-141 182-55 440-133 575-174 245-73 245-73 248-104 4-42-38-90-106-120-29-12-146-61-260-107-326-131-432-197-556-341-153-180-253-464-231-657 3-23 21-212 40-418 45-477 36-432 87-448 304-95 632-401 811-758 104-208 197-574 197-780 0-44 0-44 171-44h172l-6 138c-30 708-421 1357-1014 1684-73 40-73 40-73 82 0 23-11 158-25 300-29 300-30 329-10 416 29 122 89 225 190 326 102 102 129 118 509 293 120 56 237 116 259 133 166 132 197 435 55 538-24 17-102 48-201 80-89 28-364 117-612 197-668 218-818 251-993 222zM7650 4936c0-193 0-193 67-232 233-135 434-454 474-752 49-375-87-686-478-1092l-135-140h2152v350h-1380l46 91c314 626 116 1427-448 1817-78 53-263 152-285 152-10 0-13-45-13-194z"/></g></g></svg></span>
+    <span>Meerkat</span>
+  </div>
+  <nav class="seg" id="nav" aria-label="视图">
+    <button type="button" data-view="agents" class="on" aria-current="page">Agents</button>
+    <button type="button" data-view="tasks">Tasks</button>
+    <button type="button" data-view="usage">Usage</button>
+  </nav>
+  <div class="actions">
+    <button type="button" class="icon" id="theme-btn" aria-label="切换到深色主题" title="切换主题">
+      <svg class="i-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1Z"/></svg>
+      <svg class="i-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
+    </button>
+    <button type="button" class="icon" id="settings-btn" aria-label="设置" title="设置" aria-haspopup="dialog">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v1.7M8 12.7v1.7M14.4 8h-1.7M3.3 8H1.6M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2M12.5 12.5l-1.2-1.2M4.7 4.7 3.5 3.5"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="subbar">
+  <label class="select-pill">
+    <span class="sr-only">项目</span>
+    <select id="project" aria-label="项目筛选">
+      <option value="all">全部项目</option>
+      <option value="example-project">example-project</option>
+      <option value="meerkat">Meerkat</option>
+    </select>
+    <svg class="chev" width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+  </label>
+  <span class="state-sum" id="state-sum" aria-live="polite"></span>
+  <span class="notice" role="note">交互原型 · 示例数据，未连接真实 Agent</span>
+</div>
+
+<main class="view" id="main">
+  <section id="view-agents" aria-label="Agents"></section>
+  <section id="view-tasks" aria-label="Tasks" hidden></section>
+  <section id="view-usage" aria-label="Usage" hidden></section>
+</main>
+
+<div class="scrim" id="drawer-scrim" hidden>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1"></aside>
+</div>
+
+<div class="scrim center" id="settings-scrim" hidden>
+  <div class="sheet" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
