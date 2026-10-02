@@ -15,6 +15,7 @@ import (
 	"github.com/hunknownz/Meerkat/internal/core"
 	"github.com/hunknownz/Meerkat/internal/model"
 	"github.com/hunknownz/Meerkat/internal/server"
+	"github.com/hunknownz/Meerkat/internal/store"
 )
 
 type syncBuf struct {
@@ -245,5 +246,85 @@ func TestRunDryRunThroughDaemon(t *testing.T) {
 	}
 	if json.Unmarshal([]byte(snap), &s) != nil || len(s.Data.Tasks)+len(s.Data.Runs)+len(s.Data.Profiles)+len(s.Data.Contexts)+len(s.Data.Projects) != 0 {
 		t.Fatalf("dry-run recorded state: %s", snap)
+	}
+}
+
+func writePriv(t *testing.T, path string, v any) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(v)
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateProjectMovesAndConflictReport(t *testing.T) {
+	const pid, tid, rid = "generic-project", "00000000-0000-4000-8000-000000000041", "00000000-0000-4000-8000-000000000042"
+	d := privDir(t)
+	st, err := store.Open(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Update(func(s *model.State) error {
+		s.Projects = append(s.Projects, model.Project{ID: pid, Name: "Generic", Repositories: []string{"/new/repo"}, CreatedAt: "2026-01-02T00:00:00Z", UpdatedAt: "2026-01-02T00:00:00Z"})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	src := filepath.Join(privDir(t), "old")
+	writePriv(t, filepath.Join(src, "workflow", "state.json"), map[string]any{"schemaVersion": 1,
+		"projects": []any{map[string]any{"id": pid, "name": "Generic", "repositories": []string{"/old/repo"}, "createdAt": "2025-01-01T00:00:00Z", "updatedAt": "2025-01-01T00:00:00Z"}},
+		"contexts": []any{}, "profiles": []any{}, "deliveries": []any{}, "reviews": []any{},
+		"tasks": []any{map[string]any{"id": tid, "projectId": pid, "repository": "/old/repo", "worktree": "/old/wt", "title": "t", "goal": "g", "scope": []string{},
+			"acceptance": []string{}, "dependencies": []string{}, "state": "delivered", "createdAt": "x", "updatedAt": "x"}},
+		"runs": []any{map[string]any{"id": rid, "taskId": tid, "role": "developer", "state": "succeeded", "startedAt": "x", "updatedAt": "x", "events": []any{},
+			"usage": map[string]any{"tokens": map[string]any{"input": 7, "output": 3, "total": 10}, "usageCompleteness": "partial", "estimatedCostUsd": nil}}},
+	})
+	// No option: sanitized conflict kind/id, not a generic failure, no paths.
+	c, _, e := run(t, "migrate", "--data-dir", d, "--from", src)
+	if c != ExitFailed || !strings.Contains(e, "import conflict: projects "+pid) || strings.Contains(e, "/old/repo") || strings.Contains(e, src) {
+		t.Fatalf("conflict report %d %s", c, e)
+	}
+	mdir := privDir(t)
+	if c, _, _ := run(t, "migrate", "--data-dir", d, "--from", src, "--project-moves", "moves.json"); c != ExitUsage {
+		t.Fatal("relative --project-moves accepted")
+	}
+	bad := filepath.Join(mdir, "bad.json")
+	writePriv(t, bad, []any{map[string]any{"projectId": pid, "fromRepositories": []string{"/old/repo"}, "toRepositories": []string{"/new/repo"}, "force": true}})
+	if c, _, e := run(t, "migrate", "--data-dir", d, "--from", src, "--project-moves", bad); c != ExitUsage || strings.Contains(e, bad) {
+		t.Fatalf("invalid moves %d %s", c, e)
+	}
+	changed := filepath.Join(mdir, "changed.json")
+	writePriv(t, changed, []any{map[string]any{"projectId": pid, "fromRepositories": []string{"/old/repo"}, "toRepositories": []string{"/other/repo"}}})
+	if c, _, e := run(t, "migrate", "--data-dir", d, "--from", src, "--project-moves", changed); c != ExitFailed || !strings.Contains(e, "import conflict: projectMove "+pid) {
+		t.Fatalf("changed target %d %s", c, e)
+	}
+	good := filepath.Join(mdir, "moves.json")
+	writePriv(t, good, []any{map[string]any{"projectId": pid, "fromRepositories": []string{"/old/repo"}, "toRepositories": []string{"/new/repo"}}})
+	c, o, e := run(t, "migrate", "--data-dir", d, "--from", src, "--project-moves", good)
+	if c != 0 || !strings.Contains(o, `"projectMoves"`) || !strings.Contains(o, `"digest": "sha256:`) || !strings.Contains(o, pid) {
+		t.Fatalf("move %d %s %s", c, o, e)
+	}
+	if strings.Contains(o, "/old/repo") || strings.Contains(o, "/new/repo") || strings.Contains(o, good) || strings.Contains(o, "projectRelocations") {
+		t.Fatalf("report leaks paths/private payload: %s", o)
+	}
+	if c, o, _ := run(t, "migrate", "--data-dir", d, "--from", src, "--project-moves", good); c != 0 || !strings.Contains(o, `"repeat": true`) {
+		t.Fatalf("repeat %s", o)
+	}
+	st, err = store.Open(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s, _ := st.Read()
+	if len(s.Projects) != 1 || s.Projects[0].Repositories[0] != "/new/repo" || s.Projects[0].CreatedAt != "2026-01-02T00:00:00Z" {
+		t.Fatalf("destination project changed %+v", s.Projects)
+	}
+	rows, _ := st.MetricsRows()
+	if len(rows) != 1 || rows[0].RunID != rid || rows[0].Input == nil || *rows[0].Input != 7 || rows[0].CostUsd != nil {
+		t.Fatalf("history usage %+v", rows)
 	}
 }

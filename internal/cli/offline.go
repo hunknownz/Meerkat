@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/hunknownz/Meerkat/internal/issues"
 	"github.com/hunknownz/Meerkat/internal/model"
@@ -71,12 +73,24 @@ func cmdMigrate(env Env, args []string) (int, error) {
 	var roots multi
 	fs.Var(&roots, "run-root", "run root directory (repeatable)")
 	backup := fs.String("backup", "", "write a backup of the destination first")
+	movesPath := fs.String("project-moves", "", "absolute private JSON file of explicit project relocations")
 	if err := parse(fs, args); err != nil {
 		return ExitUsage, err
 	}
 	src, err := absPath(*from, "--from")
 	if err != nil {
 		return ExitUsage, err
+	}
+	var opts store.ImportOptions
+	if *movesPath != "" {
+		if !filepath.IsAbs(*movesPath) {
+			return ExitUsage, usageErr{"--project-moves must be an absolute path"}
+		}
+		moves, err := store.LoadProjectMoves(*movesPath)
+		if err != nil {
+			return ExitUsage, errors.New("invalid --project-moves (private regular file with a strict bounded JSON array required)")
+		}
+		opts.ProjectMoves = moves
 	}
 	if server.Alive(src) {
 		return ExitUsage, errors.New("old owner active: stop it first")
@@ -97,9 +111,11 @@ func cmdMigrate(env Env, args []string) (int, error) {
 		}
 		out["backup"] = b
 	}
-	rep, err := st.ImportLegacy(src, roots)
+	rep, err := st.ImportLegacyWithOptions(src, roots, opts)
 	if err != nil {
 		switch {
+		case errors.Is(err, store.ErrConflict):
+			return ExitFailed, errors.New(conflictMessage(rep.Conflicts))
 		case errors.Is(err, store.ErrLiveController):
 			return ExitUsage, errors.New("live controller detected; stop it first")
 		case errors.Is(err, store.ErrUnsafeSource), errors.Is(err, model.ErrInvalid):
@@ -255,4 +271,29 @@ func cmdDoctor(env Env, args []string) (int, error) {
 		return ExitUsage, nil
 	}
 	return ExitOK, nil
+}
+
+// conflictMessage renders sanitized conflict kind/id pairs (bounded; no payload content).
+func conflictMessage(cs []store.ImportConflict) string {
+	const maxShown, maxID = 3, 48
+	msg := "import conflict"
+	if len(cs) == 0 {
+		return msg
+	}
+	parts := make([]string, 0, maxShown)
+	for i, c := range cs {
+		if i == maxShown {
+			break
+		}
+		id := c.ID
+		if len(id) > maxID {
+			id = id[:maxID] + "..."
+		}
+		parts = append(parts, c.Kind+" "+id)
+	}
+	msg += ": " + strings.Join(parts, ", ")
+	if len(cs) > maxShown {
+		msg += " (+" + strconv.Itoa(len(cs)-maxShown) + " more)"
+	}
+	return msg
 }

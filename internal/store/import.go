@@ -57,6 +57,8 @@ type ImportReport struct {
 	UnknownTasks int              `json:"unknownTasks"`
 	SettingsKept bool             `json:"settingsKept"`
 	CreatedAt    string           `json:"createdAt"`
+	// ProjectMoves is present only for an explicit --project-moves import (ids/count/digest, no paths).
+	ProjectMoves *ProjectMoveReport `json:"projectMoves,omitempty"`
 }
 
 // HistoryEntry is a non-executable record of legacy work (no frozen contract; never scheduled).
@@ -344,6 +346,7 @@ type importPlan struct {
 	stops    []model.StopReceipt
 	receipts []IssueReceipt
 	bodies   map[string][]byte // deliveryID -> body
+	moves    []ProjectMove
 	report   ImportReport
 }
 
@@ -711,7 +714,19 @@ func parseRunReceipt(b []byte, rel, srcHash string) (HistoryEntry, string, error
 
 // ImportLegacy imports a 0.2.x data directory (and explicit run roots) into this store in one transaction.
 func (s *Store) ImportLegacy(from string, runRoots []string) (ImportReport, error) {
+	return s.ImportLegacyWithOptions(from, runRoots, ImportOptions{})
+}
+
+// ImportLegacyWithOptions is ImportLegacy with opt-in explicit project moves. With zero options
+// it behaves exactly like ImportLegacy. The import identity binds the source hash and the
+// mapping digest, so a changed mapping is never silently skipped as a repeat.
+func (s *Store) ImportLegacyWithOptions(from string, runRoots []string, opts ImportOptions) (ImportReport, error) {
 	var zero ImportReport
+	if len(opts.ProjectMoves) > 0 {
+		if err := validateProjectMoves(opts.ProjectMoves); err != nil {
+			return zero, err
+		}
+	}
 	if !filepath.IsAbs(from) {
 		return zero, fmt.Errorf("%w: source must be absolute", ErrUnsafeSource)
 	}
@@ -835,6 +850,15 @@ func (s *Store) ImportLegacy(from string, runRoots []string) (ImportReport, erro
 	srcHash := ss.hash()
 	p.report.SourceHash = "sha256:" + srcHash
 	p.report.ImportID = srcHash[:32]
+	if len(opts.ProjectMoves) > 0 {
+		p.moves = sortedMoves(opts.ProjectMoves)
+		mr := &ProjectMoveReport{Count: len(p.moves), Digest: projectMovesDigest(p.moves)}
+		for _, m := range p.moves {
+			mr.ProjectIDs = append(mr.ProjectIDs, m.ProjectID)
+		}
+		p.report.ProjectMoves = mr
+		p.report.ImportID = moveImportID(p.report.SourceHash, mr.Digest)
+	}
 
 	// Repeat of an identical source: idempotent no-op.
 	var prev []byte
@@ -984,7 +1008,13 @@ func (s *Store) commitImport(p *importPlan) (ImportReport, error) {
 			return err
 		}
 		conflict := func(kind, id string) { rep.Conflicts = append(rep.Conflicts, ImportConflict{kind, id}) }
-		mergeAll(cur, p.state, &rep, conflict)
+		in := *p.state
+		in.Projects = append([]model.Project{}, p.state.Projects...)
+		relocations := applyProjectMoves(cur, &in, p.moves, conflict)
+		if len(relocations) > 0 {
+			rep.Duplicates["projectMoves"] = len(relocations)
+		}
+		mergeAll(cur, &in, &rep, conflict)
 		for _, h := range p.history {
 			var old []byte
 			e := tx.QueryRow("SELECT payload FROM legacy_history WHERE id = ?", h.ID).Scan(&old)
@@ -1065,7 +1095,8 @@ func (s *Store) commitImport(p *importPlan) (ImportReport, error) {
 			return err
 		}
 		rep.CreatedAt = now()
-		_, err = tx.Exec("INSERT INTO imports (id, created_at, payload) VALUES (?, ?, ?)", rep.ImportID, rep.CreatedAt, mustJSON(rep))
+		_, err = tx.Exec("INSERT INTO imports (id, created_at, payload) VALUES (?, ?, ?)", rep.ImportID, rep.CreatedAt,
+			mustJSON(importRecord{ImportReport: rep, ProjectRelocations: relocations}))
 		if err != nil {
 			return fmt.Errorf("store: write failed")
 		}
