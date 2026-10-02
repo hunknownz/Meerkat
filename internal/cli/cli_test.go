@@ -43,7 +43,7 @@ func privDir(t *testing.T) string {
 }
 
 func TestHelpVersionUsage(t *testing.T) {
-	if c, o, _ := run(t, "version"); c != 0 || strings.TrimSpace(o) != "0.3.0" {
+	if c, o, _ := run(t, "version"); c != 0 || strings.TrimSpace(o) != server.Version {
 		t.Fatal(o)
 	}
 	if c, o, _ := run(t, "help"); c != 0 || !strings.Contains(o, "serve") {
@@ -108,7 +108,7 @@ func TestServeSocketCommandsAndOwnerExclusion(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	var start map[string]any
-	if json.Unmarshal([]byte(o.String()), &start) != nil || start["version"] != "0.3.0" || !strings.HasPrefix(start["url"].(string), "http://127.0.0.1:") {
+	if json.Unmarshal([]byte(o.String()), &start) != nil || start["version"] != server.Version || !strings.HasPrefix(start["url"].(string), "http://127.0.0.1:") {
 		t.Fatalf("startup %s", o.String())
 	}
 	if c, out, e := run(t, "snapshot", "--data-dir", d); c != 0 || !strings.Contains(out, `"schemaVersion": 1`) || !strings.Contains(out, "localHistory") {

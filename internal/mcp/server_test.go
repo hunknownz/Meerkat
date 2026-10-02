@@ -3,9 +3,11 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,13 +17,38 @@ import (
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/server"
+	"github.com/hunknownz/Meerkat/internal/web"
 )
 
 const fakeSnap = `{"schemaVersion":1,"observedAt":"2025-01-02T03:04:05Z","controller":{},"projects":[{"id":"p"}],` +
 	`"contexts":[],"tasks":[{"id":"t1","goal":"secret-task-goal"},{"id":"t2"}],"runs":[{"id":"r1","authEnv":"X"}],` +
 	`"deliveries":[],"reviews":[],"profiles":[],"settings":{},"counts":{"running":1,"queued":2,"unknown":0},"usage":{},"sessionToken":"tok"}`
 
-var assets = fstest.MapFS{MonitorAsset: {Data: []byte("<!doctype html><title>m</title>")}}
+const fakeIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h1"/></svg>`
+
+var assets = fstest.MapFS{
+	MonitorAsset: {Data: []byte("<!doctype html><title>m</title>")},
+	IconAsset:    {Data: []byte(fakeIcon)},
+}
+
+// checkIcons asserts one SVG data-URI icon that decodes to the embedded logo bytes.
+func checkIcons(t *testing.T, v any, want string) {
+	t.Helper()
+	list, ok := v.([]any)
+	if !ok || len(list) != 1 {
+		t.Fatalf("icons %v", v)
+	}
+	ic := list[0].(map[string]any)
+	src, _ := ic["src"].(string)
+	const prefix = "data:image/svg+xml;base64,"
+	if ic["mimeType"] != "image/svg+xml" || !strings.HasPrefix(src, prefix) {
+		t.Fatalf("icon %v", ic)
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(src, prefix))
+	if err != nil || string(raw) != want {
+		t.Fatalf("icon payload %q", raw)
+	}
+}
 
 type session struct {
 	t     *testing.T
@@ -116,9 +143,11 @@ func TestLifecycleAndVersions(t *testing.T) {
 		}
 		r := s.rpc(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + req + `","capabilities":{}}}`)
 		res := r["result"].(map[string]any)
-		if res["protocolVersion"] != want || res["serverInfo"].(map[string]any)["name"] != "meerkat" {
+		info := res["serverInfo"].(map[string]any)
+		if res["protocolVersion"] != want || info["name"] != "meerkat" || info["version"] != server.Version {
 			t.Fatalf("init %v", r)
 		}
+		checkIcons(t, info["icons"], fakeIcon)
 		caps := res["capabilities"].(map[string]any)
 		if caps["tools"] == nil || caps["resources"] == nil {
 			t.Fatal("caps")
@@ -225,6 +254,35 @@ func TestToolsListMetadata(t *testing.T) {
 	if b, _ := json.Marshal(gs["ui"].(map[string]any)["visibility"]); string(b) != `["app"]` || gs["openai/ui"] != nil {
 		t.Fatalf("get_monitor_snapshot meta %v", gs)
 	}
+	if byName[ToolOpenMonitor]["title"] != "Meerkat" {
+		t.Fatalf("open_monitor title %v", byName[ToolOpenMonitor]["title"])
+	}
+	checkIcons(t, byName[ToolOpenMonitor]["icons"], fakeIcon)
+}
+
+func TestIconsOmittedWithoutLogo(t *testing.T) {
+	s := &Server{Assets: fstest.MapFS{MonitorAsset: {Data: []byte("x")}}}
+	out := s.handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`))
+	if strings.Contains(string(out), `"icons"`) || !strings.Contains(string(out), `"protocolVersion":"2025-11-25"`) {
+		t.Fatal(string(out))
+	}
+	for _, tool := range s.toolList() {
+		if _, ok := tool.(map[string]any)["icons"]; ok {
+			t.Fatal("tool icon without logo")
+		}
+	}
+}
+
+func TestEmbeddedLogoIsSelectedMonochromeSVG(t *testing.T) {
+	svg, err := fs.ReadFile(web.Assets(), IconAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	icons := (&Server{Assets: web.Assets()}).icons()
+	checkIcons(t, icons, string(svg))
+	if !strings.Contains(string(svg), `fill="currentColor"`) || strings.Contains(string(svg), "<image") {
+		t.Fatal("logo must be the selected monochrome vector")
+	}
 }
 
 func TestResources(t *testing.T) {
@@ -235,7 +293,7 @@ func TestResources(t *testing.T) {
 		t.Fatal(list)
 	}
 	r := list[0].(map[string]any)
-	if r["uri"] != MonitorURI || r["mimeType"] != "text/html;profile=mcp-app" {
+	if r["uri"] != MonitorURI || r["mimeType"] != "text/html;profile=mcp-app" || r["title"] != "Meerkat Agent Monitor" {
 		t.Fatal(r)
 	}
 	read := s.rpc(`{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"ui://meerkat/monitor"}}`)

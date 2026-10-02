@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 
 // Protocol and transport limits.
 const (
-	LatestProtocol  = "2025-06-18"
+	LatestProtocol  = "2025-11-25"
 	MaxInputBytes   = 64 << 10
 	MaxOutputBytes  = 64 << 20
 	SnapshotTimeout = 3 * time.Second
@@ -27,6 +28,7 @@ const (
 	MonitorURI   = "ui://meerkat/monitor"
 	MonitorMIME  = "text/html;profile=mcp-app"
 	MonitorAsset = "mcp/meerkat-app.html"
+	IconAsset    = "app/meerkat.svg"
 
 	ToolOpenMonitor = "open_monitor"
 	ToolGetSnapshot = "get_monitor_snapshot"
@@ -271,7 +273,7 @@ func (s *Server) dispatch(ctx context.Context, method string, params json.RawMes
 		if err := objectParams(params); err != nil {
 			return nil, err
 		}
-		return map[string]any{"tools": toolList()}, nil
+		return map[string]any{"tools": s.toolList()}, nil
 	case "tools/call":
 		return s.callTool(ctx, params)
 	case "resources/list":
@@ -314,17 +316,21 @@ func (s *Server) doInitialize(params json.RawMessage) (any, *rpcError) {
 		version = p.ProtocolVersion
 	}
 	s.initialize = true
+	info := map[string]any{
+		"name":    "meerkat",
+		"title":   "Meerkat",
+		"version": server.Version,
+	}
+	if icons := s.icons(); icons != nil {
+		info["icons"] = icons
+	}
 	return map[string]any{
 		"protocolVersion": version,
 		"capabilities": map[string]any{
 			"tools":     map[string]any{"listChanged": false},
 			"resources": map[string]any{"listChanged": false, "subscribe": false},
 		},
-		"serverInfo": map[string]any{
-			"name":    "meerkat",
-			"title":   "Meerkat",
-			"version": server.Version,
-		},
+		"serverInfo":   info,
 		"instructions": "Read-only Meerkat monitor. Requires a running `meerkat serve` daemon; these tools never start, stop or change runs.",
 	}, nil
 }
@@ -340,22 +346,42 @@ func emptySchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}
 }
 
-func toolList() []any {
-	return []any{
-		map[string]any{
-			"name":        ToolOpenMonitor,
-			"title":       "Open Meerkat monitor",
-			"description": "Open the read-only Meerkat monitor and summarize current task and run counts.",
-			"inputSchema": emptySchema(),
-			"annotations": readOnly,
-			"_meta": map[string]any{
-				"ui":        map[string]any{"resourceUri": MonitorURI, "visibility": []string{"model", "app"}},
-				"openai/ui": map[string]any{"entrypoints": []any{map[string]any{"type": "global"}, map[string]any{"type": "thread"}}},
-			},
+// icons returns the embedded monochrome Meerkat logo as an SVG data URI, or nil when unavailable.
+func (s *Server) icons() []any {
+	if s.Assets == nil {
+		return nil
+	}
+	svg, err := fs.ReadFile(s.Assets, IconAsset)
+	if err != nil || len(svg) == 0 || len(svg) > 64<<10 {
+		return nil
+	}
+	return []any{map[string]any{
+		"src":      "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(svg),
+		"mimeType": "image/svg+xml",
+		"sizes":    []string{"any"},
+	}}
+}
+
+func (s *Server) toolList() []any {
+	open := map[string]any{
+		"name":        ToolOpenMonitor,
+		"title":       "Meerkat",
+		"description": "Open the read-only Meerkat agent monitor and summarize current task and run counts.",
+		"inputSchema": emptySchema(),
+		"annotations": readOnly,
+		"_meta": map[string]any{
+			"ui":        map[string]any{"resourceUri": MonitorURI, "visibility": []string{"model", "app"}},
+			"openai/ui": map[string]any{"entrypoints": []any{map[string]any{"type": "global"}, map[string]any{"type": "thread"}}},
 		},
+	}
+	if icons := s.icons(); icons != nil {
+		open["icons"] = icons
+	}
+	return []any{
+		open,
 		map[string]any{
 			"name":        ToolGetSnapshot,
-			"title":       "Get Meerkat monitor snapshot",
+			"title":       "Refresh Meerkat agent monitor",
 			"description": "Refresh the read-only public Meerkat snapshot for the monitor app.",
 			"inputSchema": emptySchema(),
 			"annotations": readOnly,
@@ -377,8 +403,8 @@ func monitorResource() map[string]any {
 	return map[string]any{
 		"uri":         MonitorURI,
 		"name":        "meerkat-monitor",
-		"title":       "Meerkat monitor",
-		"description": "Read-only Meerkat monitor app.",
+		"title":       "Meerkat Agent Monitor",
+		"description": "Read-only Meerkat monitor of local agents, tasks and usage.",
 		"mimeType":    MonitorMIME,
 		"_meta":       uiMeta(),
 	}
