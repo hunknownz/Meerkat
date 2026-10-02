@@ -1,0 +1,844 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hunknownz/Meerkat/contracts/workflow.schema.json",
+  "title": "WorkflowEnvelope",
+  "description": "Public snapshot envelope returned by GET /api/workflow (contract version 1). Secrets, context text and profile commands are never part of this contract.",
+  "type": "object",
+  "required": [
+    "ok",
+    "data",
+    "sessionToken"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "data": {
+      "$ref": "#/definitions/Snapshot"
+    },
+    "legacyActive": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/LegacyActive"
+      }
+    },
+    "sessionToken": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "definitions": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "NullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "NullableCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "Role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "developer | reviewer | polisher; unknown roles are shown verbatim."
+    },
+    "Snapshot": {
+      "title": "Snapshot",
+      "type": "object",
+      "required": [
+        "projects",
+        "contexts",
+        "tasks",
+        "runs",
+        "deliveries",
+        "reviews",
+        "profiles"
+      ],
+      "properties": {
+        "snapshotVersion": {
+          "const": 1
+        },
+        "schemaVersion": {
+          "type": "integer"
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Project"
+          }
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PublicContext"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Task"
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Run"
+          }
+        },
+        "deliveries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Delivery"
+          }
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Review"
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PublicProfile"
+          }
+        },
+        "controller": {
+          "$ref": "#/definitions/Controller"
+        },
+        "counts": {
+          "$ref": "#/definitions/Counts"
+        },
+        "settings": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Settings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Project": {
+      "title": "Project",
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "ContextSource": {
+      "title": "ContextSource",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        }
+      }
+    },
+    "PublicContext": {
+      "title": "PublicContext",
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "version",
+        "digest"
+      ],
+      "not": {
+        "required": [
+          "text"
+        ]
+      },
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "projectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContextSource"
+          }
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      }
+    },
+    "ContextRef": {
+      "title": "ContextRef",
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "digest": {
+          "type": "string"
+        }
+      }
+    },
+    "IssueRef": {
+      "title": "IssueRef",
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "bodyHash": {
+          "type": "string"
+        }
+      }
+    },
+    "Task": {
+      "title": "Task",
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "title",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "projectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "title": {
+          "type": "string"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string"
+        },
+        "worktree": {
+          "type": "string"
+        },
+        "branch": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "changeId": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contextRef": {
+          "$ref": "#/definitions/ContextRef"
+        },
+        "profileIds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "stateReason": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "resumeRole": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "candidateSha": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "baselineSha": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "issueRef": {
+          "$ref": "#/definitions/IssueRef"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "RunEvent": {
+      "title": "RunEvent",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "ModelSnapshot": {
+      "title": "ModelSnapshot",
+      "type": "object",
+      "properties": {
+        "profileId": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    },
+    "TokenCounts": {
+      "title": "TokenCounts",
+      "type": "object",
+      "description": "Independent nullable counters; null or absent means unknown, never zero.",
+      "properties": {
+        "input": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "output": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "cacheRead": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "cacheWrite": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "total": {
+          "$ref": "#/definitions/NullableCount"
+        }
+      }
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "properties": {
+        "tokens": {
+          "$ref": "#/definitions/TokenCounts"
+        },
+        "usageCompleteness": {
+          "type": "string"
+        },
+        "estimatedCostUsd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "TimeMetrics": {
+      "title": "TimeMetrics",
+      "type": "object",
+      "properties": {
+        "queueSeconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wallSeconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "modelSeconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "testSeconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fixRound": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "Run": {
+      "title": "Run",
+      "type": "object",
+      "required": [
+        "id",
+        "taskId",
+        "role",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "taskId": {
+          "$ref": "#/definitions/Id"
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "executor": {
+          "type": "string"
+        },
+        "modelSnapshot": {
+          "$ref": "#/definitions/ModelSnapshot"
+        },
+        "contextRef": {
+          "$ref": "#/definitions/ContextRef"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stage": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "endedAt": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "heartbeatAt": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunEvent"
+          }
+        },
+        "usage": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metrics": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/TimeMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stopRequested": {
+          "type": "boolean"
+        }
+      }
+    },
+    "CheckResult": {
+      "title": "CheckResult",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "type": "object",
+      "required": [
+        "id",
+        "taskId",
+        "candidateSha",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "taskId": {
+          "$ref": "#/definitions/Id"
+        },
+        "contextRef": {
+          "$ref": "#/definitions/ContextRef"
+        },
+        "candidateSha": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "runIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CheckResult"
+              }
+            },
+            {
+              "$ref": "#/definitions/CheckResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "knownGaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "state": {
+          "type": "string",
+          "description": "first | final_candidate | delivered"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "Review": {
+      "title": "Review",
+      "type": "object",
+      "required": [
+        "id",
+        "taskId",
+        "runId",
+        "verdict"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "taskId": {
+          "$ref": "#/definitions/Id"
+        },
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "candidateSha": {
+          "type": "string"
+        },
+        "contextDigest": {
+          "type": "string"
+        },
+        "verdict": {
+          "type": "string"
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CheckResult"
+              }
+            },
+            {
+              "$ref": "#/definitions/CheckResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      }
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "role"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "authEnv"
+            ]
+          },
+          {
+            "required": [
+              "piCommand"
+            ]
+          },
+          {
+            "required": [
+              "configFile"
+            ]
+          },
+          {
+            "required": [
+              "instructions"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "projectId": {
+          "$ref": "#/definitions/Id"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "executor": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    },
+    "Controller": {
+      "title": "Controller",
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "running",
+            "idle",
+            "unknown"
+          ]
+        },
+        "heartbeatAt": {
+          "$ref": "#/definitions/NullableString"
+        }
+      }
+    },
+    "Counts": {
+      "title": "Counts",
+      "type": "object",
+      "properties": {
+        "running": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "queued": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "unknown": {
+          "$ref": "#/definitions/NullableCount"
+        }
+      }
+    },
+    "Settings": {
+      "title": "Settings",
+      "type": "object",
+      "required": [
+        "maxConcurrency",
+        "maxFixRounds"
+      ],
+      "properties": {
+        "maxConcurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxFixRounds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "defaultProfiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "SettingsInput": {
+      "title": "SettingsInput",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "maxFixRounds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "defaultProfiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "LegacyActive": {
+      "title": "LegacyActive",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
