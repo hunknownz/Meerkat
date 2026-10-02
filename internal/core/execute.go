@@ -247,9 +247,9 @@ func (c *Core) Execute(ctx context.Context, taskIDs []string, resume, acknowledg
 	}
 	defer c.dispatch.Unlock()
 	c.mu.Lock()
-	if c.closed || c.lost {
+	if closed, lost := c.closed, c.lost; closed || lost {
 		c.mu.Unlock()
-		if c.closed {
+		if closed {
 			return res, ErrClosed
 		}
 		return res, ErrLeaseLost

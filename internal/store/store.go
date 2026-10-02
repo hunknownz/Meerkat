@@ -91,22 +91,38 @@ func quoteList(v []string) string {
 // Store is a handle on one private data directory.
 type Store struct {
 	dir  string
-	db   *sql.DB
+	db   *sql.DB // writer pool: every transaction is BEGIN IMMEDIATE
+	rdb  *sql.DB // reader pool: query_only, BEGIN DEFERRED snapshots that never take the writer lock
 	host string
 }
 
-func dsn(path string, readOnly bool) string {
+type dsnMode int
+
+const (
+	dsnWriter dsnMode = iota
+	dsnReader
+	dsnReadOnlyFile
+)
+
+// dsn builds a SQLite URI. The path is percent-encoded through net/url so that characters such as
+// '?', '#', '%' and spaces in the data directory cannot be mistaken for URI query or fragment syntax.
+func dsn(path string, mode dsnMode) string {
 	q := url.Values{}
 	for _, p := range []string{"foreign_keys(1)", "busy_timeout(5000)", "synchronous(FULL)"} {
 		q.Add("_pragma", p)
 	}
-	if readOnly {
+	switch mode {
+	case dsnReadOnlyFile:
 		q.Set("mode", "ro")
-	} else {
+	case dsnReader:
+		q.Add("_pragma", "query_only(1)")
+		q.Set("_txlock", "deferred")
+	default:
 		q.Add("_pragma", "journal_mode(WAL)")
 		q.Set("_txlock", "immediate")
 	}
-	return "file:" + path + "?" + q.Encode()
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: q.Encode()}
+	return u.String()
 }
 
 func checkDir(dir string) error {
@@ -164,7 +180,7 @@ func Open(dir string) (*Store, error) {
 			}
 		}
 	}
-	db, err := sql.Open("sqlite", dsn(path, false))
+	db, err := sql.Open("sqlite", dsn(path, dsnWriter))
 	if err != nil {
 		return nil, fmt.Errorf("store: open database")
 	}
@@ -174,6 +190,12 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	rdb, err := sql.Open("sqlite", dsn(path, dsnReader))
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: open database")
+	}
+	s.rdb = rdb
 	return s, nil
 }
 
@@ -204,7 +226,16 @@ func (s *Store) migrate() error {
 func (s *Store) DataDir() string { return s.dir }
 
 // Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	var rerr error
+	if s.rdb != nil {
+		rerr = s.rdb.Close()
+	}
+	if err := s.db.Close(); err != nil {
+		return err
+	}
+	return rerr
+}
 
 type querier interface {
 	Query(string, ...any) (*sql.Rows, error)
@@ -316,9 +347,11 @@ func readState(q querier) (*model.State, error) {
 	return st, nil
 }
 
-// Read returns a consistent snapshot of the complete state.
+// Read returns a consistent snapshot of the complete state. It uses a deferred transaction on the
+// reader pool, so under WAL it neither takes nor waits for the writer lock and observes the last
+// committed state across all tables.
 func (s *Store) Read() (*model.State, error) {
-	tx, err := s.db.Begin()
+	tx, err := s.rdb.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("store: begin failed")
 	}
@@ -683,7 +716,7 @@ func ValidateBackup(path string) error {
 	if err != nil || !fi.Mode().IsRegular() {
 		return ErrBadBackup
 	}
-	db, err := sql.Open("sqlite", dsn(path, true))
+	db, err := sql.Open("sqlite", dsn(path, dsnReadOnlyFile))
 	if err != nil {
 		return ErrBadBackup
 	}
