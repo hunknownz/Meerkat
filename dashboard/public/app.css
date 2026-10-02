@@ -393,3 +393,5 @@ body > #meerkat-ui { min-height: 100vh; }
 #meerkat-ui .ctx-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; max-height: 320px; overflow: auto; }
 #meerkat-ui .compat .badge { flex: none; }
 #meerkat-ui .err { color: var(--red); }
+#meerkat-ui h1 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
+#meerkat-ui .brandmark { width: 18px; height: 18px; }

@@ -1,114 +1,114 @@
-// Read-only live monitor for running Pi agents. Polls GET /api/active.
-// All rendering uses textContent; no actions, forms, or task records.
+// Standalone Meerkat dashboard bootstrap. Polls GET /api/workflow and hands
+// the snapshot to the shared host-neutral UI factory (ui.js). Writes go only
+// to the two bounded workflow endpoints with this server's session token.
+import { createMeerkatUI } from './ui.js';
 
-const POLL_MS = 4000;
+export const POLL_MS = 4000;
+export const TIMEOUT_MS = 3000;
 const MAX_TEXT = 500;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Validates the /api/active payload; throws on anything malformed. */
-export function parseActive(payload) {
+const text = (v) => (typeof v === 'string' ? v.slice(0, MAX_TEXT) : '');
+
+/** Validates one legacy single-run entry list (GET /api/active agent shape). */
+export function parseLegacy(list) {
+  if (!Array.isArray(list)) throw new Error('malformed');
+  return list.map((a) => {
+    if (!a || typeof a !== 'object') throw new Error('malformed');
+    return { id: text(a.id), task: text(a.task), model: text(a.model), worktree: text(a.worktree), startedAt: text(a.startedAt) };
+  });
+}
+
+/** Validates GET /api/workflow; throws on anything malformed (never returns a fictitious empty state). */
+export function parseWorkflow(payload) {
   if (!payload || typeof payload !== 'object' || payload.ok !== true) throw new Error('malformed');
-  const { count, agents } = payload;
-  if (!Number.isInteger(count) || count < 0 || !Array.isArray(agents)) throw new Error('malformed');
-  return {
-    count,
-    agents: agents.map((a) => {
-      if (!a || typeof a !== 'object') throw new Error('malformed');
-      return {
-        id: text(a.id),
-        task: text(a.task),
-        model: text(a.model),
-        worktree: text(a.worktree),
-        startedAt: text(a.startedAt),
-      };
-    }),
-  };
+  const { data, sessionToken } = payload;
+  if (!data || typeof data !== 'object' || data.schemaVersion !== 1) throw new Error('malformed');
+  for (const k of ['projects', 'contexts', 'tasks', 'runs', 'deliveries', 'reviews', 'profiles']) {
+    if (data[k] !== undefined && !Array.isArray(data[k])) throw new Error('malformed');
+  }
+  if (typeof sessionToken !== 'string' || !sessionToken) throw new Error('malformed');
+  return { data, legacyActive: parseLegacy(payload.legacyActive ?? []), sessionToken };
 }
 
-function text(v) {
-  return typeof v === 'string' ? v.slice(0, MAX_TEXT) : '';
+async function fetchJson(url, init = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin', ...init, signal: ctl.signal });
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok || !body || body.ok !== true) throw new Error(text(body?.error) || `HTTP ${res.status}`);
+    return body;
+  } catch (e) {
+    throw new Error(e?.name === 'AbortError' ? '请求超时' : (text(e?.message) || '网络错误'));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-/** Formats elapsed time since an ISO timestamp, e.g. "1h 02m", "3m 05s". */
-export function formatElapsed(startedAt, now = Date.now()) {
-  const t = Date.parse(startedAt);
-  if (!Number.isFinite(t)) return '—';
-  const s = Math.max(0, Math.floor((now - t) / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const pad = (n) => String(n).padStart(2, '0');
-  if (h) return `${h}h ${pad(m)}m`;
-  if (m) return `${m}m ${pad(s % 60)}s`;
-  return `${s}s`;
-}
+/** Starts polling into `root`; returns a stop function. `fetchImpl`-free so tests can stub global fetch. */
+export function startDashboard(root) {
+  let token = '';
+  let timer = 0;
+  let inFlight = null;
+  let stopped = false;
 
-function el(tag, className, content) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (content !== undefined) node.textContent = content;
-  return node;
-}
-
-function renderAgents(list, agents) {
-  list.replaceChildren(
-    ...agents.map((a) => {
-      const li = el('li', 'agent');
-      li.append(el('p', 'agent-task', a.task || '(未命名任务)'));
-      const dl = el('dl', 'agent-meta');
-      for (const [k, v] of [
-        ['模型', a.model || '—'],
-        ['工作树', a.worktree || '—'],
-        ['已运行', formatElapsed(a.startedAt)],
-      ]) dl.append(el('dt', '', k), el('dd', '', v));
-      li.append(dl);
-      return li;
-    }),
-  );
-}
-
-function startMonitor() {
-  const status = document.getElementById('status');
-  const count = document.getElementById('count');
-  const list = document.getElementById('agents');
-  const updated = document.getElementById('updated');
-
-  const showError = (message) => {
-    status.dataset.state = 'error';
-    status.textContent = message;
-    count.textContent = '运行状态未知';
-    list.replaceChildren();
+  const write = (method, path, body) => {
+    if (!token) return Promise.reject(new Error('尚未取得会话令牌，请先重新连接'));
+    return fetchJson(path, { method, headers: { 'Content-Type': 'application/json', 'X-Meerkat-Token': token }, body: JSON.stringify(body) });
   };
 
-  async function poll() {
-    let res;
-    try {
-      res = await fetch('/api/active', { cache: 'no-store', headers: { accept: 'application/json' } });
-    } catch {
-      showError('无法连接状态服务，正在重试…');
+  async function onAction(action) {
+    if (action?.type === 'reconnect') {
+      const ok = await poll();
+      if (!ok) throw new Error('重连失败');
       return;
     }
-    if (!res.ok) {
-      showError(`状态服务不可用（HTTP ${res.status}），正在重试…`);
-      return;
+    if (action?.type === 'stop') {
+      if (!UUID_RE.test(action.runId || '') || !UUID_RE.test(action.requestId || '')) throw new Error('无效的运行 ID');
+      const res = await write('POST', `/api/workflow/runs/${encodeURIComponent(action.runId)}/stop`, { requestId: action.requestId });
+      poll();
+      return res;
     }
-    let data;
-    try {
-      data = parseActive(await res.json());
-    } catch {
-      showError('状态数据格式无效，正在重试…');
-      return;
+    if (action?.type === 'settings') {
+      const res = await write('PUT', '/api/workflow/settings', action.input);
+      poll();
+      return res;
     }
-    status.dataset.state = 'ok';
-    status.textContent = '实时';
-    count.textContent = `${data.count} 个运行中`;
-    renderAgents(list, data.agents);
-    updated.textContent = `更新于 ${new Date().toLocaleTimeString()}`;
+    throw new Error('不支持的操作');
   }
 
-  const loop = async () => {
-    await poll();
-    setTimeout(loop, POLL_MS);
-  };
-  loop();
+  const ui = createMeerkatUI(root, { onAction });
+
+  // One request at a time; on failure the last snapshot is marked stale and
+  // polling stops until the user reconnects manually.
+  function poll() {
+    if (inFlight) return inFlight;
+    clearTimeout(timer);
+    inFlight = (async () => {
+      try {
+        const { data, legacyActive, sessionToken } = parseWorkflow(await fetchJson('/api/workflow'));
+        token = sessionToken;
+        ui.update(data, legacyActive);
+        if (!stopped) timer = setTimeout(poll, POLL_MS);
+        return true;
+      } catch (e) {
+        token = '';
+        ui.setDisconnected(e?.message === 'malformed' ? '工作流数据格式无效' : text(e?.message) || '无法连接');
+        return false;
+      } finally {
+        inFlight = null;
+      }
+    })();
+    return inFlight;
+  }
+
+  poll();
+  return () => { stopped = true; clearTimeout(timer); ui.destroy(); };
 }
 
-if (typeof document !== 'undefined') startMonitor();
+if (typeof document !== 'undefined') {
+  const root = document.getElementById('meerkat-ui');
+  if (root) startDashboard(root);
+}
