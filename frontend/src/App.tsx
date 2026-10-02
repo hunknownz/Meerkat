@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { LegacyActive, Run, SettingsInput, Snapshot, Task } from './generated/workflow';
 import {
   DELIVERY_LABEL, ROLES, ROLE_LABEL, agentLabel, checkView, type CheckEntry, dedupLegacy, formatDuration, formatTime, isActiveRun, lastEvent,
-  modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory,
+  modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory, taskLabel,
 } from './model';
 import { newRequestId } from './transport';
 
@@ -184,7 +184,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
     return (
       <>
         {banner}
-        <div className="host"><span className="badge accent">宿主</span><span><b>Codex · 协调者</b> — 本地调度器：{ctl}{snapshot.controller?.heartbeatAt ? `（心跳 ${formatTime(snapshot.controller.heartbeatAt)}）` : ''}</span></div>
+        <div className="host"><span className="badge">宿主</span><span><b>Codex · 协调者</b> — 本地调度器：{ctl}{snapshot.controller?.heartbeatAt ? `（心跳 ${formatTime(snapshot.controller.heartbeatAt)}）` : ''}</span></div>
         <div className="sec-h"><b>工作流运行</b><span>运行中 {countText(counts?.running)} · 排队 {countText(counts?.queued)} · 未知 {countText(counts?.unknown)}</span><span className="end">{stale ? '快照' : '更新于'} {formatTime(snapshot.observedAt)}</span></div>
         <div className="list">{activeRuns.length ? activeRuns.map(agentRow) : <div className="empty">当前没有工作流运行。</div>}</div>
         {independent.length ? (
@@ -198,14 +198,13 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             ))}</div>
           </>
         ) : null}
-        <div className="sec-h"><b>最近交付</b><span>最终代码交付仅指代码，不代表已发布或客户验收</span></div>
+        <div className="sec-h"><b>最近交付</b><span>仅本地代码提交</span></div>
         <div className="list">{dl.length ? dl.map((d) => {
           const t = idx.task.get(d.taskId);
-          const cls = d.state === 'delivered' ? 'green' : d.state === 'final_candidate' ? 'amber' : 'accent';
           return (
             <button type="button" className="row deliv-row" key={d.id} onClick={() => t && setOpenTask(t.id)}>
               <span className="who"><span className="name">{t?.title || '未知任务'}</span><span className="sub"><code>{short(d.candidateSha, 10)}</code>{d.knownGaps?.length ? ` · 已知缺口 ${d.knownGaps.length}` : ''}</span></span>
-              <span className={`badge res ${cls}`}>{DELIVERY_LABEL[d.state] ?? d.state}</span>
+              <span className="badge res">{DELIVERY_LABEL[d.state] ?? d.state}</span>
             </button>
           );
         }) : <div className="empty">暂无交付。</div>}</div>
@@ -223,7 +222,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
         return (
           <button type="button" className="row task-row" key={t.id} onClick={() => setOpenTask(t.id)}>
             <span className="who"><span className="name">{t.title || '未命名任务'}</span><span className="sub"><code>{short(t.id)}</code> · {idx.proj.get(t.projectId)?.name ?? t.projectId} · 更新 {formatTime(t.updatedAt)}</span></span>
-            <span className="meta"><span className={`badge ${cat === 'delivered' ? 'green' : cat === 'attention' ? 'red' : ''}`}>{t.state}</span>{last ? <span className="badge">{roleLabel(last.role)} · {runLabel(last.state)}</span> : null}</span>
+            <span className="meta"><span className={`badge${cat === 'attention' ? ' red' : ''}`}>{taskLabel(t.state)}</span>{last ? <span className="badge">{roleLabel(last.role)} · {runLabel(last.state)}</span> : null}</span>
           </button>
         );
       }) : <div className="empty">还没有工作流任务。</div>}</div></>
@@ -273,7 +272,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
     return (
       <div className="scrim" onClick={(e) => { if (e.target === e.currentTarget) setOpenTask(null); }}>
         <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="mk-drawer-title" tabIndex={-1} ref={(el) => el?.focus()}>
-          <div className="dlg-h"><div><h2 id="mk-drawer-title">{task.title || '未命名任务'}</h2><div className="sub"><code>{task.id}</code><span>{task.state}</span><IssueLink task={task} /></div></div>
+          <div className="dlg-h"><div><h2 id="mk-drawer-title">{task.title || '未命名任务'}</h2><div className="sub"><code>{task.id}</code><span>{taskLabel(task.state)}</span><IssueLink task={task} /></div></div>
             <button type="button" className="icon" aria-label="关闭" onClick={() => setOpenTask(null)}><Close /></button></div>
           <div className="dlg-b">
             <div className="card"><h3>概览</h3><dl className="concl">
@@ -281,7 +280,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               <dt>基线 SHA</dt><dd><code>{task.baselineSha ?? '—'}</code></dd>
               <dt>候选 SHA</dt><dd><code>{task.candidateSha ?? '—'}</code></dd>
               <dt>上下文</dt><dd><code>{task.contextRef ? `v${task.contextRef.version} · ${task.contextRef.digest}` : '—'}</code></dd>
-            </dl></div>
+            </dl><p className="boundary">交付仅表示本地代码提交（候选 SHA）；发布、独立 QA 与客户验收是独立环节，此处不代表已完成。</p></div>
             <div className="card"><h3>角色流程</h3><ol className="phases" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
               {ROLES.map((role) => {
                 const rs = tRuns.filter((r) => r.role === role);
@@ -341,7 +340,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
           </select>
         </label>
         <span className="state-sum">运行中 <b>{countText(counts?.running)}</b> · 独立 <b>{stale ? '未知' : independent.length}</b></span>
-        <span className="notice" role="status" aria-live="polite">{stale ? '已断连 · 快照已过期' : connected ? '已连接' : '正在连接…'}</span>
+        <span className={`notice${stale ? ' stale' : ''}`} role="status" aria-live="polite">{stale ? '已断连 · 快照已过期' : connected ? '已连接' : '正在连接…'}</span>
       </div>
       <main className="view">
         <section aria-label={view}>{view === 'agents' ? AgentsView() : view === 'tasks' ? TasksView() : UsageView()}</section>

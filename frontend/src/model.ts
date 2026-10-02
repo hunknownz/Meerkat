@@ -11,8 +11,17 @@ export const RUN_LABEL: Record<string, string> = {
 };
 export const ACTIVE_RUN = new Set(['queued', 'pending', 'starting', 'running', 'stopping', 'unknown']);
 
+/** Task stage labels. first_delivery is an unreviewed local candidate; delivered is the reviewed local code delivery. */
+export const TASK_LABEL: Record<string, string> = {
+  ready: '就绪', queued: '排队中', blocked: '受阻', implementing: '开发中', developing: '开发中',
+  first_delivery: '初次交付（未审查）', checking: '审查中', final_candidate: '交付候选', polishing: '精修中',
+  rechecking: '复审中', fixing: '修复中', delivered: '最终代码交付', failed: '失败', stopped: '已停止', unknown: '未知',
+};
+
 export const roleLabel = (r: string | undefined): string => (r ? ROLE_LABEL[r] ?? r : '未知角色');
 export const runLabel = (s: string | undefined): string => (s ? RUN_LABEL[s] ?? s : '未知');
+/** Unrecognised task states are shown raw; never mapped to a published/accepted claim. */
+export const taskLabel = (s: string | undefined): string => (s ? TASK_LABEL[s] ?? s : '未知');
 
 /** Historical Pi-NN IDs display as Agent-NN; custom IDs are shown unchanged. */
 export function agentLabel(id: string | undefined): { label: string; legacy: string | null } {
