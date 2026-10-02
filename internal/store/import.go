@@ -1219,6 +1219,11 @@ type MetricsRow struct {
 	Completeness string   `json:"usageCompleteness"`
 	CostUsd      *float64 `json:"estimatedCostUsd"`
 	UsageSource  string   `json:"usageSource"`
+	// Additive, nullable timing columns (appended to keep the existing column order stable).
+	QueuedAt     *string  `json:"queuedAt"`
+	QueueSeconds *float64 `json:"queueSeconds"`
+	TestSeconds  *float64 `json:"testSeconds"`
+	FixRound     *int     `json:"fixRound"`
 }
 
 func fillUsage(r *MetricsRow, u *model.Usage) {
@@ -1258,6 +1263,7 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 		}
 		if r.Metrics != nil {
 			row.WallSeconds, row.ModelSeconds = r.Metrics.WallSeconds, r.Metrics.ModelSeconds
+			row.QueuedAt, row.QueueSeconds, row.TestSeconds, row.FixRound = r.Metrics.QueuedAt, r.Metrics.QueueSeconds, r.Metrics.TestSeconds, r.Metrics.FixRound
 		}
 		fillUsage(&row, r.Usage)
 		out = append(out, row)
@@ -1288,7 +1294,8 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 		var buf bytes.Buffer
 		w := csv.NewWriter(&buf)
 		_ = w.Write([]string{"source", "origin", "taskId", "runId", "role", "executor", "provider", "model", "changeId", "state", "startedAt", "endedAt",
-			"wallSeconds", "modelSeconds", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens", "usageCompleteness", "estimatedCostUsd", "usageSource"})
+			"wallSeconds", "modelSeconds", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens", "usageCompleteness", "estimatedCostUsd", "usageSource",
+			"queuedAt", "queueSeconds", "testSeconds", "fixRound"})
 		ps := func(p *string) string {
 			if p == nil {
 				return ""
@@ -1307,9 +1314,16 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 			}
 			return strconv.FormatFloat(*p, 'f', -1, 64)
 		}
+		pn := func(p *int) string {
+			if p == nil {
+				return ""
+			}
+			return strconv.Itoa(*p)
+		}
 		for _, r := range rows {
 			_ = w.Write([]string{r.Source, r.Origin, r.TaskID, r.RunID, r.Role, r.Executor, r.Provider, r.Model, ps(r.ChangeID), r.State, r.StartedAt, ps(r.EndedAt),
-				pf(r.WallSeconds), pf(r.ModelSeconds), pi(r.Input), pi(r.Output), pi(r.CacheRead), pi(r.CacheWrite), pi(r.Total), r.Completeness, pf(r.CostUsd), r.UsageSource})
+				pf(r.WallSeconds), pf(r.ModelSeconds), pi(r.Input), pi(r.Output), pi(r.CacheRead), pi(r.CacheWrite), pi(r.Total), r.Completeness, pf(r.CostUsd), r.UsageSource,
+				ps(r.QueuedAt), pf(r.QueueSeconds), pf(r.TestSeconds), pn(r.FixRound)})
 		}
 		w.Flush()
 		return buf.Bytes(), w.Error()

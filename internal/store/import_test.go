@@ -179,6 +179,43 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 	if !strings.Contains(string(csv), "changeId") || strings.Count(string(csv), "\n") != 5 {
 		t.Fatalf("csv %s", csv)
 	}
+	// Additive nullable timing columns: appended after the existing columns; unknown stays null/empty.
+	header := strings.SplitN(string(csv), "\n", 2)[0]
+	if !strings.HasSuffix(header, ",usageSource,queuedAt,queueSeconds,testSeconds,fixRound") ||
+		!strings.HasPrefix(header, "source,origin,taskId,runId,role,executor,provider,model,changeId,state,startedAt,endedAt,wallSeconds,modelSeconds,") {
+		t.Fatalf("csv header %s", header)
+	}
+	for _, r := range rows {
+		if r.Source != "workflow" && (r.QueueSeconds != nil || r.TestSeconds != nil || r.FixRound != nil || r.QueuedAt != nil) {
+			t.Fatalf("legacy history row invented timing %+v", r)
+		}
+	}
+	// Recorded workflow metrics are exported; known zero stays 0, unknown test time stays null.
+	q, zero, at := 1.5, 0, "2024-01-01T00:00:00Z"
+	if err := s.Update(func(st *model.State) error {
+		st.Runs[0].Metrics = &model.TimeMetrics{QueuedAt: &at, QueueSeconds: &q, FixRound: &zero}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st3, _ := s.Read()
+	js, _ = s.ExportMetrics("json")
+	rows = nil
+	json.Unmarshal(js, &rows)
+	var got *MetricsRow
+	for i := range rows {
+		if rows[i].RunID == st3.Runs[0].ID {
+			got = &rows[i]
+		}
+	}
+	if got == nil || got.QueueSeconds == nil || *got.QueueSeconds != 1.5 || got.FixRound == nil || *got.FixRound != 0 ||
+		got.TestSeconds != nil || got.QueuedAt == nil || *got.QueuedAt != at || !strings.Contains(string(js), `"testSeconds": null`) {
+		t.Fatalf("metrics export %s", js)
+	}
+	csv, _ = s.ExportMetrics("csv")
+	if !strings.Contains(string(csv), ","+at+",1.5,,0\n") {
+		t.Fatalf("csv %s", csv)
+	}
 }
 
 func snapshotTree(t *testing.T, root string) string {

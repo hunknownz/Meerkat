@@ -400,6 +400,9 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 		}
 		if resumable {
 			f := inspect(t.Worktree)
+			if f.Err != nil {
+				return nil, nil, invalid("task worktree could not be inspected (%s); refusing to resume", inspectFailed)
+			}
 			if !f.Exists || f.Branch != deref(t.Branch) || !f.Clean {
 				return nil, nil, invalid("task worktree is missing, on another branch or dirty (changes preserved)")
 			}
@@ -412,11 +415,15 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 	return ack, states, nil
 }
 
+// inspectFailed is the reason used when Git could not determine worktree facts (unknown, not a mismatch).
+const inspectFailed = "worktree_inspection_failed"
+
 type active struct{ worktree string }
 
 // schedule runs the selection with bounded concurrency; one task per worktree; dependencies gate dispatch.
 func (c *Core) schedule(ctx context.Context, ids []string, orig map[string]string) {
 	pending := slices.Clone(ids)
+	queuedAt := time.Now() // every selected task is queued by the scheduler from this instant
 	running := map[string]active{}
 	slots := []bool{}
 	doneCh := make(chan struct {
@@ -496,8 +503,9 @@ func (c *Core) schedule(ctx context.Context, ids []string, orig map[string]strin
 			slots[slot] = true
 			running[id] = active{worktree: t.Worktree}
 			agent := fmt.Sprintf("Agent-%02d", slot+1)
+			dispatched := time.Now()
 			go func(id string, slot int) {
-				c.runTask(ctx, id, agent)
+				c.runTask(ctx, id, agent, queueWait{at: queuedAt, until: dispatched})
 				doneCh <- struct {
 					id   string
 					slot int
@@ -551,12 +559,29 @@ func (c *Core) depStatus(st *model.State, t model.Task, pending []string, runnin
 		}
 		if dt.Repository == t.Repository {
 			f := inspect(t.Worktree)
+			if f.Err != nil {
+				return inspectFailed, false
+			}
 			if !f.Exists || !isAncestor(t.Worktree, dl.CandidateSha, f.Head) {
 				return "dependency_not_integrated", false
 			}
 		}
 	}
 	return "", wait
+}
+
+// queueMetrics records the scheduler queue wait (queued -> dispatched), which ends before any executor
+// or model time. Without a measured queue the role started on intention: queuedAt = start, wait 0.
+// Model and test seconds stay unknown (nil) unless a provider/tool reports them. FixRound is the known
+// round: 0 for non-fix runs.
+func queueMetrics(qw queueWait, start time.Time, fixRound int) *model.TimeMetrics {
+	if qw.at.IsZero() || qw.until.Before(qw.at) {
+		qw = queueWait{at: start, until: start}
+	}
+	q := qw.until.Sub(qw.at).Seconds()
+	at := qw.at.UTC().Format(time.RFC3339Nano)
+	fr := fixRound
+	return &model.TimeMetrics{QueuedAt: &at, QueueSeconds: &q, FixRound: &fr}
 }
 
 func (c *Core) failTask(id, state, reason, role string) {
@@ -572,7 +597,13 @@ func (c *Core) failTask(id, state, reason, role string) {
 	})
 }
 
-func (c *Core) runTask(ctx context.Context, id, agent string) {
+// queueWait is a measured scheduler queue interval: queued at `at`, dispatched at `until`.
+type queueWait struct{ at, until time.Time }
+
+// runTask drives one task's roles back to back. The scheduler queue wait is attributed only to the
+// first role run; later roles start right after the previous one in this goroutine (no queue).
+func (c *Core) runTask(ctx context.Context, id, agent string, qw queueWait) {
+	first := true
 	for i := 0; i < 20; i++ {
 		if c.isLost() {
 			return
@@ -608,7 +639,12 @@ func (c *Core) runTask(ctx context.Context, id, agent string) {
 			c.failTask(id, model.TaskStopped, "controller_stopped", s.role)
 			return
 		}
-		if !c.runRole(ctx, st, set, *t, p, s, agent) {
+		intent := qw
+		if !first {
+			intent = queueWait{}
+		}
+		first = false
+		if !c.runRole(ctx, st, set, *t, p, s, agent, intent) {
 			return
 		}
 	}
@@ -669,7 +705,9 @@ func frozenOK(st *model.State, t model.Task) (model.Context, string) {
 	return *ctxRec, ""
 }
 
-func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings, t model.Task, p pipeline, s step, agent string) bool {
+// runRole runs one role. qw is the measured scheduler queue interval for the task's first role; a zero
+// value means no queue preceded this role (it starts on intention), recorded as a known 0 wait.
+func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings, t model.Task, p pipeline, s step, agent string, qw queueWait) bool {
 	prof, why := c.verifiedProfile(st, set, t, s.role)
 	if why != "" {
 		c.failTask(t.ID, model.TaskFailed, why, s.role)
@@ -699,6 +737,8 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	base := ""
 	pre := ""
 	switch {
+	case f.Err != nil:
+		pre = inspectFailed // unknown facts are never reported as a branch/dirty/candidate change
 	case !f.Exists:
 		pre = "worktree_missing"
 	case f.Branch != deref(t.Branch):
@@ -754,15 +794,13 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if s.purpose == "fix" {
 		sm.FixRound = p.fixRounds + 1
 	}
-	ts := now()
+	startT := time.Now()
+	ts := startT.UTC().Format(time.RFC3339Nano)
 	ref := t.ContextRef
 	run := model.Run{ID: runID, AgentID: agent, TaskID: t.ID, Role: s.role, ProfileID: prof.ID, Executor: execName(prof),
 		ModelSnapshot: &model.ModelSnapshot{ProfileID: prof.ID, Provider: prof.Provider, Model: prof.Model}, ContextRef: &ref,
 		State: model.RunStarting, StartedAt: ts, UpdatedAt: ts, Events: []model.RunEvent{}, Summary: mustJSON(sm), Origin: model.OriginNative,
-		Metrics: &model.TimeMetrics{}}
-	if sm.FixRound > 0 {
-		run.Metrics.FixRound = &sm.FixRound
-	}
+		Metrics: queueMetrics(qw, startT, sm.FixRound)}
 	pushEvent(&run, "state", "starting")
 	err := c.update(func(st *model.State) error {
 		tt := findTask(st, t.ID)
@@ -968,6 +1006,9 @@ func verifyRole(role string, t model.Task, base string, f wtFacts, xr executor.R
 	if model.CheckFreeForm(toAny(rep), "report") != nil {
 		return nil, executor.CatReportInvalid
 	}
+	if f.Err != nil {
+		return nil, inspectFailed
+	}
 	if !f.Exists {
 		return nil, "worktree_missing"
 	}
@@ -1082,6 +1123,8 @@ func (c *Core) finalize(st *model.State, t model.Task, p pipeline) {
 	bad := ""
 	_, frozen := frozenOK(st, t)
 	switch {
+	case f.Err != nil:
+		bad = inspectFailed
 	case !f.Exists:
 		bad = "worktree_missing"
 	case f.Branch != deref(t.Branch) || !f.Clean:
