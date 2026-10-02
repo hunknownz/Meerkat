@@ -98,6 +98,17 @@ After a crash, unverified runs become unknown. The service neither replays them 
 
 Migration imports records by original ID and source digest. Invalid or conflicting data blocks switching. Old tasks without a frozen contract stay historical and cannot execute. Backups are consistent SQLite snapshots; restoration uses a separate directory so newer records are preserved.
 
+```sh
+bin/meerkat migrate --from /private/legacy --run-root /private/archived-run-root
+bin/meerkat backup --output /private/history.db
+bin/meerkat restore --backup /private/history.db --to /private/fresh-data-dir
+bin/meerkat export --format json --output /private/metrics.json
+```
+
+Backups include prepared Issue bodies and restore their paths into the new private directory. When moving the same logical project to another repository, `migrate --project-moves /private/moves.json` accepts explicit `{projectId, fromRepositories, toRepositories}` mappings. Both source and existing destination must match. The target project stays intact; the original project and mapping remain in the private import audit. Plain migration still rejects divergent records.
+
+Metrics include Project, Task, Run, Role, Executor, Model and available change IDs, tokens, queue time, execution time and fix rounds. Provider model time, test time and fees stay null unless measured. JSON and CSV exports contain no context, credentials or transcript.
+
 ## Codex plugin
 
 ```sh
