@@ -9,7 +9,7 @@
 
   const NOW = '14:32';
   const SNAPSHOT_AT = '14:29';
-  const PHASES = ['任务', '开发', '初次交付', '检查', '最终交付', '精修与复验'];
+  const PHASES = ['任务', '开发', '初次交付', '检查', '最终候选', '精修与复验'];
   const ROLE = { dev: '开发', check: '检查', polish: '最终精修' };
   const MODELS = ['DeepSeek V4 Flash', 'Claude Opus 5.5'];
 
@@ -31,7 +31,7 @@
         ],
       },
       {
-        id: 'Pi-02', role: 'check', task: 'T-211', model: 'DeepSeek V4 Flash', status: 'running', startedAt: '13:58',
+        id: 'Pi-02', role: 'check', task: 'T-211', model: 'Claude Opus 5.5', status: 'running', startedAt: '13:58',
         action: '运行本地测试 npm test -- export', actionAt: '14:31',
         cwd: '~/work/meerkat-core/.worktrees/t-211', context: '共享上下文 v1 · sha256:51d0…e7c2', lastDelivery: '初次交付 a41c2e7（Pi-01）',
         events: [
@@ -82,7 +82,7 @@
         ],
       },
       {
-        id: 'T-102', project: 'example-project', issue: 'APP-47', title: '订阅表单错误提示的可读性', stage: 5, category: 'delivered', owner: 'Pi-03（排队）', last: '精修后待核验',
+        id: 'T-102', project: 'example-project', issue: 'APP-47', title: '订阅表单错误提示的可读性', stage: 5, category: 'active', owner: 'Pi-03（排队）', last: '精修交付 · 待复验',
         issueBody: '订阅表单出错时提示太淡，读屏软件也不会读出来。',
         goal: '订阅表单的错误提示清晰可读，并能被读屏软件读出。', scope: ['SubscribeForm 组件', '表单错误样式', '对应单元测试'],
         acceptance: ['错误文字对比度 ≥ 4.5:1（浅色与深色）', '输入框通过 aria-describedby 关联错误文字', '提交失败时焦点移到第一个出错字段'],
@@ -94,11 +94,11 @@
           received: ['Pi-01 · 开发 · r-102-1（v2）', 'Pi-02 · 检查 · r-102-2（v2）', 'Pi-01 · 定向修复 · r-102-3（v2）', 'Pi-02 · 复检 · r-102-4（v2）', 'Pi-01 · 最终精修 · r-102-5（v3）', 'Pi-03 · 复验 · r-102-6（v3，排队）'],
         },
         delivery: {
-          baseline: '5b2c9d1', candidate: 'e7d5f02', final: 'c3e9b42',
+          baseline: '5b2c9d1', candidate: 'e7d5f02', reviewed: 'c3e9b42',
           files: ['src/components/SubscribeForm.tsx', 'src/styles/form.css', 'tests/subscribe-form.test.ts'],
           code: '检查发现 2 项（对比度 3.6:1；缺少 aria-describedby），定向修复 1 轮后复检通过。',
           tests: '示例：12 项单元测试通过（r-102-4 报告）。精修后待复验。',
-          review: 'Codex 审查最终交付 c3e9b42：满足 v2 验收；精修候选尚待复验。',
+          review: 'Codex 审查主体候选 c3e9b42：满足 v2 验收；精修交付 e7d5f02 尚待复验，尚非最终代码交付。',
           polish: { before: '错误文字与输入框之间间距 2px，文案“格式错误”。', after: '间距 6px，图标与文字对齐，文案按 v3 定稿“请输入有效的邮箱地址”。' },
           preview: '示例 · 未生成真实 Preview',
         },
@@ -108,25 +108,25 @@
           { t: '10:31', p: '初次交付', x: 'Pi-01 交付候选 8a17f30' },
           { t: '10:58', p: '检查', x: '发现 2 项：错误文字对比度 3.6:1；未关联 aria-describedby', c: 'find' },
           { t: '11:15', p: '开发', x: '定向修复（第 1/2 轮），候选 c3e9b42' },
-          { t: '11:30', p: '最终交付', x: '复检通过，最终代码交付 c3e9b42（未发布、未经客户验收）', c: 'pass' },
+          { t: '11:30', p: '最终候选', x: '复检通过，主体交付 c3e9b42 成为最终候选（待精修与复验）', c: 'pass' },
           { t: '13:40', p: '任务', x: 'Codex 固定文案定稿 → 上下文 v3' },
           { t: '14:10', p: '精修与复验', x: 'Pi-01 以最强配置（Claude Opus 5.5）精修，候选 e7d5f02' },
           { t: '14:19', p: '精修与复验', x: 'Pi-03 复验排队，等待并发槽位' },
         ],
       },
       {
-        id: 'T-101', project: 'example-project', issue: 'APP-42', title: '文章页移动端目录折叠', stage: 4, category: 'delivered', owner: '—', last: '最终交付',
+        id: 'T-101', project: 'example-project', issue: 'APP-42', title: '文章页移动端目录折叠', stage: 4, category: 'active', owner: '—', last: '主体检查通过 · 待精修',
         issueBody: '手机上文章目录太长，挡住正文。',
         goal: '窄屏下目录默认折叠，可展开。', scope: ['ArticleToc 组件', '窄屏断点样式'],
         acceptance: ['宽度 < 600px 时目录默认折叠', '展开按钮有可读名称与 aria-expanded', '桌面布局不变'],
         blockers: '无', next: '按设置进入最终精修（最强配置），之后必须复验。',
         ctx: { v: 'v1', digest: 'sha256:a7b2…19fe', files: ['src/components/ArticleToc.tsx', 'src/styles/article.css'], constraints: ['不改桌面断点'], received: ['Pi-02 · 开发 · r-101-1', 'Pi-01 · 检查 · r-101-2'] },
-        delivery: { baseline: '0c6e2b8', candidate: '2d4f9a1', final: '2d4f9a1', files: ['src/components/ArticleToc.tsx', 'src/styles/article.css'], code: '首次检查即通过，无阻断发现。', tests: '示例：6 项组件测试通过（r-101-2 报告）。', review: 'Codex 审查通过，标记最终代码交付。', polish: null, preview: '示例 · 未生成真实 Preview' },
+        delivery: { baseline: '0c6e2b8', candidate: '2d4f9a1', reviewed: '2d4f9a1', files: ['src/components/ArticleToc.tsx', 'src/styles/article.css'], code: '首次检查即通过，无阻断发现。', tests: '示例：6 项组件测试通过（r-101-2 报告）。', review: 'Codex 审查通过，标记最终候选；精修并复验后才是最终代码交付。', polish: null, preview: '示例 · 未生成真实 Preview' },
         timeline: [
           { t: '09:05', p: '任务', x: 'Codex 从 APP-42 拆分任务，生成上下文 v1' },
           { t: '09:38', p: '初次交付', x: 'Pi-02 交付候选 2d4f9a1' },
           { t: '10:02', p: '检查', x: 'Pi-01 检查通过，无发现', c: 'pass' },
-          { t: '10:04', p: '最终交付', x: '最终代码交付 2d4f9a1（未发布、未经客户验收）', c: 'pass' },
+          { t: '10:04', p: '最终候选', x: '最终候选 2d4f9a1（主体检查通过，待精修与复验）', c: 'pass' },
         ],
       },
       {
@@ -136,14 +136,14 @@
         acceptance: ['深色模式链接对比度 ≥ 4.5:1', '悬停与焦点状态可辨', '浅色模式不变'],
         blockers: '无', next: '需要你在真实页面上确认效果；Meerkat 不会把它标记为已发布。',
         ctx: { v: 'v1', digest: 'sha256:0e44…c1d7', files: ['src/styles/footer.css'], constraints: ['保留品牌色相'], received: ['Pi-02 · 开发 · r-103-1', 'Pi-03 · 检查 · r-103-2', 'Pi-03 · 最终精修 · r-103-3', 'Pi-01 · 复验 · r-103-4'] },
-        delivery: { baseline: '3a90f15', candidate: 'b90a3d6', final: '71be0c4', files: ['src/styles/footer.css'], code: '首次检查通过；精修后复验通过。', tests: '示例：样式快照 4 项通过（r-103-4 报告）。', review: 'Codex 审查通过。', polish: { before: '链接色 #7b8cff，焦点环与背景接近。', after: '链接色调整亮度保持色相，焦点环加 2px 外描边。' }, preview: '示例 · 未生成真实 Preview' },
+        delivery: { baseline: '3a90f15', candidate: 'b90a3d6', reviewed: '71be0c4', final: 'b90a3d6', files: ['src/styles/footer.css'], code: '首次检查通过；精修后复验通过。', tests: '示例：样式快照 4 项通过（r-103-4 报告）。', review: 'Codex 审查通过：最终代码交付 b90a3d6（精修后复验通过；早先审查候选 71be0c4）。', polish: { before: '链接色 #7b8cff，焦点环与背景接近。', after: '链接色调整亮度保持色相，焦点环加 2px 外描边。' }, preview: '示例 · 未生成真实 Preview' },
         timeline: [
           { t: '08:12', p: '任务', x: 'Codex 从 APP-44 拆分任务，生成上下文 v1' },
           { t: '08:41', p: '初次交付', x: 'Pi-02 交付候选 71be0c4' },
           { t: '08:57', p: '检查', x: 'Pi-03 检查通过', c: 'pass' },
-          { t: '08:58', p: '最终交付', x: '最终代码交付 71be0c4（未发布、未经客户验收）', c: 'pass' },
+          { t: '08:58', p: '最终候选', x: '最终候选 71be0c4（主体检查通过，待精修与复验）', c: 'pass' },
           { t: '09:30', p: '精修与复验', x: 'Pi-03 以最强配置（Claude Opus 5.5）精修，候选 b90a3d6' },
-          { t: '09:44', p: '精修与复验', x: 'Pi-01 复验通过 → 待效果核验', c: 'pass' },
+          { t: '09:44', p: '精修与复验', x: 'Pi-01 复验通过 → 最终代码交付 b90a3d6（未发布、未经客户验收）· 待效果核验', c: 'pass' },
         ],
       },
       {
@@ -174,25 +174,26 @@
       { id: 'r-103-1', task: 'T-103', agent: 'Pi-02', role: 'dev', model: 'DeepSeek V4 Flash', start: '08:20', end: '08:41', result: '初次交付 71be0c4', tokens: { in: 21400, out: 2900, cr: 14800, cw: 4100 }, fee: 0.22 },
       { id: 'r-103-2', task: 'T-103', agent: 'Pi-03', role: 'check', model: 'DeepSeek V4 Flash', start: '08:44', end: '08:57', result: '通过', first: 'pass', tokens: { in: 9800, out: 1100, cr: 7200, cw: 1600 }, fee: 0.08 },
       { id: 'r-103-3', task: 'T-103', agent: 'Pi-03', role: 'polish', model: 'Claude Opus 5.5', start: '09:02', end: '09:30', result: '精修候选 b90a3d6', tokens: null, fee: null },
-      { id: 'r-103-4', task: 'T-103', agent: 'Pi-01', role: 'check', model: 'DeepSeek V4 Flash', start: '09:33', end: '09:44', result: '复验通过', tokens: { in: 8700, out: 900, cr: 6900, cw: 1200 }, fee: 0.07 },
+      { id: 'r-103-4', task: 'T-103', agent: 'Pi-01', role: 'check', model: 'DeepSeek V4 Flash', start: '09:33', end: '09:44', result: '复验通过 → 最终代码交付 b90a3d6', tokens: { in: 8700, out: 900, cr: 6900, cw: 1200 }, fee: 0.07 },
       { id: 'r-101-1', task: 'T-101', agent: 'Pi-02', role: 'dev', model: 'DeepSeek V4 Flash', start: '09:10', end: '09:38', result: '初次交付 2d4f9a1', tokens: { in: 30100, out: 4200, cr: 19400, cw: 6200 }, fee: 0.31 },
       { id: 'r-101-2', task: 'T-101', agent: 'Pi-01', role: 'check', model: 'DeepSeek V4 Flash', start: '09:45', end: '10:02', result: '通过', first: 'pass', tokens: { in: 12500, out: 1300, cr: 9100, cw: 2000 }, fee: 0.12 },
       { id: 'r-102-1', task: 'T-102', agent: 'Pi-01', role: 'dev', model: 'DeepSeek V4 Flash', start: '10:05', end: '10:31', result: '初次交付 8a17f30', tokens: { in: 48200, out: 6100, cr: 31000, cw: 9800 }, fee: 0.38 },
       { id: 'r-102-2', task: 'T-102', agent: 'Pi-02', role: 'check', model: 'DeepSeek V4 Flash', start: '10:36', end: '10:58', result: '发现 2 项', first: 'fail', tokens: { in: 15600, out: 1900, cr: 11200, cw: 2400 }, fee: 0.14 },
       { id: 'r-102-3', task: 'T-102', agent: 'Pi-01', role: 'dev', fix: true, model: 'DeepSeek V4 Flash', start: '11:02', end: '11:15', result: '定向修复 c3e9b42', tokens: { in: 11900, out: 1700, cr: 9300, cw: null }, fee: null },
-      { id: 'r-102-4', task: 'T-102', agent: 'Pi-02', role: 'check', model: 'DeepSeek V4 Flash', start: '11:18', end: '11:30', result: '复检通过 → 最终交付', tokens: { in: 10400, out: 1000, cr: 8100, cw: 1500 }, fee: 0.09 },
+      { id: 'r-102-4', task: 'T-102', agent: 'Pi-02', role: 'check', model: 'DeepSeek V4 Flash', start: '11:18', end: '11:30', result: '复检通过 → 最终候选', tokens: { in: 10400, out: 1000, cr: 8100, cw: 1500 }, fee: 0.09 },
       { id: 'r-212-1', task: 'T-212', agent: 'Pi-03', role: 'dev', model: 'DeepSeek V4 Flash', start: '12:30', end: '13:05', result: '初次交付 5e88d10', tokens: { in: 26300, out: 3800, cr: null, cw: null }, fee: null },
       { id: 'r-211-1', task: 'T-211', agent: 'Pi-01', role: 'dev', model: 'DeepSeek V4 Flash', start: '13:12', end: '13:44', result: '初次交付 a41c2e7', tokens: { in: 33800, out: 4600, cr: 22500, cw: 7000 }, fee: 0.29 },
       { id: 'r-102-5', task: 'T-102', agent: 'Pi-01', role: 'polish', model: 'Claude Opus 5.5', start: '13:48', end: '14:10', result: '精修候选 e7d5f02', tokens: { in: 61200, out: 9400, cr: null, cw: null }, fee: null },
-      { id: 'r-211-2', task: 'T-211', agent: 'Pi-02', role: 'check', model: 'DeepSeek V4 Flash', start: '13:58', end: null, result: '运行中', tokens: null, fee: null },
+      { id: 'r-211-2', task: 'T-211', agent: 'Pi-02', role: 'check', model: 'Claude Opus 5.5', start: '13:58', end: null, result: '运行中', tokens: null, fee: null },
       { id: 'r-104-1', task: 'T-104', agent: 'Pi-01', role: 'dev', model: 'DeepSeek V4 Flash', start: '14:12', end: null, result: '运行中', tokens: null, fee: null },
       { id: 'r-102-6', task: 'T-102', agent: 'Pi-03', role: 'check', model: 'DeepSeek V4 Flash', start: null, end: null, result: '排队', tokens: null, fee: null },
     ],
     deliveries: [
-      { task: 'T-102', at: '14:10', change: '错误提示间距与文案按定稿精修', agent: 'Pi-01', model: 'Claude Opus 5.5', result: '精修后待核验' },
+      { task: 'T-102', at: '14:10', change: '错误提示间距与文案按定稿精修', agent: 'Pi-01', model: 'Claude Opus 5.5', result: '精修交付 · 待复验' },
       { task: 'T-211', at: '13:44', change: '新增 export 子命令，未知用量写 null', agent: 'Pi-01', model: 'DeepSeek V4 Flash', result: '检查中' },
       { task: 'T-212', at: '13:05', change: '并发上限限制为 1–4 并显示提示', agent: 'Pi-03', model: 'DeepSeek V4 Flash', result: '初次交付' },
-      { task: 'T-101', at: '10:04', change: '窄屏目录默认折叠，补充 aria-expanded', agent: 'Pi-02', model: 'DeepSeek V4 Flash', result: '最终交付' },
+      { task: 'T-101', at: '10:04', change: '窄屏目录默认折叠，补充 aria-expanded', agent: 'Pi-02', model: 'DeepSeek V4 Flash', result: '主体检查通过 · 待精修' },
+      { task: 'T-103', at: '09:44', change: '深色模式链接对比度精修，复验通过，最终 SHA b90a3d6', agent: 'Pi-03', model: 'Claude Opus 5.5', result: '最终代码交付 · 待效果核验' },
     ],
   });
 
@@ -210,7 +211,7 @@
     view: 'agents', project: 'all', demo: 'normal', expanded: new Set(),
     query: '', filter: 'all', drawer: null, drawerTab: 'overview', issueOpen: false, returnFocus: null,
     sim: {},
-    settings: { profiles: { dev: 'DeepSeek V4 Flash', check: 'DeepSeek V4 Flash', polish: 'Claude Opus 5.5' }, concurrency: 2, maxRounds: 2, tokenBudget: 200000, minuteBudget: 45 },
+    settings: { profiles: { dev: 'DeepSeek V4 Flash', check: 'Claude Opus 5.5', polish: 'Claude Opus 5.5' }, concurrency: 2, maxRounds: 2, tokenBudget: 200000, minuteBudget: 45 },
   };
 
   // ---------------------------------------------------------------------------
@@ -230,7 +231,7 @@
     if (!r.tokens) return 'none';
     return Object.values(r.tokens).every((v) => v !== null) ? 'full' : 'partial';
   };
-  const resultClass = (res) => ({ 初次交付: 'accent', 检查中: 'amber', 最终交付: 'green', 精修后待核验: 'amber', 待效果核验: 'amber', 开发中: '', 待分派: '', 已阻塞: 'red' }[res] || '');
+  const resultClass = (res) => ({ 初次交付: 'accent', 检查中: 'amber', '最终代码交付 · 待效果核验': 'green', '精修交付 · 待复验': 'amber', '主体检查通过 · 待精修': 'accent', 待效果核验: 'amber', 开发中: '', 待分派: '', 已阻塞: 'red' }[res] || '');
 
   function taskView(t) {
     if (state.demo === 'blocked' && t.id === BLOCKED.task) {
@@ -288,7 +289,7 @@
     const open = state.expanded.has(a.id);
     const elapsed = dur(toMin(NOW) - toMin(a.startedAt));
     const nextModel = state.settings.profiles[a.role];
-    const nextNote = nextModel !== a.model ? `<dt>下次运行</dt><dd>${esc(ROLE[a.role])}配置已改为 ${esc(nextModel)}（当前运行不变）</dd>` : '';
+    const nextNote = nextModel !== a.model ? `<dt>下次运行</dt><dd>${esc(ROLE[a.role])}配置当前设置为 ${esc(nextModel)}（本次运行仍使用 ${esc(a.model)}）</dd>` : '';
     const dot = stale ? 'stale' : a.status;
     return `
     <div class="agent-row${stale ? ' stale' : ''}">
@@ -301,7 +302,7 @@
         <span class="fields">
           <span class="field"><span class="v">${esc(a.model)}</span></span>
           <span class="field"><span class="v">${a.status === 'blocked' ? '已阻塞' : esc(PHASES[t.stage] === '精修与复验' ? '复验' : PHASES[t.stage])}</span></span>
-          <span class="field f-elapsed" title="已用时"><span class="k">用时</span><span class="v">${elapsed}</span></span>
+          <span class="field f-elapsed" title="${a.status === 'waiting' ? '已等待' : '已用时'}"><span class="k">${a.status === 'waiting' ? '等待' : '用时'}</span><span class="v">${elapsed}</span></span>
         </span>
         <svg class="chev-r" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 6.5 5 3.5 8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
       </button>
@@ -346,7 +347,7 @@
       ? `<div class="list">${ag.map((a) => agentRow(a, stale)).join('')}</div>`
       : `<div class="list"><div class="empty">0 个运行中的 Pi 实例。<br>新任务分派后会出现在这里；当前没有排队进程。</div></div>`;
 
-    const dl = DATA.deliveries.filter((d) => inProject(taskById(d.task).project)).slice(0, 3);
+    const dl = DATA.deliveries.filter((d) => inProject(taskById(d.task).project)).slice(0, 5);
     const dRows = dl.length ? dl.map((d) => {
       const t = taskById(d.task);
       return `<button type="button" class="row deliv-row" data-open-task="${t.id}">
@@ -361,7 +362,7 @@
       <div class="host"><span class="badge accent">宿主</span><span><b>${c.name} · ${c.role}</b> — ${esc(c.note)}</span></div>
       <div class="sec-h"><b>本地 Pi 实例</b><span>${headCount}</span><span class="end">${stale ? `快照 ${SNAPSHOT_AT}` : `更新于 ${NOW}`}</span></div>
       ${list}
-      <div class="sec-h"><b>最近交付</b><span>最终交付仅表示代码交付，不代表已发布或客户验收</span></div>
+      <div class="sec-h"><b>最近交付</b><span>最终代码交付需经精修与复验，仍不代表已发布或客户验收</span></div>
       <div class="list">${dRows}</div>`;
   }
 
@@ -374,8 +375,9 @@
     const scoped = tasks().filter((t) => inProject(t.project));
     const q = state.query.trim().toLowerCase();
     const matched = scoped.filter((t) => !q || [t.title, t.issue, t.id, t.owner, t.last, projName(t.project)].join(' ').toLowerCase().includes(q));
-    const shown = matched.filter((t) => state.filter === 'all' || t.category === state.filter);
-    const count = (f) => matched.filter((t) => f === 'all' || t.category === f).length;
+    const inFilter = (t, f) => f === 'all' || (f === 'delivered' ? !!t.done : t.category === f);
+    const shown = matched.filter((t) => inFilter(t, state.filter));
+    const count = (f) => matched.filter((t) => inFilter(t, f)).length;
     const rows = shown.length ? shown.map((t) => `
       <button type="button" class="row task-row" data-open-task="${t.id}">
         <span class="who"><span class="name">${esc(t.title)}</span>
@@ -508,7 +510,7 @@
           <dl class="concl"><dt>版本</dt><dd>${c.v}（已批准，只读）</dd><dt>来源摘要</dt><dd><code>${esc(c.digest)}</code> · 由 ${esc(t.issue)}（示例 Issue）与 Codex 审定的需求生成</dd></dl></div>
         <div class="card"><h3>相关文件</h3><ul class="files">${c.files.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>
         <div class="card"><h3>约束</h3><ul>${c.constraints.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
-        <div class="card"><h3>已接收此上下文的运行</h3>${c.received.length ? `<ul>${c.received.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="k">尚无运行接收。</p>'}</div>
+        <div class="card"><h3>运行使用的上下文版本</h3>${c.received.length ? `<ul>${c.received.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="k">尚无运行接收。</p>'}</div>
         <div class="card"><h3>如何变成 ${nextV}</h3><p>需求或约束变化时，由 Codex 生成新的 ${nextV}（新摘要）并重新分派；${c.v} 不会被就地修改，已完成的运行继续引用 ${c.v}。各运行只拿到共享包与本任务文件，不复制完整对话记录。</p></div>`;
     }
     if (state.drawerTab === 'delivery') {
@@ -517,7 +519,9 @@
       return `
         <div class="card"><h3>版本</h3><dl class="concl">
           <dt>基线</dt><dd><code>${d.baseline}</code></dd>
-          <dt>候选</dt><dd><code>${d.candidate}</code>${d.final && d.final !== d.candidate ? ` · 最终代码交付 <code>${d.final}</code>` : ''}</dd>
+          <dt>候选</dt><dd><code>${d.candidate}</code></dd>
+          ${d.reviewed ? `<dt>主体候选</dt><dd><code>${d.reviewed}</code> · 检查通过${d.final ? '（早先审查版本）' : ''}</dd>` : ''}
+          ${d.final ? `<dt>最终代码</dt><dd><code>${d.final}</code> · 精修后复验通过</dd>` : ''}
           <dt>仓库</dt><dd><code>${esc(DATA.projects[t.project].repo)}</code></dd></dl></div>
         <div class="card"><h3>变更文件（${d.files.length}）</h3><ul class="files">${d.files.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>
         <div class="card"><h3>结论</h3><dl class="concl"><dt>代码检查</dt><dd>${esc(d.code)}</dd><dt>本地测试</dt><dd>${esc(d.tests)}</dd><dt>审查</dt><dd>${esc(d.review)}</dd></dl>
@@ -548,7 +552,7 @@
       return `<li class="${cls}"${i === p ? ' aria-current="step"' : ''}>${name}</li>`;
     }).join('');
     const finalState = t.done ? '<span class="badge amber">待效果核验</span><span>精修已复验通过，等待你确认真实效果</span>'
-      : t.stage === 5 ? '<span class="badge amber">精修后待核验</span><span>最强配置精修后必须再经检查，才进入“待效果核验”</span>'
+      : t.stage === 5 ? '<span class="badge amber">精修交付 · 待复验</span><span>最强配置精修后必须再经检查，才进入“待效果核验”</span>'
         : t.blocked ? `<span class="badge red">已阻塞</span><span>${esc(BLOCKED.rounds)}</span>`
           : `<span class="badge">${PHASES[t.stage]}</span><span>${esc(t.last)}</span>`;
     $('#drawer').innerHTML = `
