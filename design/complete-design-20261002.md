@@ -8,7 +8,7 @@ Owner：用户与 Codex 负责目标、设计和取舍；Pi 负责代码实施�
 
 Meerkat 是一个通用的本地 Agent 开发协作插件：把明确任务分发给使用不同模型的 Agent，保留共同的项目背景，接收初次交付，检查与修正，形成最终候选，再由用户配置的高能力模型做细节精修并复验。
 
-用户主要在 Codex 或 Claude Desktop 中讨论需求、架构和重要设计。Meerkat 页面用于看执行情况和结果，发起受控操作。Pi 是当前代码开发引擎；其他 Agent 引擎通过适配器加入。example-project 是首个实践项目，插件内不固化客户规则、部署拓扑、素材、密钥或仓库名称。
+用户主要在 Codex 或 Claude Desktop 中讨论需求、架构和重要设计。Meerkat 页面用于看执行情况和结果，发起受控操作。Pi 是当前代码开发引擎；其他 Agent 引擎通过适配器加入。插件内不固化任何使用项目的规则、部署拓扑、素材、密钥或仓库名称。
 
 一次典型使用：
 
@@ -29,7 +29,7 @@ Codex 把这句话变成确定的任务合同和分工。用户在页面看到�
 
 | 概念 | 定义 | 身份与示例 |
 |---|---|---|
-| Project 项目 | 一组工作目标、代码仓库及项目规则 | 稳定 projectId；example-project、Meerkat |
+| Project 项目 | 一组工作目标、代码仓库及项目规则 | 稳定 projectId；如 example-project、Meerkat |
 | Repository 仓库 | 一个独立的 Git 根与远端身份 | host/owner/repo + 本地根；一个项目可包含 Website 与 CMS |
 | Issue | 人与 Agent 对需求、讨论、决定、验收的长期记录 | 完整 URL，含主机、owner、repo、number |
 | Task 任务 | 可独立实施和验证的工作合同 | taskId；目标、范围、验收、依赖、目标仓库、上下文版本 |
@@ -416,13 +416,11 @@ Task 有依赖时的 queued 原因写明是依赖、并发还是预算。修改�
 
 省成本的具体方法：稳定 Context Packet、任务仅加必要文件、检查只看冻结合同与证据、精修范围有限、固定角色配置、无默认跨模型重试。缓存是否命中以返回计数为准；不能因传相同文本就承诺不同 provider/模型共享缓存。
 
-## 13. 与 example-project 工作流的连接
+## 13. 项目集成边界
 
-通用插件读取项目自己的命令、角色 Skill、验收和发布合同；example-project 配置留在项目内。一个网站/CMS 联合 Issue 可拆为 Website Task、CMS Task 与联合验证 Task，统一上下文合同，分别登记 SHA 和内容/配置引用。
+通用插件只读取使用项目自己提供的命令、角色 Skill、验收和发布合同；项目配置留在项目或用户本地，插件不内置任何项目的流程、部署拓扑或默认规则。一个 Issue 可按项目合同拆为多个 Task，共享同一上下文合同，分别登记 SHA 与相关引用。
 
-在 example-project：本地实施与快速检查 → AI 审查 → 获授权的 PR/合并 → main 自动 Preview 与精确 SHA 回执 → 人尽早看效果 → 按风险补独立 QA → 单独选定生产候选与授权发布。CMS 内容发布遵守对应的草稿/预览/发布链，不能把代码已合并当成内容已上线。
-
-Meerkat 首页可显示“等待 Preview 核验”等来源明确的阶段；它不承担部署引擎，使用项目现有工具报告结果。GitHub 免费模式下，Pi 和主要本地检查在本机执行；服务状态轮询只读本地数据，不消耗 GitHub Actions runner。
+Meerkat 不是部署引擎，不执行 PR、合并、部署或内容发布；这些步骤及其授权由项目现有工具和流程负责。首页只显示来源明确的阶段与回执，服务状态轮询只读本地数据。
 
 ## 14. 一次性交付的实施清单
 
@@ -432,7 +430,7 @@ Meerkat 首页可显示“等待 Preview 核验”等来源明确的阶段；它
 2. **角色执行与分发**：Pi developer/reviewer/polisher 的不同成功合同、依赖/写入范围、并发/预算限制、无改动精修报告、候选失效机制。
 3. **Issue 与协调工具**：既有 GitHub 工具适配、来源快照、交付摘要、幂等回写、Codex 审查报告登记、必要 CLI/MCP 入口。
 4. **完整 UI 接入**：Agents/Tasks/Usage、详情与设置、真实状态和回执、受控停止/重试；页面从原型切换到服务 API。
-5. **宿主与项目验证**：Codex 适配器版本核对与人工可见验收、example-project 真实 Issue 验证、使用说明与完整交付记录。
+5. **宿主与项目验证**：Codex 适配器版本核对与人工可见验收、实际项目的真实 Issue 工作流验证、使用说明与完整交付记录。
 
 ### 整条链的验收场景
 
@@ -455,7 +453,7 @@ Meerkat 首页可显示“等待 Preview 核验”等来源明确的阶段；它
 
 | 能力 | 当前事实 | 本方案要求 |
 |---|---|---|
-| Pi 开发 | 单个受控 CLI Run、干净 linked worktree、自测与本地提交，已用于 example-project | 保留并接 Task/Context/Issue |
+| Pi 开发 | 单个受控 CLI Run、干净 linked worktree、自测与本地提交，已用于实际工作流验证 | 保留并接 Task/Context/Issue |
 | 多模型 | project profile 选择 provider/model | 每角色配置 + Run 快照 |
 | 并行/依赖 | 没有统一调度器 | 受控并发、依赖、写入冲突判断 |
 | 活跃监控 | 心跳、进程检查，首页显示运行实例 | 加角色、自然语言任务、Issue、结构化事件与断连状态 |

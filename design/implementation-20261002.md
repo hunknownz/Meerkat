@@ -40,7 +40,7 @@ flowchart LR
 | 桌面接线 | 同一个 UI factory 与 CSS 在 ShadowRoot 中渲染；injector 在宿主 CSP 外取状态并剥离写令牌；桌面只读，不使用 iframe；原生导航和升级清理有模拟验证 |
 | 指标 | 实际角色时间与用量，缓存读写单列，未知不当零；一次通过率、修复次数、检查耗时；费用没有可信返回时保持未知 |
 
-通用代码没有 example-project 业务逻辑。现有 example-project 配置是试点配置，预算和模型需要按任务选择，不代表所有项目的最佳默认值。
+通用代码不含任何使用项目的业务逻辑。执行配置由用户本地持有，预算和模型需要按任务选择，不存在适合所有项目的默认值。
 
 ## 核验
 
@@ -53,7 +53,7 @@ flowchart LR
 ### 真实 Pi 链路
 
 任务：`823816c4-1c6f-4cb7-b599-cd049d31e9af`，完善真实工作流使用指南与协调 Skill。
-需求来自本地；没有伪造 Issue 关联。该任务在 example-project 外层仓库的 linked worktree 执行，属于 Meerkat 插件开发，不是 example-project 网站业务交付。
+需求来自本地；没有伪造 Issue 关联。该任务在一个实际工作流仓库的 linked worktree 执行，属于 Meerkat 插件开发，不是使用项目的业务交付。
 
 Developer → Reviewer pass → Polisher `no_change` → 新 Reviewer pass → `delivered`。
 最终候选：`0147054486bd0151963570d6112afae0ed3a7ce1`。此后桌面接线与显示修复是新的本地提交，不把旧候选的审查扩大为新代码的审查。
@@ -88,5 +88,5 @@ Developer → Reviewer pass → Polisher `no_change` → 新 Reviewer pass → `
 - **原生 Codex 实机核验尚未完成**：此前原生应用访问被拒绝，本轮没有绕过。桌面接线通过自有 DOM / mock CDP 检查，不能据此声称当前 Codex 版本已安装可用。这是非官方、依赖版本的适配器。
 - 本地浏览器 `http://127.0.0.1:47826/` 是真实数据的开发验证界面，不代表官方插件 UI。
 - 本轮未升级已安装缓存包，也未合入主目录或远端。代码保存在当前工作树与本地分支。
-- example-project 的真实业务 Issue → Pi 修改 Website/CMS → Preview → 人效果核验仍需作为业务试点执行；本次没有冒充完成该业务链路。
+- 使用项目的真实业务 Issue → Pi 修改 → 项目自有验证 → 人效果核验的完整链路仍需在实际工作流中验证；本次没有冒充完成该业务链路。
 

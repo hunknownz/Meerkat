@@ -15,7 +15,7 @@
 
   const DATA = deepFreeze({
     projects: {
-      example-project: { name: 'example-project', repo: 'example-project/web' },
+      'example-project': { name: 'Example Project', repo: 'example/web' },
       meerkat: { name: 'Meerkat', repo: 'meerkat/core' },
     },
     coordinator: { name: 'Codex', role: '需求与审查', note: '宿主会话 · 拆分任务、生成共享上下文、审查交付；不计入本地 Pi 进程' },
@@ -23,7 +23,7 @@
       {
         id: 'Pi-01', role: 'dev', task: 'T-104', model: 'DeepSeek V4 Flash', status: 'running', startedAt: '14:12',
         action: '修改 src/search/highlight.ts：多关键词分词与转义', actionAt: '14:29',
-        cwd: '~/work/example-project-web/.worktrees/t-104', context: '共享上下文 v2 · sha256:9c1e…40ab', lastDelivery: '本任务尚无交付',
+        cwd: '~/work/example-web/.worktrees/t-104', context: '共享上下文 v2 · sha256:9c1e…40ab', lastDelivery: '本任务尚无交付',
         events: [
           { t: '14:12', k: '领取', x: '领取 T-104，收到共享上下文 v2' },
           { t: '14:21', k: '读取', x: '读取 src/search/index.ts、highlight.ts、search.test.ts' },
@@ -43,7 +43,7 @@
       {
         id: 'Pi-03', role: 'check', task: 'T-102', model: 'DeepSeek V4 Flash', status: 'waiting', startedAt: '14:19',
         action: '排队复验 T-102 精修结果：等待并发槽位', actionAt: '14:19',
-        cwd: '~/work/example-project-web/.worktrees/t-102', context: '共享上下文 v3 · sha256:5f1c…a903', lastDelivery: '精修候选 e7d5f02（Pi-01 · Claude Opus 5.5）',
+        cwd: '~/work/example-web/.worktrees/t-102', context: '共享上下文 v3 · sha256:5f1c…a903', lastDelivery: '精修候选 e7d5f02（Pi-01 · Claude Opus 5.5）',
         events: [
           { t: '14:10', k: '交付', x: 'Pi-01 完成最终精修，候选 e7d5f02' },
           { t: '14:19', k: '排队', x: '进入复验队列（角色：检查）' },

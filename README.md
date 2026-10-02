@@ -47,7 +47,7 @@ The next architecture direction is Go with React + TypeScript; SQLite and an exe
 
 1. Configure the provider for the Pi adapter in `~/.pi/agent/models.json` so its `apiKey` reads an env var (for example `"$ZENMUX_PI_API_KEY"`).
 2. Export that variable in the shell that runs `execute`/`run.mjs`. Never commit, print or pass it as an argument. Profiles store only the variable name.
-3. Create or choose execution profiles. `example-project.json` and `example-project-website.json` are pilot profiles for the first pilot workspace; they are not built-in limits of the plugin.
+3. Create your own execution profile as a user-owned local file outside this repository. Choose its budget, model and checks per project and task; the plugin ships no project-specific profiles or defaults.
 
 ## Managed workflow
 
