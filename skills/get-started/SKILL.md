@@ -18,15 +18,16 @@ Requirements: macOS/Linux (arm64/amd64), Node 22+, Git, and Pi 0.99.1
 1. Runtime: `node scripts/setup.mjs` downloads and verifies the platform binary
    (`SHA256SUMS`, `release.json`) into `~/.meerkat/runtime/<version>/<os>-<arch>`.
    Use `--artifact-dir` for offline files or `--runtime-dir` for an isolated install.
-2. Profile: ask the user for project ID, provider, model and the *name* of the environment
-   variable that holds the key. Then run:
+2. Profile: reuse an existing private profile when suitable. Otherwise use supplied project ID,
+   provider, model and credential environment-variable name; ask only for missing values. Run:
    `node scripts/configure.mjs --project-id ID --provider P --model M --auth-env VAR_NAME`
    (custom endpoints add `--base-url URL --api anthropic-messages|openai-completions`).
    It refuses to overwrite an existing profile.
 3. Key: tell the user to `export VAR_NAME=...` in their own shell. Never ask for, accept,
-   echo or store the key; if pasted, tell them to rotate it.
-4. Service: the user runs `node scripts/launch.mjs serve --port 47826` in that shell with
-   `pi` on PATH. It stays in the foreground.
+   echo or store the key.
+4. Service: reuse a running service for the chosen data directory. Otherwise start
+   `node scripts/launch.mjs serve --port 47826` with the named key available and `pi` on PATH.
+   If the key is unavailable to your environment, ask the user to start it in their shell.
 5. Monitor: after install, in a new chat, call the `open_monitor` tool and report the counts
    it shows (agents, tasks, deliveries). If the host lacks MCP Apps, run
    `node scripts/launch.mjs snapshot` and say it is a CLI fallback, not the native panel.

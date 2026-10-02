@@ -46,7 +46,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.1`, personal GitHub prerelease. macOS/Linux on arm64/amd64; Windows is unsupported. Needs Node 22+, Git, Codex and Pi 0.99.1; no Go or frontend build.
+Version `0.4.0-beta.1` is a release candidate. The tag-based commands below become available after publication. macOS/Linux on arm64/amd64; Windows is unsupported. Needs Node 22+, Git, Codex and Pi 0.99.1; no Go or frontend build.
 
 ```sh
 codex plugin marketplace add hunknownz/Meerkat --ref v0.4.0-beta.1

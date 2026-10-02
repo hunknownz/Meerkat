@@ -1,6 +1,7 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.1` is a personal GitHub prerelease by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.1` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+The tag-based commands below become available when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
 
 ## Requirements
@@ -52,12 +53,12 @@ node scripts/launch.mjs <command> [--data-dir /private/path]
 
 ```sh
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL \
-  --auth-env MY_PROVIDER_KEY \
-  [--base-url https://... --api anthropic-messages|openai-completions] \
-  [--pi-command /abs/path/to/pi] [--data-dir /abs/private/dir]
+  --auth-env MY_PROVIDER_KEY
 ```
 
 - Choose the provider and model yourself. Without `--base-url`, Pi's existing provider configuration is used.
+- Optional flags: `--base-url URL` together with `--api anthropic-messages` or `--api openai-completions`,
+  `--pi-command /abs/path/to/pi`, and `--data-dir /abs/private/dir`.
 - With `--base-url`/`--api`, a custom provider is written to an isolated `pi/example/models.json`
   that references the environment variable name only, never the key.
 - The profile is written to `~/.meerkat/profiles/example.json`; existing profiles are not overwritten.
