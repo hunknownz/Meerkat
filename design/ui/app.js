@@ -8,7 +8,7 @@
   const deepFreeze = (o) => { Object.values(o).forEach((v) => { if (v && typeof v === 'object') deepFreeze(v); }); return Object.freeze(o); };
 
   const NOW = '14:32';
-  const SNAPSHOT_AT = '14:29';
+  const SNAPSHOT_AT = '14:32';
   const PHASES = ['任务', '开发', '初次交付', '检查', '最终候选', '精修与复验'];
   const ROLE = { dev: '开发', check: '检查', polish: '最终精修' };
   const MODELS = ['DeepSeek V4 Flash', 'Claude Opus 5.5'];
@@ -445,7 +445,7 @@
       return `<div class="row stat-row">
         <span class="who"><span class="name">${ROLE[role]} · ${esc(model)}</span>
         <span class="sub">${rs.length} 次运行 · 用量完整 ${gFull}/${rs.length} · 耗时合计 ${dur(rs.reduce((a, r) => a + runMinutes(r), 0))}</span></span>
-        <span class="num"><b>${tok}</b><small>tokens（已上报）</small></span>
+        <span class="num"><b>${tok}</b><small>输入 + 输出（已上报）</small></span>
         <span class="num"><b>${gs.crN ? num(gs.cr) : '未知'} / ${gs.cwN ? num(gs.cw) : '未知'}</b><small>缓存 读 / 写</small></span>
         <span class="num"><b>${gFee.length ? `¥${gFee.reduce((a, r) => a + r.fee, 0).toFixed(2)}` : '未知'}</b><small>${gFee.length}/${rs.length} 次返回费用</small></span>
       </div>`;
@@ -467,13 +467,13 @@
       <div class="sec-h"><b>用量</b><span class="example-tag">示例数据</span><span>非真实账单；数字来自原型样例</span></div>
       <div class="stats">
         <div class="kpi"><b>${runs.length}</b><span>运行次数</span><small>用量完整 ${full}/${runs.length}</small></div>
-        <div class="kpi"><b>${mixed ? '≥ ' : ''}${num(s.in + s.out)}</b><span>已上报 tokens</span><small>${s.reported}/${runs.length} 次有上报${mixed ? '，非完整总量' : ''}</small></div>
+        <div class="kpi"><b>${mixed ? '≥ ' : ''}${num(s.in + s.out)}</b><span>输入 + 输出 tokens</span><small>${s.reported}/${runs.length} 次有上报${mixed ? '，非完整总量' : ''}</small></div>
         <div class="kpi"><b>${num(s.cr)} / ${num(s.cw)}</b><span>缓存 读 / 写</span><small>上报 ${s.crN} / ${s.cwN} 次</small></div>
         <div class="kpi"><b>¥${fee.toFixed(2)}</b><span>已返回费用（示例）</span><small>${runs.length - feeRuns.length} 次未知，不估算</small></div>
         <div class="kpi"><b>${dur(wall)}</b><span>墙钟时间</span><small>Agent 耗时合计 ${dur(agentSum)}</small></div>
       </div>
 
-      <div class="sec-h"><b>按角色 / 模型</b><span>“≥” 表示有运行未返回用量</span></div>
+      <div class="sec-h"><b>按角色 / 模型</b><span>“≥” 表示有运行未返回用量；缓存读 / 写单独列出，不计入输入 + 输出小计</span></div>
       <div class="list">${groupRows}</div>
 
       <div class="sec-h"><b>流程指标</b><span class="example-tag">示例</span></div>
@@ -534,7 +534,7 @@
     return `<div class="card"><div class="run-table">${runs.map((r) => {
       const tk = r.tokens;
       const c = completeness(r);
-      const tokens = tk ? `${tk.in === null || tk.out === null ? '' : num(tk.in + tk.out)} tokens · 缓存 ${tk.cr === null ? '未返回' : num(tk.cr)} / ${tk.cw === null ? '未返回' : num(tk.cw)}` : null;
+      const tokens = tk ? `${tk.in === null || tk.out === null ? '' : num(tk.in + tk.out)} 输入 + 输出 tokens · 缓存 ${tk.cr === null ? '未返回' : num(tk.cr)} / ${tk.cw === null ? '未返回' : num(tk.cw)}` : null;
       return `<div class="run">
         <span><span class="rid">${r.id}</span> · <span class="rt">${r.agent} · ${ROLE[r.role]}${r.fix ? '（定向修复）' : ''}</span></span>
         <span class="rr">${esc(r.result)}</span>
