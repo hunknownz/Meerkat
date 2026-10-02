@@ -172,6 +172,13 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 	if len(rows) != 4 || ids[uR1] != 1 || ids[uSR] != 1 || ids[uRH] != 1 {
 		t.Fatalf("metrics %s", js)
 	}
+	// Project linkage: workflow runs via their task, legacy runs via their stored task, standalone via the receipt.
+	wantProject := map[string]string{uR1: uP, uR2: uP, uRH: uP, uSR: "p"}
+	for _, r := range rows {
+		if r.ProjectID == nil || *r.ProjectID != wantProject[r.RunID] {
+			t.Fatalf("project linkage %s: %v", r.RunID, r.ProjectID)
+		}
+	}
 	if strings.Contains(string(js), "ANTHROPIC") || strings.Contains(string(js), "private context") || strings.Contains(string(js), "piCommand") {
 		t.Fatal("metrics leak")
 	}
@@ -181,7 +188,7 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 	}
 	// Additive nullable timing columns: appended after the existing columns; unknown stays null/empty.
 	header := strings.SplitN(string(csv), "\n", 2)[0]
-	if !strings.HasSuffix(header, ",usageSource,queuedAt,queueSeconds,testSeconds,fixRound") ||
+	if !strings.HasSuffix(header, ",usageSource,queuedAt,queueSeconds,testSeconds,fixRound,projectId") ||
 		!strings.HasPrefix(header, "source,origin,taskId,runId,role,executor,provider,model,changeId,state,startedAt,endedAt,wallSeconds,modelSeconds,") {
 		t.Fatalf("csv header %s", header)
 	}
@@ -213,7 +220,7 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 		t.Fatalf("metrics export %s", js)
 	}
 	csv, _ = s.ExportMetrics("csv")
-	if !strings.Contains(string(csv), ","+at+",1.5,,0\n") {
+	if !strings.Contains(string(csv), ","+at+",1.5,,0,"+uP+"\n") {
 		t.Fatalf("csv %s", csv)
 	}
 }
@@ -351,5 +358,52 @@ func TestIssueReceiptCAS(t *testing.T) {
 	h, _ := s.History()
 	if len(h) != 1 || h[0].Executable {
 		t.Fatal("history must be non-executable")
+	}
+}
+
+func TestMetricsUnknownProjectStaysEmpty(t *testing.T) {
+	s, _ := openTemp(t)
+	from, root := legacySource(t, legacyFixture())
+	// Standalone receipt with no project and no task reference: linkage is unknown, never guessed.
+	writeJSON(t, filepath.Join(root, ".pi-developer", "runs", "a.json"), map[string]any{"model": "openai/gpt", "runId": uSR, "role": "developer",
+		"startedAt": "2025-01-01T00:00:00Z", "endedAt": "2025-01-01T00:00:30Z", "tokens": map[string]any{"input": 1, "output": nil}, "usageCompleteness": "partial",
+		"estimatedCostUsd": nil, "outcome": "success", "report": map[string]any{"summary": "x"}})
+	if _, err := s.ImportLegacy(from, []string{root}); err != nil {
+		t.Fatal(err)
+	}
+	js, err := s.ExportMetrics("json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []MetricsRow
+	if err := json.Unmarshal(js, &rows); err != nil {
+		t.Fatal(err)
+	}
+	var got *MetricsRow
+	for i := range rows {
+		if rows[i].RunID == uSR {
+			got = &rows[i]
+		} else if rows[i].ProjectID == nil || *rows[i].ProjectID != uP {
+			t.Fatalf("known linkage lost %+v", rows[i])
+		}
+	}
+	if len(rows) != 4 || got == nil || got.ProjectID != nil || got.Input == nil || *got.Input != 1 || got.Output != nil || got.CostUsd != nil {
+		t.Fatalf("unknown project row %s", js)
+	}
+	if !strings.Contains(string(js), `"projectId": null`) {
+		t.Fatalf("unknown project must be null %s", js)
+	}
+	csv, _ := s.ExportMetrics("csv")
+	for _, line := range strings.Split(strings.TrimSpace(string(csv)), "\n")[1:] {
+		f := strings.Split(line, ",")
+		if len(f) != 27 {
+			t.Fatalf("column count %d: %s", len(f), line)
+		}
+		if f[3] == uSR && f[26] != "" {
+			t.Fatalf("unknown project not empty: %s", line)
+		}
+		if f[3] != uSR && f[26] != uP {
+			t.Fatalf("known project missing: %s", line)
+		}
 	}
 }

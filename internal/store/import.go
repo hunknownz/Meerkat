@@ -1255,6 +1255,16 @@ type MetricsRow struct {
 	QueueSeconds *float64 `json:"queueSeconds"`
 	TestSeconds  *float64 `json:"testSeconds"`
 	FixRound     *int     `json:"fixRound"`
+	// Additive project linkage from stored task/history references; unknown is null (JSON) / empty (CSV).
+	ProjectID *string `json:"projectId"`
+}
+
+// optProject returns a stored project reference, or nil when unknown (never guessed).
+func optProject(id string) *string {
+	if id == "" {
+		return nil
+	}
+	return &id
 }
 
 func fillUsage(r *MetricsRow, u *model.Usage) {
@@ -1283,6 +1293,13 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 	for _, t := range st.Tasks {
 		tasks[t.ID] = t
 	}
+	// Stored project references of legacy tasks, keyed by exact task id (for legacy runs without their own).
+	histTaskProject := map[string]string{}
+	for _, h := range hist {
+		if h.Kind == "legacy_task" && h.TaskID != "" && h.ProjectID != "" {
+			histTaskProject[h.TaskID] = h.ProjectID
+		}
+	}
 	seen := map[string]bool{}
 	out := []MetricsRow{}
 	for _, r := range st.Runs {
@@ -1296,6 +1313,9 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 			row.WallSeconds, row.ModelSeconds = r.Metrics.WallSeconds, r.Metrics.ModelSeconds
 			row.QueuedAt, row.QueueSeconds, row.TestSeconds, row.FixRound = r.Metrics.QueuedAt, r.Metrics.QueueSeconds, r.Metrics.TestSeconds, r.Metrics.FixRound
 		}
+		if t, ok := tasks[r.TaskID]; ok {
+			row.ProjectID = optProject(t.ProjectID)
+		}
 		fillUsage(&row, r.Usage)
 		out = append(out, row)
 	}
@@ -1305,7 +1325,15 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 		}
 		seen[h.RunID] = true
 		row := MetricsRow{Source: h.Kind, Origin: model.OriginLegacyImport, TaskID: h.TaskID, RunID: h.RunID, Role: h.Role, Executor: h.Executor,
-			Provider: h.Provider, Model: h.Model, ChangeID: h.ChangeID, State: h.State, StartedAt: h.StartedAt, EndedAt: h.EndedAt, WallSeconds: h.WallSeconds}
+			Provider: h.Provider, Model: h.Model, ChangeID: h.ChangeID, State: h.State, StartedAt: h.StartedAt, EndedAt: h.EndedAt, WallSeconds: h.WallSeconds,
+			ProjectID: optProject(h.ProjectID)}
+		if row.ProjectID == nil && h.TaskID != "" {
+			if t, ok := tasks[h.TaskID]; ok {
+				row.ProjectID = optProject(t.ProjectID)
+			} else {
+				row.ProjectID = optProject(histTaskProject[h.TaskID])
+			}
+		}
 		fillUsage(&row, h.Usage)
 		out = append(out, row)
 	}
@@ -1326,7 +1354,7 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 		w := csv.NewWriter(&buf)
 		_ = w.Write([]string{"source", "origin", "taskId", "runId", "role", "executor", "provider", "model", "changeId", "state", "startedAt", "endedAt",
 			"wallSeconds", "modelSeconds", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens", "usageCompleteness", "estimatedCostUsd", "usageSource",
-			"queuedAt", "queueSeconds", "testSeconds", "fixRound"})
+			"queuedAt", "queueSeconds", "testSeconds", "fixRound", "projectId"})
 		ps := func(p *string) string {
 			if p == nil {
 				return ""
@@ -1354,7 +1382,7 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 		for _, r := range rows {
 			_ = w.Write([]string{r.Source, r.Origin, r.TaskID, r.RunID, r.Role, r.Executor, r.Provider, r.Model, ps(r.ChangeID), r.State, r.StartedAt, ps(r.EndedAt),
 				pf(r.WallSeconds), pf(r.ModelSeconds), pi(r.Input), pi(r.Output), pi(r.CacheRead), pi(r.CacheWrite), pi(r.Total), r.Completeness, pf(r.CostUsd), r.UsageSource,
-				ps(r.QueuedAt), pf(r.QueueSeconds), pf(r.TestSeconds), pn(r.FixRound)})
+				ps(r.QueuedAt), pf(r.QueueSeconds), pf(r.TestSeconds), pn(r.FixRound), ps(r.ProjectID)})
 		}
 		w.Flush()
 		return buf.Bytes(), w.Error()
