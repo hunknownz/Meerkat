@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -157,40 +156,18 @@ func cmdRestore(env Env, args []string) (int, error) {
 	if _, err := os.Lstat(dst); !errors.Is(err, os.ErrNotExist) {
 		return ExitUsage, errors.New("--to must not exist (restore never overwrites)")
 	}
-	if err := store.ValidateBackup(src); err != nil {
-		return ExitUsage, errors.New("invalid backup")
+	if err := store.Restore(src, dst); err != nil {
+		switch {
+		case errors.Is(err, store.ErrConflict):
+			return ExitUsage, errors.New("--to must not exist (restore never overwrites)")
+		case errors.Is(err, store.ErrBadBackup):
+			return ExitUsage, errors.New("invalid backup (missing, corrupt or unrecoverable issue bodies)")
+		}
+		return ExitFailed, errors.New("restore failed; partial destination removed")
 	}
-	if err := os.Mkdir(dst, 0o700); err != nil {
-		return ExitFailed, errors.New("cannot create --to")
-	}
-	if err := copyNew(src, filepath.Join(dst, "meerkat.db")); err != nil {
-		return ExitFailed, errors.New("restore copy failed")
-	}
-	st, err := store.Open(dst)
-	if err != nil {
-		return ExitFailed, errors.New("restored store does not open")
-	}
-	st.Close()
 	writeJSON(env.Stdout, map[string]any{"ok": true, "data": map[string]any{
 		"dataDir": dst, "merged": false, "note": "restored into a fresh directory; existing data untouched"}})
 	return ExitOK, nil
-}
-
-func copyNew(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
 }
 
 func cmdExport(env Env, args []string) (int, error) {

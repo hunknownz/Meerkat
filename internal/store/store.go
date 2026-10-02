@@ -102,6 +102,7 @@ const (
 	dsnWriter dsnMode = iota
 	dsnReader
 	dsnReadOnlyFile
+	dsnBackupFile // single-file rollback-journal database (never switched to WAL)
 )
 
 // dsn builds a SQLite URI. The path is percent-encoded through net/url so that characters such as
@@ -114,6 +115,8 @@ func dsn(path string, mode dsnMode) string {
 	switch mode {
 	case dsnReadOnlyFile:
 		q.Set("mode", "ro")
+	case dsnBackupFile:
+		q.Set("_txlock", "immediate")
 	case dsnReader:
 		q.Add("_pragma", "query_only(1)")
 		q.Set("_txlock", "deferred")
@@ -692,51 +695,6 @@ func (s *Store) FinishStop(requestID, outcome string) error {
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
 		return ErrNotFound
-	}
-	return nil
-}
-
-// Backup writes a consistent copy of the database to destination (which must not exist).
-func (s *Store) Backup(destination string) error {
-	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%w: backup destination exists", ErrConflict)
-	}
-	if _, err := s.db.Exec("VACUUM INTO ?", destination); err != nil {
-		return fmt.Errorf("store: backup failed")
-	}
-	if err := os.Chmod(destination, 0o600); err != nil {
-		return fmt.Errorf("store: backup permissions failed")
-	}
-	return ValidateBackup(destination)
-}
-
-// ValidateBackup checks integrity, foreign keys and schema of a backup file.
-func ValidateBackup(path string) error {
-	fi, err := os.Lstat(path)
-	if err != nil || !fi.Mode().IsRegular() {
-		return ErrBadBackup
-	}
-	db, err := sql.Open("sqlite", dsn(path, dsnReadOnlyFile))
-	if err != nil {
-		return ErrBadBackup
-	}
-	defer db.Close()
-	var res string
-	if err := db.QueryRow("PRAGMA integrity_check").Scan(&res); err != nil || res != "ok" {
-		return ErrBadBackup
-	}
-	if checkFKs(db) != nil {
-		return ErrBadBackup
-	}
-	var v int
-	if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil || v != 1 {
-		return ErrBadBackup
-	}
-	for _, t := range schemaTables {
-		var n int
-		if err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", t).Scan(&n); err != nil || n != 1 {
-			return ErrBadBackup
-		}
 	}
 	return nil
 }
