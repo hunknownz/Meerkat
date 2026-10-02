@@ -10,7 +10,7 @@ network.
 From this directory (`plugins/meerkat/design/ui/`):
 
 ```sh
-python3 -m http.server 8000
+python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 Then open <http://localhost:8000/>.
