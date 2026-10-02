@@ -2,102 +2,115 @@
 
 ![Meerkat icon](./assets/meerkat.png)
 
-The vector master is `assets/meerkat-sidebar.svg`: selected candidate 4, with a rounded triangular head facing right, an upright back, and two front curves. It has no badge or background. `assets/meerkat-artwork.png` is the high-resolution export, and `assets/meerkat.png` is the 512px plugin export in neutral gray for light and dark surfaces. The sidebar uses the same vector at 22px and colors it with the UI text color. `assets/meerkat-sidebar.png` is the transparent raster export; `assets/meerkat-sidebar-artwork.png` preserves the selected image-generation reference.
+Meerkat is a generic local plugin: **Codex coordinates** and **Pi implements**. Codex turns a GitHub Issue or local requirement into a bounded task with frozen shared context. The managed flow runs developer → reviewer → (bounded fix → reviewer) → polisher → reviewer recheck on that task and records durable local history. A read-only monitor shows which agents are running. No dependencies; needs Node 22+, Git, and the `pi` CLI (`gh` only for Issue commands).
 
-Meerkat shows which coding agents are running and what they are doing. Its first developer runtime is Pi: the runner handles one Pi CLI coding task in a clean linked Git worktree, enforces wall-time/token caps, and writes a small private run summary. Codex reviews the resulting commit. No dependencies; needs Node 22+ and the `pi` CLI.
+There are two entry points:
 
-## Concepts and ownership
+- **Managed flow** (`scripts/flow.mjs`, skill `meerkat-flow`): prepared tasks, three role profiles, a shared task budget, review, polishing, stop and resume.
+- **Legacy standalone runner** (`scripts/run.mjs`, skill `pi-developer`): exactly one Pi developer run per invocation, with no review loop or task store. It is kept for simple one-off delegation.
 
-This is a generic plugin. example-project is its first pilot workspace, with an initial execution profile; the runner has no example-project-specific boundary. The current `example-project` marketplace name identifies a local installation source, not the only workspace the plugin can serve.
+## Concepts
 
-| Term | Meaning in this MVP |
+| Term | Meaning |
 | --- | --- |
-| **Plugin** (`meerkat`) | The installable package containing a Codex Skill, the runner, execution profiles, and an optional read-only live monitor. Existing private data paths remain stable for compatibility. Installing it does not create a task board. |
-| **Workspace** | A human-facing project or product area, such as example-project. It may contain several Git repositories. The MVP has no workspace registry. |
-| **Coordinator** (Codex) | The main agent that scopes the task, selects the target repository and base commit, prepares or reuses a task branch and linked worktree, writes the task brief, starts the run, and reviews the result. |
-| **Developer** (Pi) | The Pi CLI process launched for one run. It implements in the assigned worktree, runs local checks, and creates one scoped local commit. It does not create worktrees or branches. Its provider/model is a runtime choice, not another agent. |
-| **Repository** | One Git root whose branch and commits are checked for the run. A run targets exactly one repository root. A workspace may contain more than one repository. |
-| **Execution profile** (`projects/<id>.json`) | The configuration for instructions, provider/model, credential environment-variable name, and limits. Its current `projectId` field names the profile in prompts and summaries; it is not a workspace registry or proof that the selected worktree belongs to a repository. Use a separate profile for each distinct target repository. |
-| **Task** | One bounded goal accepted by Codex, whether it comes from the user or an Issue. The runner does not store tasks and the monitor UI does not plan them. |
-| **Task brief** (`--task <file>`) | The bounded execution contract: goal, scope, non-scope, and acceptance checks. The runner reads a file; it has no queue. |
-| **Task ID** (`--task-id <uuid>`, optional) | An externally supplied UUID (for example from an issue tracker or a legacy dashboard task record). When passed, the runner validates it as a UUID and records it as `taskId` in the run summary. There is no dashboard task drawer. |
-| **GitHub Issue** | An optional upstream record for requirements and discussion. This MVP does not read, create, comment on, or synchronize Issues. Codex must translate an Issue into a task brief. |
-| **Task branch / worktree** | The branch is a Git ref; the worktree is its linked checkout directory. Codex owns their selection and lifecycle. A clean suitable worktree can be reused for later runs; one run does not imply a new worktree. |
-| **Run** | One invocation of the runner and one Pi process. The runner checks the worktree, starts Pi, enforces limits, and records the result. It does not edit code or commit. There is no automatic retry or parallel scheduling. |
-| **Run summary** | Private JSON under `<worktree>/.pi-developer/runs/` with time, tokens, outcome, branch, and before/after SHAs. `success` means Pi settled, committed, and left a clean worktree; it does not mean Codex review, QA, merge, Preview, production, or user acceptance passed. |
+| **Project** | A slug (`project.id`) that groups tasks, profiles and repositories. Each profile config's `projectId` must equal it. |
+| **Repository** | A Git root (absolute path). A task targets exactly one repository; a nested repository is a separate repository with its own worktree. |
+| **Context** | Shared requirement text (plus optional source URLs/hashes) frozen as `{id, version, digest}` at `prepare`. A context version is immutable: different text needs a new version. Every run brief embeds it, and reviewer reports must cite its digest. |
+| **Task** | One bounded goal with explicit `scope` paths, `acceptance` criteria, budget, worktree and optional `issueRef`. Registered by `flow.mjs prepare`. |
+| **Run** | One Pi process for one role on one task, with per-run token/time caps and a generated brief. |
+| **Delivery** | A recorded candidate commit: first delivery (developer), final candidate (review passed), delivered (recheck passed after polishing). `delivered` is a local AI-reviewed commit, not QA, human acceptance, merge or deployment. |
+| **Review** | A reviewer verdict (`pass` / `changes_requested`) with findings, bound to an exact candidate SHA and context digest. |
+| **Coordinator** (Codex) | Scopes the task, creates the branch and linked worktree, writes the prepare input, starts `execute`, reads results, and decides next steps. It is the only party that starts work. |
+| **Developer** (Pi) | Implements or fixes findings within scope and makes one scoped local commit. |
+| **Reviewer** (Pi) | Read-only check of the exact candidate; reports a verdict. |
+| **Polisher** (Pi) | Optional small in-scope improvements. Reporting `no_change` (HEAD untouched) is accepted; the candidate is still rechecked by the reviewer. |
 
-The machine, agent, model, branch, and worktree are different things: Codex prepares a local worktree, and the local Pi CLI uses the model selected by the execution profile. A nested Git repository needs its own target worktree; a commit inside it does not advance the outer repository's HEAD and cannot satisfy an outer-repository run's commit check.
+Roles are profiles, not separate products: each role uses an execution profile `projects/<id>.json` (`projectId`, `provider`, `model`, `authEnv` = env var **name**, relative `instructions`, `limits.maxWallSeconds`, `limits.maxTokens`, optional `piCommand`, default `["pi"]`). Several roles may use the same file. `prepare` freezes each profile by digest; if a config file changes later, `execute` refuses and you must prepare a new task.
 
 ## Setup
 
-1. Configure the provider in `~/.pi/agent/models.json` so its `apiKey` reads an env var (e.g. `"$ZENMUX_PI_API_KEY"`).
-2. `export ZENMUX_PI_API_KEY=...` — never commit, print, or pass it as an argument.
-3. Execution profile `projects/<id>.json`: `projectId`, `provider`, `model`, `authEnv` (env var **name**), `instructions` (paths embedded in the prompt), `limits.maxWallSeconds`, `limits.maxTokens` (input + output + cache read/write). Optional `piCommand` array (default `["pi"]`). Token caps are guardrails, not dollar estimates.
+1. Configure the Pi provider in `~/.pi/agent/models.json` so its `apiKey` reads an env var (for example `"$ZENMUX_PI_API_KEY"`).
+2. Export that variable in the shell that runs `execute`/`run.mjs`. Never commit, print or pass it as an argument. Profiles store only the variable name.
+3. Create or choose execution profiles. `example-project.json` and `example-project-website.json` are pilot profiles for the first pilot workspace; they are not built-in limits of the plugin.
 
-`example-project.json` targets the outer example-project Git repository. `example-project-website.json` is a bounded starter profile for the nested Website/CMS monorepo (60,000 tokens, 600 seconds); use it only with a clean linked worktree of that nested repository. It injects the repository's root `AGENTS.md`. Codex must add the applicable package instructions and example-project Development contract to each task brief, then verify the selected Git root and resulting commit. An outer-repository run cannot count a nested-repository commit as its result.
+## Managed flow
 
-## Example
-
-```bash
-git worktree add -b codex/root-readme ../example-project-root-readme HEAD
-cat > /tmp/root-readme.md <<'EOF'
-Goal: clarify one setup instruction in the outer repository README.
-Scope: root README.md only. Non-scope: nested repositories and application code.
-Acceptance: the instruction is accurate and there is one scoped local commit.
-EOF
-P=plugins/meerkat
-node $P/scripts/run.mjs --config $P/projects/example-project.json --worktree ../example-project-root-readme --task /tmp/root-readme.md --dry-run
-node $P/scripts/run.mjs --config $P/projects/example-project.json --worktree ../example-project-root-readme --task /tmp/root-readme.md
-# optional: tag the run summary with an externally supplied task UUID
-node $P/scripts/run.mjs --config $P/projects/example-project.json --worktree ../example-project-root-readme --task /tmp/root-readme.md --task-id <task UUID>
-```
-
-## Responsibilities
-
-- **Script:** preflight (task/config exist; clean, non-primary worktree root on a non-protected branch; Pi and key present), one `spawn` of Pi (argv, no shell) with `--print --mode json --no-session --no-extensions --no-skills --no-prompt-templates --no-context-files --tools read,bash,edit,write`, streaming token accounting from completed assistant messages, caps, summary. It never edits code, creates branches/worktrees, commits, retries, pushes, or deploys.
-- **Pi:** implement, run local checks, make one scoped local commit.
-- **Codex:** prepare worktree/task, review the diff, rerun checks, decide next step.
-
-Summary: `<worktree>/.pi-developer/runs/<timestamp>.json` (dir 0700, file 0600; added to `info/exclude` if not ignored). Holds `taskId` (only when `--task-id` was given), model, times, tokens, estimated cost (or `null`), baseline/result SHA, changed paths, exit/settled flags, outcome/reason — no transcript. Exit codes: `0` success, `1` failed/stopped (changes kept), `2` preflight error.
-
-## Limitations
-
-- One task, one run: no retries, queues, model switching, or parallel workers.
-- Cost is `null` unless Pi reports a cost for every assistant message.
-- Pi runs with your user permissions; the worktree is isolation for Git state only, not a sandbox.
-
-## Live monitor (optional)
-
-A dependency-free, loopback-only, **read-only** status page. It polls `GET /api/active` every 4 seconds and shows the number of running Pi processes and, for each, the task, model, worktree, and elapsed time. When the status cannot be read it shows an explicit unavailable state rather than stale data. It does not plan tasks, create branches or worktrees, or launch Pi or `scripts/run.mjs`; the runner workflow above is unchanged (Codex prepares the worktree and brief, Pi codes and commits, Codex reviews).
-
-Start it (Node 22+, no install or build step) and open the printed URL, e.g. http://127.0.0.1:3000/ :
+Codex prepares the worktree; Meerkat never creates branches or worktrees, and never pushes, merges or deploys. The repository and worktree must be absolute paths that share one Git common directory. The worktree must be a linked (non-primary) worktree, clean, and on a branch other than `main`/`master`/`develop`/`trunk`.
 
 ```bash
-node plugins/meerkat/dashboard/server.mjs --port 3000
-# optional: keep legacy data somewhere specific
-node plugins/meerkat/dashboard/server.mjs --port 3000 --data-dir /path/to/private/dir
+P=$PWD/plugins/meerkat
+git worktree add -b codex/readme-fix ../myrepo-readme-fix HEAD
+# write /tmp/task.json (see skills/meerkat-flow/references/task-input.md)
+node $P/scripts/flow.mjs prepare --input /tmp/task.json      # -> {"taskId", "state":"ready", "contextRef", ...}
+node $P/scripts/flow.mjs execute --task <taskId>             # repeat --task to run several; exits 0 only if all are delivered
+node $P/scripts/flow.mjs snapshot                            # tasks, runs (ids, roles, models), deliveries, usage, settings
+# from another terminal while execute is running: request a stop (lowercase UUID request id, idempotent)
+node $P/scripts/flow.mjs stop --run <runId> --request-id "$(node -e 'console.log(crypto.randomUUID())')"
+node $P/scripts/flow.mjs execute --task <taskId> --resume    # continue a failed/stopped task from the role that stopped
 ```
 
-- `--port <0-65535>`: default `0` picks an ephemeral port; the URL and data directory are printed on start.
-- `--data-dir <dir>`: defaults to `~/.codex-pi-developer/dashboard` (never inside the repository). The directory is created `0700`; each collection is a `0600` JSON file written atomically. If an existing data file is unreadable or malformed, the server refuses to start and names the file; it never discards existing data.
-- If you set `--data-dir` on the monitor, pass the same directory to `scripts/run.mjs --data-dir <dir>` so the runner's heartbeat appears in that monitor. Use an absolute path when launching them from different directories.
-- Binds `127.0.0.1` only.
+All commands accept `--data-dir <dir>` and print small JSON. Error output is `{"error": ...}` with exit code 2.
 
-Legacy compatibility: the old board/config/metrics UI has been removed, but the server still keeps the legacy workspace, repository, agent, task, and run-summary data and HTTP APIs (`GET /api/state`, `GET /api/runs`, `GET|POST /api/{workspaces,repositories,agents,tasks}`, `GET|PUT /api/<collection>/<id>`, `DELETE /api/tasks/<id>`) for existing callers. Writes require `Content-Type: application/json`, are limited to 256 KiB, and are rejected with 403 for a foreign `Origin` or `Sec-Fetch-Site: cross-site`.
+**Execution.** `execute` takes a single controller lock per data dir. It runs independent tasks concurrently (`maxConcurrency`, default 2), serializes tasks that share a worktree, and starts a task only after its `dependencies` are delivered. Each role gets a brief with the goal, scope, acceptance, frozen context, findings to address (fix runs) and dependency candidate SHAs (references only; nothing is merged). After each run Meerkat checks the report, HEAD, clean tree, changed paths against `scope`, and the context digest. Ctrl+C stops the active runs.
+
+**Stop and resume.** A stop request needs a live controller; it is acknowledged and the controller decides when the run stops. `--resume` continues only if the worktree is clean, on the task branch, and HEAD equals the recorded candidate (or the frozen baseline). Otherwise work is preserved and the command refuses. A run whose controller died is `unknown` and is never replayed automatically. After confirming the old process is gone, use `--resume --acknowledge-interruption`. Meerkat still refuses if a recorded PID looks alive; it never signals stale PIDs.
+
+**Defaults and budgets.** The data dir defaults to `~/.codex-pi-developer/dashboard`, outside any repository. It must be a real directory owned by you with mode `0700`. The task budget defaults to 500,000 tokens, 1,800 seconds and 2 fix rounds (maximum 2), spread over all of the task's runs. Each run is capped at the lower of its profile limit and the remaining budget. Token counts include input, output, cache read and cache write; prompt caches are counted, not exempt. Runs whose usage was not reported make the usage `incomplete`, and only known tokens are subtracted. `estimatedCostUsd` is `null` unless every run reported a cost. Token caps are guardrails, not price quotes; provider fees can be unknown.
+
+**Settings** (`flow.mjs settings --input <json>` or the monitor's settings dialog) affect only runs that start later. Settings are `maxConcurrency` 1–4, `maxFixRounds` 0–2 (the effective limit is the lower of this and the task budget), and `defaultProfiles` `{ "<projectId>": { "<role>": "<registered profile id>" } }`. Paths and new configs can only come in through `prepare`.
+
+**History.** `<data-dir>/workflow/state.json` holds projects, contexts, tasks, runs, deliveries, reviews and profiles. Per-run briefs and reports live in `<data-dir>/workflow/runs/<runId>/`. History is independent of worktrees: removing a worktree does not erase it. Run transcripts are not stored.
+
+## GitHub Issues (optional)
+
+Issue commands use your existing `gh` authentication. Only `github.com` is allowed by default; add other hosts explicitly with `--allow-host <host>`.
+
+```bash
+node $P/scripts/issues.mjs read --url https://github.com/<owner>/<repo>/issues/<n> --output ~/private/issue-<n>.json
+# -> {"output","snapshot","issueRef","untrusted":true}; output must be outside any Git worktree (written 0600)
+node $P/scripts/issues.mjs update --task <taskId>            # writes a local Markdown draft (bodyFile); sends nothing
+node $P/scripts/issues.mjs update --task <taskId> --apply    # posts that draft once per delivery; only with explicit authorization
+```
+
+Issue text is untrusted source material that grants no permissions. Codex writes the task's goal, scope, acceptance and context itself and passes `issueRef` to `prepare`. `--apply` refuses if the draft changed after preparation. It deduplicates by a delivery marker, so a retry after an `unknown` post outcome does not post twice. Tasks without `issueRef` have nothing to post.
+
+## Live monitor
+
+```bash
+node plugins/meerkat/dashboard/server.mjs --port 3000          # prints URL and data dir; default --port 0 = ephemeral
+node plugins/meerkat/dashboard/server.mjs --port 3000 --data-dir /abs/private/dir   # must match the flow's --data-dir
+```
+
+A loopback-only (`127.0.0.1`) page that polls the workflow snapshot every 4 seconds. It shows the tasks, the role pipeline, shared context, deliveries/reviews, runs with their model and usage, and running Pi agents. If the status cannot be read, it shows an explicit unavailable state rather than stale data. It is a monitor, not a kanban board: it cannot create tasks, start runs, or accept repository/config paths. Its only writes are **stop request** for an active run and **future-run settings**. Both are token- and origin-guarded. The server also keeps legacy data APIs (`/api/state`, `/api/runs`, `/api/active`, collection CRUD) for existing callers.
 
 ### Codex desktop adapter (optional, NON-OFFICIAL)
 
-An experimental adapter can show the same read-only monitor as a "Meerkat" entry in the Codex desktop sidebar. It is not an official Codex plugin API and is not permanent: it attaches over the Chrome DevTools Protocol to a Codex instance you start yourself, relies on version-sensitive DOM selectors that may break after Codex updates, and never modifies `app.asar` or Codex user data.
-
-1. Start the monitor server as above.
-2. Separately launch the Codex desktop app from a terminal with a loopback remote-debugging port (`--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222`). It must be started explicitly this way; a normally launched Codex has no debugging port.
-3. Run the adapter:
+`desktop/injector.mjs` is an experimental, version-dependent adapter, not an official Codex plugin UI. It attaches over the Chrome DevTools Protocol to a Codex desktop instance that you launched yourself with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222`. It adds a "Meerkat" sidebar entry that lists the running agents from `GET /api/active`. It relies on renderer selectors that a Codex update may break. It never modifies `app.asar` or Codex user data and accepts only loopback addresses.
 
 ```bash
 node plugins/meerkat/desktop/injector.mjs --cdp-port 9222 --status-url http://127.0.0.1:3000/
 ```
 
-Stop it with Ctrl+C. The adapter polls the status URL itself and only accepts literal loopback addresses; no browser security settings need to be changed.
+The browser monitor above is the supported fallback and the development/validation surface. It does not make Meerkat an official plugin UI. The full workflow UI (`dashboard/public/ui.js`) is a host-neutral factory designed for both the page and a ShadowRoot overlay. The current desktop adapter does not mount it yet and renders only its own read-only agent list. Live verification inside Codex desktop has not been performed for this version.
+
+## Legacy standalone runner
+
+```bash
+node $P/scripts/run.mjs --config $P/projects/<id>.json --worktree ../myrepo-readme-fix --task /tmp/brief.md --dry-run
+node $P/scripts/run.mjs --config $P/projects/<id>.json --worktree ../myrepo-readme-fix --task /tmp/brief.md [--task-id <uuid>] [--data-dir <dir>]
+```
+
+The runner makes one Pi spawn (argv, no shell) with tools `read,bash,edit,write` and no extensions, skills or context files. It enforces the profile caps and writes a private summary at `<worktree>/.pi-developer/runs/<timestamp>.json`, which is git-excluded: mode 0600 in a 0700 directory, with no transcript. Exit codes: `0` means Pi settled, committed and left a clean tree; `1` means failed/stopped (changes kept); `2` means a preflight error. It has no retries, review loop, queue or task store; Codex reviews the commit itself. Pass the monitor's `--data-dir` so the run's heartbeat appears there.
+
+## Limitations
+
+- Pi runs with your user permissions. A worktree isolates Git state only; it is not a sandbox.
+- `delivered` means a locally reviewed commit on the task branch. Push, merge, PRs, deployment, QA and human acceptance stay outside Meerkat and need separate authorization.
+- At most 4 concurrent runs and 2 fix rounds; no automatic retries or model switching.
+
+## Assets
+
+`assets/meerkat.png` is the selected plugin icon (candidate 4, exported from the vector master `assets/meerkat-sidebar.svg`); `assets/meerkat-sidebar.png` is the sidebar raster.
 
 ## Test
 

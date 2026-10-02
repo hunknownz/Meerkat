@@ -1,20 +1,20 @@
 {
   "name": "meerkat",
-  "version": "0.1.0+codex.20261001.icon4",
-  "description": "Meerkat monitors active coding agents and runs bounded Pi tasks with token and time limits.",
+  "version": "0.2.0+local.20261002",
+  "description": "Meerkat coordinates bounded Pi task delivery: Codex prepares worktrees and frozen context, Pi develops, reviews and polishes, and a read-only monitor shows running agents.",
   "author": {
     "name": "Local developer"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Meerkat",
-    "shortDescription": "Watch active coding agents and run bounded Pi development tasks.",
-    "longDescription": "Meerkat shows how many coding agents are active and what they are doing. Its first developer runtime is Pi: Codex prepares a clean linked worktree and task brief, the runner enforces token and time limits, Pi codes and commits, and Codex reviews the local result. The read-only monitor shows task, model, worktree, and elapsed time. An optional, non-official desktop adapter shows that monitor inside Codex when launched with a loopback debugging port.",
+    "shortDescription": "Coordinate bounded Pi development, review and polish with a live agent monitor.",
+    "longDescription": "Meerkat is a generic local plugin. Codex turns an Issue or local requirement into a bounded task with frozen shared context, prepares a linked Git worktree, and starts the managed flow: a Pi developer commits, a Pi reviewer checks the exact candidate, bounded fixes follow, a Pi polisher makes optional small changes, and the reviewer rechecks. Token, time and fix-round budgets apply; history stays in a private local store; nothing is pushed, merged or deployed. A loopback browser monitor shows tasks, runs and running agents and only accepts stop requests and future-run settings. An optional, NON-OFFICIAL, version-dependent desktop adapter can list running agents inside Codex desktop. A legacy one-run Pi runner remains available.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [],
     "logo": "./assets/meerkat.png",
     "composerIcon": "./assets/meerkat.png",
-    "defaultPrompt": "Prepare a clean linked worktree and task brief for this task, run it once with the Pi one-task runner, and review the resulting local commit."
+    "defaultPrompt": "Turn this requirement into a bounded Meerkat task: prepare a linked worktree and frozen context, run the managed flow, and report the delivered local commit with checks and known gaps."
   }
 }
