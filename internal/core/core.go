@@ -301,6 +301,10 @@ func ParseSettingsPatch(raw []byte) (model.SettingsPatch, error) {
 
 // Settings validates and applies a future-run settings patch. Existing runs keep their frozen profiles.
 func (c *Core) Settings(p model.SettingsPatch) (model.Settings, error) {
+	// Serialize the whole read/merge/write across CLI, HTTP and MCP callers.
+	// Locking only the write would let disjoint patches overwrite each other.
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
 	cur, err := c.settings()
 	if err != nil {
 		return cur, err
@@ -352,8 +356,6 @@ func (c *Core) Settings(p model.SettingsPatch) (model.Settings, error) {
 		cur.DefaultProfiles = merged
 	}
 	cur.UpdatedAt = now()
-	c.wmu.Lock()
-	defer c.wmu.Unlock()
 	if c.isLost() {
 		return cur, ErrLeaseLost
 	}

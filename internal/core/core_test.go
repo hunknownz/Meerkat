@@ -750,6 +750,31 @@ func TestPrepareValidationAndSettings(t *testing.T) {
 	}
 }
 
+func TestConcurrentSettingsPatchesPreserveDisjointFields(t *testing.T) {
+	e := setup(t)
+	for round := 0; round < 30; round++ {
+		two, three, zero := 2, 3, 0
+		if _, err := e.c.Settings(model.SettingsPatch{MaxConcurrency: &two, MaxFixRounds: &two}); err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		for _, patch := range []model.SettingsPatch{{MaxConcurrency: &three}, {MaxFixRounds: &zero}} {
+			go func(p model.SettingsPatch) { <-start; _, err := e.c.Settings(p); errs <- err }(patch)
+		}
+		close(start)
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+		}
+		set, err := e.st.GetSettings()
+		if err != nil || set.MaxConcurrency != three || set.MaxFixRounds != zero {
+			t.Fatalf("round %d lost a patch: %+v %v", round, set, err)
+		}
+	}
+}
+
 func TestDelegateRunsOnlyDeveloper(t *testing.T) {
 	e := setup(t)
 	wt := e.worktree("dlg")

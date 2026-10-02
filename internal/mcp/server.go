@@ -1,6 +1,6 @@
-// Package mcp exposes a read-only Model Context Protocol server over stdio
+// Package mcp exposes a Model Context Protocol server over stdio
 // (newline-delimited JSON-RPC 2.0). It never owns the controller or the
-// database: snapshots come only from the running daemon's private Unix socket.
+// database: all operations use the running daemon's private Unix socket.
 package mcp
 
 import (
@@ -53,21 +53,29 @@ const (
 // SnapshotFunc fetches the public snapshot from the daemon.
 type SnapshotFunc func(ctx context.Context) (server.Response, error)
 
+// CommandFunc forwards a validated control request to the service authority.
+type CommandFunc func(ctx context.Context, req server.Request) (server.Response, error)
+
 // Server is one stdio MCP session.
 type Server struct {
 	Snapshot SnapshotFunc
+	Command  CommandFunc
 	Assets   fs.FS
 
 	initialize  bool // initialize request answered
 	initialized bool // notifications/initialized received
 }
 
-// Serve runs a read-only MCP session on input/output for the daemon of dataDir.
+// Serve connects one MCP session to the daemon of dataDir. Closing this session
+// never closes the daemon or its execution processes.
 func Serve(ctx context.Context, input io.Reader, output io.Writer, dataDir string, assets fs.FS) error {
 	s := &Server{
 		Assets: assets,
 		Snapshot: func(ctx context.Context) (server.Response, error) {
 			return server.Call(ctx, dataDir, server.Request{Op: "snapshot"})
+		},
+		Command: func(ctx context.Context, req server.Request) (server.Response, error) {
+			return server.Call(ctx, dataDir, req)
 		},
 	}
 	return s.Serve(ctx, input, output)
@@ -324,6 +332,10 @@ func (s *Server) doInitialize(params json.RawMessage) (any, *rpcError) {
 	if icons := s.icons(); icons != nil {
 		info["icons"] = icons
 	}
+	instructions := "Read-only Meerkat monitor. Requires a running `meerkat serve` daemon; these tools never start, stop or change runs."
+	if s.Command != nil {
+		instructions = "Meerkat local monitor and run controls. Requires a running `meerkat serve` daemon. Stop acceptance is not proof of process exit. Settings affect future runs. Use control tools only within the user's authorization; a lost reply is unknown and must not trigger automatic write retries. The monitor app remains read-only."
+	}
 	return map[string]any{
 		"protocolVersion": version,
 		"capabilities": map[string]any{
@@ -331,7 +343,7 @@ func (s *Server) doInitialize(params json.RawMessage) (any, *rpcError) {
 			"resources": map[string]any{"listChanged": false, "subscribe": false},
 		},
 		"serverInfo":   info,
-		"instructions": "Read-only Meerkat monitor. Requires a running `meerkat serve` daemon; these tools never start, stop or change runs.",
+		"instructions": instructions,
 	}, nil
 }
 
@@ -377,7 +389,7 @@ func (s *Server) toolList() []any {
 	if icons := s.icons(); icons != nil {
 		open["icons"] = icons
 	}
-	return []any{
+	tools := []any{
 		open,
 		map[string]any{
 			"name":        ToolGetSnapshot,
@@ -390,6 +402,10 @@ func (s *Server) toolList() []any {
 			},
 		},
 	}
+	if s.Command != nil {
+		tools = append(tools, controlTools()...)
+	}
+	return tools
 }
 
 func uiMeta() map[string]any {
@@ -450,7 +466,10 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		return nil, invalidParams("invalid params")
 	}
 	if p.Name != ToolOpenMonitor && p.Name != ToolGetSnapshot {
-		return nil, invalidParams("unknown tool")
+		if s.Command == nil {
+			return nil, invalidParams("unknown tool")
+		}
+		return s.controlTool(ctx, p.Name, p.Arguments)
 	}
 	if a := bytes.TrimSpace(p.Arguments); len(a) > 0 && string(a) != "null" {
 		var m map[string]json.RawMessage

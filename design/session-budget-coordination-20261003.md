@@ -6,7 +6,7 @@ change_id：`meerkat-session-budget-coordination-20261003`
 
 源码基线：`fd7575076a34fbdbff8f4766002d5826489d605b`
 
-状态：完整目标设计；本次有界交付仅实现私有 Pi RPC 通信基础层。调度器仍使用现有执行通道。预算收尾、检查点恢复、数据库实体和新的控制界面尚未实现。
+状态：完整目标设计；私有 Pi RPC 通信基础层已实现，MCP 增加运行查询、停止和未来运行设置。调度器仍使用现有执行通道。预算收尾、检查点恢复、数据库实体、异步分发和会话控制尚未实现。MCP 的完整控制合同见 [补充设计](mcp-control-20261003.md)。
 
 ## 1. 目标与职责
 
@@ -45,7 +45,7 @@ flowchart TB
     MCP --> HOST[支持 MCP Apps 的宿主]
 ```
 
-MCP 不是核心运行前提。CLI、浏览器和 MCP 共用 Go 服务的操作，不能各自拥有调度器或直接写数据库。现有 MCP 提供只读监控；新增写操作必须复用核心校验、预算与回执。真实宿主展示需要单独验收，浏览器截图不能替代。
+MCP 不是核心运行前提。CLI、浏览器和 MCP 共用 Go 服务的操作，不能各自拥有调度器或直接写数据库。MCP 的停止与设置操作复用现有 Go 校验和 SQLite 状态；异步分发、会话和预算控制按补充设计接入。MCP App 仍提供只读监控。真实宿主展示需要单独验收，浏览器截图不能替代。
 
 ## 2. 概念与合同
 
@@ -152,7 +152,7 @@ Issue 保存需求、验收、决策、阻塞、交付摘要和可复用经验�
 | 17 | delegate / workflow skill 的收尾与恢复说明 | 待实施 |
 | 18 | 历史迁移、备份恢复与脱敏导出 | 扩展现有实现 |
 | 19 | doctor 的协议版本、会话、门禁与配置验证 | 待实施 |
-| 20 | CLI / HTTP / 可选 MCP 控制、安装包和真实宿主验收 | 待实施 |
+| 20 | CLI / HTTP / 可选 MCP 控制、安装包和真实宿主验收 | MCP 查询、停止、设置已实现；完整控制、安装和宿主验收待实施 |
 
 实施顺序：合同与接口 → 持久会话与控制 → 预算与自动收尾 → 检查点与恢复 → 协作与完整交付 → Issue、界面、skill、迁移与安装验证。全部工作包完成后才按完整重构交付。
 
@@ -192,3 +192,7 @@ Issue 保存需求、验收、决策、阻塞、交付摘要和可复用经验�
 - [Claude Managed Agents 预算](https://platform.claude.com/docs/en/managed-agents/budgets)：请求边界控制和保留会话的预算暂停。
 - [Pi RPC](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) 与 [命令](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc-commands.md)：本机 JSONL、回执、事件、引导与清队列中止；同时以安装版本接口为准。
 - [OpenAI MCP UI 接入](https://developers.openai.com/plugins/build/chatgpt-ui)：工具关联 UI 资源与数据交换；具体宿主的入口与渲染仍单独核验。
+
+## 11. MCP 控制实施
+
+基线已更新到 `9d00ab376061bcd30fa73e3c7482ec94f2d1efe2`，独立工作区保留 RPC 基础层。完整调研依据、控制工具、并发规则与本轮合同见 [MCP 控制设计](mcp-control-20261003.md)。当前公开工具只包含已经接到服务权威的操作，不开放尚未验证的会话续跑或异步分发。
