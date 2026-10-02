@@ -42,7 +42,7 @@ Nothing modifies `app.asar`, Codex files or Codex user data; Ctrl+C evaluates `s
 ```sh
 # 1. Start Codex yourself with: --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222
 # 2. With a local service serving GET /api/workflow:
-node desktop/injector.mjs --cdp-port 9222 --status-url http://127.0.0.1:47824/
+node desktop/injector.mjs --cdp-port 9222 --status-url http://127.0.0.1:47826/
 ```
 
 Exit codes: `64` usage/no CDP target, `2` Codex selectors not found (update `shell.js`), `1` renderer gone.

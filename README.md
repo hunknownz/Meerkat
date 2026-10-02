@@ -49,11 +49,11 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 Requires Go 1.26, Node 22, Git, and Pi for Pi execution. gh is used only for Issue integration.
 
 ```sh
+nvm use
 cd frontend
 npm ci
-npm run build
 cd ..
-go build -o bin/meerkat ./cmd/meerkat
+node scripts/build.mjs
 bin/meerkat serve --port 47826
 ```
 
@@ -101,9 +101,12 @@ Migration imports records by original ID and source digest. Invalid or conflicti
 ## Codex plugin
 
 ```sh
+node scripts/package.mjs
 codex plugin marketplace add /path/to/Meerkat
 codex plugin add meerkat@meerkat
 ```
+
+Package from a clean committed tree after installing frontend dependencies. The marketplace installs the staged package at `.dist/meerkat`, including the Go binary and `build-info.json` with source and binary hashes. Repackaging keeps the prior stage for recovery. `--skip-build` uses an existing binary and should only be used when its source is already verified.
 
 The plugin supplies meerkat:delegate and meerkat:workflow. The custom sidebar monitor is an experimental CDP integration, separate from official skill installation. See [desktop adapter](desktop/README.md). It does not modify the Codex application bundle.
 
