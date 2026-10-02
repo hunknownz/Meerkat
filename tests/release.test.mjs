@@ -33,7 +33,7 @@ function fixture() {
   git(root, 'config', 'user.email', 't@example.invalid');
   git(root, 'config', 'user.name', 't');
   put(root, '.codex-plugin/plugin.json', JSON.stringify({ name: 'meerkat', version: VERSION }));
-  put(root, '.gitignore', '.dist/\n.fakebin/\n');
+  put(root, '.gitignore', '.dist/\n.fakebin/\nignored.embed\n');
   put(root, 'cmd/meerkat/main.go', 'package main\nfunc main() {}\n');
   git(root, 'add', '.');
   git(root, 'commit', '-qm', 'init');
@@ -42,6 +42,11 @@ function fixture() {
   const go = join(fakeBin, 'go');
   writeFileSync(go, [
     '#!/bin/sh',
+    // Source cwd must be the committed snapshot only: no .git, untracked or ignored files.
+    '[ -f cmd/meerkat/main.go ] || { echo "committed source missing" >&2; exit 3; }',
+    'for f in .git .fakebin .dist cmd/meerkat/untracked.go ignored.embed; do',
+    '  if [ -e "$f" ]; then echo "unexpected $f in source dir" >&2; exit 4; fi',
+    'done',
     'out=""; prev=""',
     'for a in "$@"; do if [ "$prev" = "-o" ]; then out="$a"; fi; prev="$a"; done',
     'printf "%s %s %s %s\\n" "$GOOS" "$GOARCH" "$CGO_ENABLED" "$*" > "$out"',
@@ -116,6 +121,22 @@ test('repeated --platform builds only the selected subset', () => {
     assert.equal(r.status, 0, r.stderr);
     const meta = JSON.parse(readFileSync(join(root, '.dist', 'releases', VERSION, 'release.json'), 'utf8'));
     assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.1_linux_arm64']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('builds from a git archive of HEAD, never untracked or ignored worktree files', () => {
+  const { root, env } = fixture();
+  try {
+    put(root, 'cmd/meerkat/untracked.go', 'package main\nfunc init() { panic("untracked") }\n');
+    put(root, 'ignored.embed', 'ignored secret asset');
+    const sha = git(root, 'rev-parse', 'HEAD');
+    const r = release(root, env, '--platform', 'linux/amd64');
+    assert.equal(r.status, 0, r.stderr);
+    const meta = JSON.parse(readFileSync(join(root, '.dist', 'releases', VERSION, 'release.json'), 'utf8'));
+    assert.equal(meta.sourceSha, sha);
+    assert.ok(existsSync(join(root, 'cmd/meerkat/untracked.go')), 'live worktree left untouched');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

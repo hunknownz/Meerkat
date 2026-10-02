@@ -8,4 +8,5 @@ Meerkat is a general local agent tool. Keep client requirements, credentials, de
 - Preserve unknown usage, fees and process identity. Never replace unknown with zero or replay an uncertain run automatically.
 - Local delivery, QA, human check, repository integration and deployment are separate states. Remote actions follow the user's actual authorization.
 - Use codex/ for task branches. Build frontend assets before Go builds. Run meaningful checks for the changed surface.
-- The desktop connector is experimental. Browser screenshots do not prove the Codex sidebar works.
+- Codex display has two paths: the standard MCP host adapter (MCP Apps tool `open_monitor`, local stdio, read-only) is the default; the legacy CDP desktop connector is optional, non-default and experimental. Native Codex acceptance is pending. Browser screenshots do not prove the Codex panel works.
+- Install docs live in docs/install.md, distribution in docs/publishing.md. Keep commands matching scripts/setup.mjs, configure.mjs and launch.mjs.

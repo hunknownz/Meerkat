@@ -2,6 +2,8 @@
 // Build reproducible raw release binaries for meerkat from a clean tracked HEAD.
 // Output: <root>/.dist/releases/<version>/{meerkat_<version>_<os>_<arch>, SHA256SUMS, release.json}.
 // Standard Node builtins only, no shell. Does not rebuild the frontend: embedded assets come from HEAD.
+// Compiles from `git archive <HEAD sha>` extracted into a fresh temporary directory, never the live
+// worktree, so untracked or ignored files cannot influence the published binaries.
 //
 // Usage: node scripts/build-release.mjs [--root <repo>] [--platform <os>/<arch>]...
 //   Platforms: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 (default: all four).
@@ -10,6 +12,7 @@ import { createHash } from 'node:crypto';
 import {
   chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,6 +69,25 @@ function run(cmd, args, cwd, env) {
   return r.stdout;
 }
 
+const ARCHIVE_MAX_BYTES = 512 << 20;
+
+// Export the exact committed tree of `sha` into a new empty temporary directory (no shell).
+function exportSource(root, sha) {
+  const arch = spawnSync('git', ['archive', '--format=tar', sha], { cwd: root, shell: false, maxBuffer: ARCHIVE_MAX_BYTES });
+  if (arch.error) throw new Error(`git archive failed: ${arch.error.message}`);
+  if (arch.status !== 0) throw new Error(`git archive failed${arch.stderr?.length ? `: ${String(arch.stderr).trim()}` : ''}`);
+  const src = mkdtempSync(join(tmpdir(), 'meerkat-release-src-'));
+  try {
+    const x = spawnSync('tar', ['-x', '-f', '-', '-C', src], { input: arch.stdout, shell: false, encoding: 'utf8', maxBuffer: 16 << 20 });
+    if (x.error) throw new Error(`tar could not start: ${x.error.message}`);
+    if (x.status !== 0) throw new Error(`tar extract failed${x.stderr ? `: ${x.stderr.trim()}` : ''}`);
+  } catch (err) {
+    rmSync(src, { recursive: true, force: true });
+    throw err;
+  }
+  return src;
+}
+
 function assertClean(root) {
   if (run('git', ['status', '--porcelain', '--untracked-files=no'], root).trim()) {
     throw new Error('tracked working tree is not clean; commit or stash changes first');
@@ -103,7 +125,9 @@ export function buildRelease({ root, platforms }) {
   const hadTarget = assertSafeDir(target, `.dist/releases/${version}`);
 
   const work = mkdtempSync(join(releases, '.stage-'));
+  let src;
   try {
+    src = exportSource(root, sha);
     const stage = join(work, version);
     mkdirSync(stage, { mode: 0o755 });
     const artifacts = [];
@@ -111,7 +135,7 @@ export function buildRelease({ root, platforms }) {
       const file = artifactName(version, os, arch);
       const out = join(stage, file);
       const env = { ...process.env, GOOS: os, GOARCH: arch, CGO_ENABLED: '0' };
-      run('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', out, './cmd/meerkat'], root, env);
+      run('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', out, './cmd/meerkat'], src, env);
       if (!existsSync(out) || !lstatSync(out).isFile()) throw new Error(`go build produced no regular file for ${os}/${arch}`);
       chmodSync(out, 0o755);
       artifacts.push({ file, os, arch, sha256: createHash('sha256').update(readFileSync(out)).digest('hex') });
@@ -128,6 +152,7 @@ export function buildRelease({ root, platforms }) {
     return { target, meta };
   } finally {
     rmSync(work, { recursive: true, force: true });
+    if (src) rmSync(src, { recursive: true, force: true });
   }
 }
 

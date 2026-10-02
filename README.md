@@ -14,7 +14,7 @@ Meerkat is a general tool. Projects supply their own requirements, private profi
 | Live updates | HTTP snapshot and SSE |
 | Coordinator commands | Private Unix socket |
 | Execution | Executor interface → Pi CLI → configured provider |
-| Codex display | Experimental thin CDP adapter, shared React mount in ShadowRoot |
+| Codex display | MCP Apps `open_monitor` (standard host adapter); optional legacy CDP adapter |
 
 ```mermaid
 flowchart LR
@@ -25,7 +25,7 @@ flowchart LR
     E --> F[Development → Review → Fix → Polish → Review]
     C --> G[HTTP / SSE]
     G --> H[React monitor]
-    H --> I[Browser or Codex adapter]
+    H --> I[Browser or Codex MCP App]
 ```
 
 ## Concepts
@@ -44,39 +44,44 @@ flowchart LR
 
 Delivered means a locally AI-reviewed commit. Human effect checks, independent QA, GitHub integration and deployment remain separate decisions.
 
-## Build and run
+## Install (end users)
 
-Requires Go 1.26, Node 22, Git, and Pi for Pi execution. gh is used only for Issue integration.
-
-```sh
-nvm use
-cd frontend
-npm ci
-cd ..
-node scripts/build.mjs
-bin/meerkat serve --port 47826
-```
-
-The default private data directory is ~/.meerkat/. Use the same --data-dir for all commands when selecting another directory. Keep credentials in the environment inherited by the service; profiles contain references only.
+Version `0.4.0-beta.1`, personal GitHub prerelease. macOS/Linux on arm64/amd64; Windows is unsupported. Needs Node 22+, Git, Codex and Pi 0.99.1; no Go or frontend build.
 
 ```sh
-bin/meerkat prepare --input /private/task.json
-bin/meerkat execute --task <task-id>
-bin/meerkat snapshot
-bin/meerkat stop --run <run-id> --request-id <uuid>
-bin/meerkat execute --task <task-id> --resume
+codex plugin marketplace add hunknownz/Meerkat --ref v0.4.0-beta.1
+codex plugin add meerkat@meerkat
+git clone --branch v0.4.0-beta.1 https://github.com/hunknownz/Meerkat.git && cd Meerkat
+node scripts/setup.mjs
+node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
+export MY_PROVIDER_KEY=...        # in your own shell only
+node scripts/launch.mjs serve --port 47826
 ```
 
-See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only and removes the browser write token from its bridge.
+Then, in a new Codex chat, ask `打开 Meerkat 面板` (MCP Apps tool `open_monitor`). Full guide, diagnosis, update and uninstall: [docs/install.md](docs/install.md). Distribution: [docs/publishing.md](docs/publishing.md).
 
-## Single delegation
+## Run tasks
+
+The default private data directory is ~/.meerkat/. Use the same --data-dir for all commands when selecting another directory. Keep credentials in the environment inherited by the service; profiles contain references only. `launch.mjs` runs the installed binary and never builds or downloads.
 
 ```sh
-bin/meerkat run --input /private/task.json --dry-run
-bin/meerkat run --input /private/task.json
+node scripts/launch.mjs prepare --input /private/task.json
+node scripts/launch.mjs execute --task <task-id>
+node scripts/launch.mjs snapshot
+node scripts/launch.mjs stop --run <run-id> --request-id <uuid>
+node scripts/launch.mjs execute --task <task-id> --resume
 ```
 
-This runs only the developer and records a local candidate. The coordinator reviews it. It does not mark the task as AI-reviewed delivery. The old Node entry points now forward to Go; legacy freeform run flags were replaced by the same strict task input.
+See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only.
+
+Single delegation runs only the developer and records a first local candidate, unreviewed:
+
+```sh
+node scripts/launch.mjs run --input /private/task.json --dry-run
+node scripts/launch.mjs run --input /private/task.json
+```
+
+The examples below write `bin/meerkat` for brevity; `node scripts/launch.mjs` accepts the same commands.
 
 ## Issue integration
 
@@ -111,17 +116,11 @@ Metrics include Project, Task, Run, Role, Executor, Model and available change I
 
 ## Codex plugin
 
-```sh
-node scripts/package.mjs
-codex plugin marketplace add /path/to/Meerkat
-codex plugin add meerkat@meerkat
-```
-
-Package from a clean committed tree after installing frontend dependencies. The marketplace installs the staged package at `.dist/meerkat`, including the Go binary and `build-info.json` with source and binary hashes. Repackaging keeps the prior stage for recovery. `--skip-build` uses an existing binary and should only be used when its source is already verified.
-
-The plugin supplies meerkat:delegate and meerkat:workflow. The custom sidebar monitor is an experimental CDP integration, separate from official skill installation. See [desktop adapter](desktop/README.md). It does not modify the Codex application bundle.
+The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens a read-only monitor (global or per-thread entrypoint). Acceptance inside the native Codex app is still pending; no sidebar success is claimed. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
 
 ## Development and evidence
+
+Contributors need Go 1.26 and the frontend toolchain (`cd frontend && npm ci`). `node scripts/build.mjs` builds `bin/meerkat`; `node scripts/build-release.mjs` builds release binaries from a `git archive` of clean HEAD.
 
 ```sh
 go test -race ./...
@@ -133,3 +132,5 @@ npm run build
 ```
 
 [Migration design](design/architecture-go-sqlite-react-20261002.md) · [Delivery verification](design/verification-0.3.0.md).
+
+License: [MIT](LICENSE), © 2026 hunknownz.

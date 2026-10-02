@@ -1,9 +1,11 @@
-# Codex desktop adapter (experimental, NON-OFFICIAL)
+# Legacy Codex desktop adapter (optional, experimental)
+
+The default Codex display is the plugin's MCP Apps tool `open_monitor` (see [install](../docs/install.md)).
+This legacy adapter is optional and not used by default.
 
 `desktop/injector.mjs` attaches over the Chrome DevTools Protocol (CDP) to a Codex desktop window you
-started yourself with remote debugging, and shows a read-only "Meerkat" sidebar entry. It is **not** a
-Codex plugin or extension API (Codex currently has no sidebar plugin API); it depends on renderer
-selectors that any Codex update may rename. Live use inside the native Codex app has **not** been
+started yourself with remote debugging, and shows a read-only "Meerkat" sidebar entry. It does not use
+the official plugin or extension APIs; it depends on renderer selectors that any Codex update may rename. Live use inside the native Codex app has **not** been
 verified yet (CDP access was denied earlier); installation will be user-assisted. Until then only the
 local tests below have run.
 
