@@ -15,6 +15,7 @@ import (
 
 	"github.com/hunknownz/Meerkat/internal/core"
 	"github.com/hunknownz/Meerkat/internal/issues"
+	"github.com/hunknownz/Meerkat/internal/model"
 )
 
 // SocketName is the command socket file inside the data directory.
@@ -42,6 +43,8 @@ type Request struct {
 	Acknowledge bool            `json:"acknowledge,omitempty"`
 	RunID       string          `json:"runId,omitempty"`
 	RequestID   string          `json:"requestId,omitempty"`
+	OperationID string          `json:"operationId,omitempty"`
+	WaitMillis  int             `json:"waitMillis,omitempty"`
 	Apply       bool            `json:"apply,omitempty"`
 }
 
@@ -181,7 +184,7 @@ func DecodeRequest(r io.Reader) (Request, error) {
 	if dec.More() {
 		return req, errors.New("trailing data")
 	}
-	if len(req.Tasks) > 256 || len(req.RunID) > 64 || len(req.RequestID) > 64 {
+	if len(req.Tasks) > 256 || len(req.RunID) > 64 || len(req.RequestID) > 64 || len(req.OperationID) > 64 || req.WaitMillis < 0 || req.WaitMillis > 30000 {
 		return req, errors.New("bounds")
 	}
 	return req, nil
@@ -208,6 +211,13 @@ type delegator interface {
 	Delegate(ctx context.Context, raw []byte) (core.Result, error)
 }
 
+type dispatcher interface {
+	Dispatch(model.DispatchRequest) (model.DispatchReceipt, error)
+	Operation(string) (model.Operation, error)
+	OperationByRequest(string) (model.Operation, error)
+	WaitOperation(context.Context, string, time.Duration) (model.Operation, error)
+}
+
 // Do executes one command under the service-owned context.
 func (s *Service) Do(req Request) Response {
 	select {
@@ -216,6 +226,37 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "dispatch", "operation", "wait-operation":
+		dc, can := s.core.(dispatcher)
+		if !can {
+			return bad("unknown op")
+		}
+		if req.Op == "dispatch" {
+			r, err := dc.Dispatch(model.DispatchRequest{RequestID: req.RequestID, TaskIDs: req.Tasks, Resume: req.Resume, Acknowledge: req.Acknowledge})
+			if err != nil {
+				return fail(err)
+			}
+			return ok(r)
+		}
+		if req.WaitMillis < 0 || req.WaitMillis > 30000 {
+			return bad("waitMillis must be 0..30000")
+		}
+		var o model.Operation
+		var err error
+		if req.OperationID != "" && req.RequestID != "" {
+			return bad("use operationId or requestId, not both")
+		}
+		if req.Op == "operation" && req.RequestID != "" {
+			o, err = dc.OperationByRequest(req.RequestID)
+		} else if req.Op == "wait-operation" {
+			o, err = dc.WaitOperation(s.ctx, req.OperationID, time.Duration(req.WaitMillis)*time.Millisecond)
+		} else {
+			o, err = dc.Operation(req.OperationID)
+		}
+		if err != nil {
+			return fail(err)
+		}
+		return ok(o)
 	case "health":
 		return ok(map[string]string{"version": Version})
 	case "snapshot":

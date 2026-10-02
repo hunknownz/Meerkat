@@ -404,6 +404,7 @@ func (s *Server) toolList() []any {
 	}
 	if s.Command != nil {
 		tools = append(tools, controlTools()...)
+		tools = append(tools, dispatchTools()...)
 	}
 	return tools
 }
@@ -468,6 +469,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	if p.Name != ToolOpenMonitor && p.Name != ToolGetSnapshot {
 		if s.Command == nil {
 			return nil, invalidParams("unknown tool")
+		}
+		if p.Name == ToolDispatchTasks || p.Name == ToolGetOperation || p.Name == ToolWaitOperation {
+			return s.dispatchTool(ctx, p.Name, p.Arguments)
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
 	}

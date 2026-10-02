@@ -61,9 +61,10 @@ type Core struct {
 	closed      bool
 	dispatching bool
 
-	kick chan struct{}
-	quit chan struct{}
-	bg   sync.WaitGroup
+	kick      chan struct{}
+	queueKick chan struct{}
+	quit      chan struct{}
+	bg        sync.WaitGroup
 }
 
 // New acquires the controller lease (stale recovery follows store policy), reconciles previously active
@@ -87,13 +88,18 @@ func New(st *store.Store, reg Registry, opts ...Options) (*Core, error) {
 		return nil, err
 	}
 	host, _ := os.Hostname()
-	c := &Core{st: st, reg: reg, opts: o, token: l.Token, host: host, lanes: map[string]*lane{}, kick: make(chan struct{}, 1), quit: make(chan struct{})}
+	c := &Core{st: st, reg: reg, opts: o, token: l.Token, host: host, lanes: map[string]*lane{}, kick: make(chan struct{}, 1), queueKick: make(chan struct{}, 1), quit: make(chan struct{})}
 	if err := c.update(reconcile); err != nil {
 		_ = st.ReleaseLease(l.Token)
 		return nil, err
 	}
-	c.bg.Add(1)
+	if err := c.reconcileQueue(); err != nil {
+		_ = st.ReleaseLease(l.Token)
+		return nil, err
+	}
+	c.bg.Add(2)
 	go c.loop()
+	go c.queueLoop()
 	return c, nil
 }
 

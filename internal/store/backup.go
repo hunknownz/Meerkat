@@ -187,7 +187,7 @@ func verifyBackupBodies(q querier, fn func(IssueReceipt, []byte) error) error {
 }
 
 // ValidateBackup checks integrity, foreign keys, schema and bundled Issue bodies of a backup file. Backups of every
-// supported schema version (v1, v2) are accepted; Restore migrates older ones when it opens the restored store.
+// supported schema version (v1, v2, v3) are accepted; Restore migrates older ones when it opens the restored store.
 func ValidateBackup(path string) error {
 	fi, err := os.Lstat(path)
 	if err != nil || !fi.Mode().IsRegular() {
@@ -209,10 +209,19 @@ func ValidateBackup(path string) error {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil || v < schemaV1 || v > schemaVersion {
 		return ErrBadBackup
 	}
-	for _, t := range schemaTables {
+	tables := append([]string{}, schemaTables...)
+	if v >= schemaV3 {
+		tables = append(tables, operationTables...)
+	}
+	for _, t := range tables {
 		var n int
 		if err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", t).Scan(&n); err != nil || n != 1 {
 			return ErrBadBackup
+		}
+	}
+	if v >= schemaV3 {
+		if err := validateOperations(db); err != nil {
+			return err
 		}
 	}
 	return verifyBackupBodies(db, nil)

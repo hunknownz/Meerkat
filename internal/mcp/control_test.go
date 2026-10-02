@@ -73,10 +73,10 @@ func noCommand(context.Context, server.Request) (server.Response, error) {
 func TestControlToolsMetadata(t *testing.T) {
 	s := controlled(snapshotWith(), noCommand)
 	tools := s.toolList()
-	if len(tools) != 7 {
+	if len(tools) != 10 {
 		t.Fatalf("tools: %v", tools)
 	}
-	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false}
+	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false, ToolDispatchTasks: false, ToolGetOperation: true, ToolWaitOperation: true}
 	for _, raw := range tools[2:] {
 		tool := raw.(map[string]any)
 		name := tool["name"].(string)

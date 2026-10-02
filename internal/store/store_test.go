@@ -459,7 +459,7 @@ func schemaInfo(t *testing.T, path string) (int, string) {
 // assertV2History checks that the v1 fixture history survived migration and that the v2 index semantics hold.
 func assertV2History(t *testing.T, s *Store, path string) {
 	t.Helper()
-	if v, idx := schemaInfo(t, path); v != schemaV2 || !strings.Contains(idx, "json_extract(payload, '$.stateReason')") {
+	if v, idx := schemaInfo(t, path); v != schemaVersion || !strings.Contains(idx, "json_extract(payload, '$.stateReason')") {
 		t.Fatalf("schema v%d index %s", v, idx)
 	}
 	st, err := s.Read()
@@ -518,7 +518,7 @@ func TestMigrateV1ToV2PreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	s2.Close()
-	if v, idx2 := schemaInfo(t, path); v != schemaV2 || idx2 != idx {
+	if v, idx2 := schemaInfo(t, path); v != schemaVersion || idx2 != idx {
 		t.Fatal("reopen changed schema")
 	}
 }
@@ -526,7 +526,7 @@ func TestMigrateV1ToV2PreservesHistory(t *testing.T) {
 func TestOpenFreshIsV2AndRefusesFuture(t *testing.T) {
 	_, dir := openTemp(t)
 	path := filepath.Join(dir, dbName)
-	if v, idx := schemaInfo(t, path); v != schemaV2 || !strings.Contains(idx, "json_extract(payload, '$.origin')") {
+	if v, idx := schemaInfo(t, path); v != schemaVersion || !strings.Contains(idx, "json_extract(payload, '$.origin')") {
 		t.Fatalf("fresh schema v%d %s", v, idx)
 	}
 	future := filepath.Join(t.TempDir(), "future")
@@ -535,11 +535,11 @@ func TestOpenFreshIsV2AndRefusesFuture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE TABLE x (a); PRAGMA user_version = 3"); err != nil {
+	if _, err := db.Exec("CREATE TABLE x (a); PRAGMA user_version = 4"); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
-	if s, err := Open(future); err == nil || !strings.Contains(err.Error(), "unsupported schema version 3") {
+	if s, err := Open(future); err == nil || !strings.Contains(err.Error(), "unsupported schema version 4") {
 		if s != nil {
 			s.Close()
 		}
@@ -550,7 +550,7 @@ func TestOpenFreshIsV2AndRefusesFuture(t *testing.T) {
 		defer db.Close()
 		var v int
 		return v, db.QueryRow("PRAGMA user_version").Scan(&v)
-	}(); v != 3 {
+	}(); v != 4 {
 		t.Fatal("future store modified")
 	}
 }

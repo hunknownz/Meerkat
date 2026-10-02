@@ -34,6 +34,7 @@ flowchart LR
 | --- | --- |
 | Project | A registered Git repository and its private profiles. |
 | Task | One bounded goal, explicit paths, acceptance checks, dependencies and budget. |
+| Operation | A durable dispatch receipt for selected tasks; completion records their outcomes, not code acceptance. |
 | Context | Curated decisions and source references, frozen by version and digest. It is not a shared chat transcript. |
 | Role | developer, reviewer or polisher; fixes are developer runs. |
 | Profile | Executor, provider, model, credential environment-variable name and limits. |
@@ -73,6 +74,8 @@ node scripts/launch.mjs execute --task <task-id> --resume
 ```
 
 See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only.
+
+The development branch also supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits. The installed release has not been replaced by this development work.
 
 Single delegation runs only the developer and records a first local candidate, unreviewed:
 

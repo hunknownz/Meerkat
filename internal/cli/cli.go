@@ -33,6 +33,11 @@ Daemon:
   serve     [--port 0]                       run the daemon (127.0.0.1 browser API + private socket)
 Via daemon:
   prepare   --input FILE|-                   record a ready task
+  dispatch  --task ID [--task ID] --request-id UUID [--resume] [--acknowledge-interruption]
+                                             persist and return immediately; accepted != delivered
+  operation --operation ID [--wait-ms 0..30000]
+                                             inspect durable outcome; waiting never cancels execution
+            --request-id UUID               recover the handle after a lost dispatch reply
   execute   --task ID [--task ID] [--resume] [--acknowledge-interruption]
                                              full review workflow; exit 0 only when delivered
   run       --input FILE|- [--dry-run]       one developer run -> local candidate (not reviewed);
@@ -41,7 +46,7 @@ Via daemon:
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
   issue update --task ID [--apply]           prepare update; post only with --apply
-  mcp                                        read-only MCP server on stdio (monitor tools)
+  mcp                                        MCP stdio: read-only monitor plus model control tools
 Offline:
   issue read --url URL --output FILE         read an Issue into an untrusted source file
   migrate   --from DIR [--run-root DIR]... [--backup FILE]
@@ -109,6 +114,8 @@ func init() {
 	commands = map[string]func(Env, []string) (int, error){
 		"serve":        cmdServe,
 		"prepare":      cmdPrepare,
+		"dispatch":     cmdDispatch,
+		"operation":    cmdOperation,
 		"execute":      cmdExecute,
 		"run":          cmdRun,
 		"snapshot":     cmdSnapshot,

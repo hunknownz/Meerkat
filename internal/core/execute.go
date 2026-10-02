@@ -178,9 +178,6 @@ func sp(s string) *string { return &s }
 // verifiedProfile resolves the effective profile and re-reads its config; a changed digest is refused.
 func (c *Core) verifiedProfile(s *model.State, set model.Settings, t model.Task, role string) (model.Profile, string) {
 	id := t.ProfileIDs[role]
-	if d, ok := set.DefaultProfiles[t.ProjectID][role]; ok && d != "" {
-		id = d
-	}
 	i := slices.IndexFunc(s.Profiles, func(p model.Profile) bool { return p.ID == id })
 	if i < 0 || s.Profiles[i].ProjectID != t.ProjectID || s.Profiles[i].Role != role {
 		return model.Profile{}, "profile_missing"
@@ -268,62 +265,33 @@ func (c *Core) dispatchLocked(ctx context.Context, sel func() ([]string, error),
 		}
 		return res, ErrLeaseLost
 	}
-	c.dispatching = true
 	c.mu.Unlock()
-	defer func() { c.mu.Lock(); c.dispatching = false; c.mu.Unlock() }()
-
 	ids, err := sel()
 	if err != nil {
 		return res, err
 	}
+	mode := "workflow"
 	if delegate {
-		res.Mode = "delegate"
+		mode = "delegate"
 	}
-	set, err := c.settings()
+	rc, err := c.submit(model.DispatchRequest{RequestID: newUUID(), TaskIDs: ids, Resume: resume, Acknowledge: acknowledge}, mode)
 	if err != nil {
 		return res, err
 	}
-	st, err := c.st.Read()
+	res, err = c.waitResult(ctx, rc.Operation.ID)
 	if err != nil {
 		return res, err
 	}
-	ack, states, err := c.validateSelection(st, set, ids, resume, acknowledge, delegate)
-	if err != nil {
-		return res, err
-	}
-	err = c.update(func(s *model.State) error {
-		for id, state := range states {
-			if t := findTask(s, id); t == nil || t.State != state {
-				return invalid("task changed during selection")
-			}
-		}
-		for _, rid := range ack {
-			if r := findRun(s, rid); r != nil && r.State == model.RunUnknown {
-				r.State, r.EndedAt = model.RunInterrupted, sp(now())
-				pushEvent(r, "state", "interruption_acknowledged")
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return res, err
-	}
-	c.schedule(ctx, ids, states)
-
-	if c.isLost() {
-		res.Fatal = "controller_lost"
-	} else if ctx.Err() != nil || c.isClosed() {
-		res.Stopped = "controller_stopped"
-	}
-	final, err := c.st.Read()
-	if err != nil {
-		return res, err
-	}
+	ordered := []TaskResult{}
 	for _, id := range ids {
-		if t := findTask(final, id); t != nil {
-			res.Tasks = append(res.Tasks, TaskResult{ID: id, State: t.State, StateReason: t.StateReason, CandidateSha: t.CandidateSha, ResumeRole: t.ResumeRole})
+		for _, task := range res.Tasks {
+			if task.ID == id {
+				ordered = append(ordered, task)
+				break
+			}
 		}
 	}
+	res.Tasks = ordered
 	return res, nil
 }
 
@@ -375,7 +343,7 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 			return nil, nil, invalid("task is %s; resume must be requested explicitly", t.State)
 		}
 		for _, o := range st.Tasks {
-			if o.ID != t.ID && o.Worktree == t.Worktree && !slices.Contains(ids, o.ID) && (o.State == model.TaskUnknown || model.IsActiveTaskState(o.State)) && !isDelegateCandidate(o) {
+			if o.ID != t.ID && o.Worktree == t.Worktree && !slices.Contains(ids, o.ID) && o.State == model.TaskUnknown {
 				return nil, nil, invalid("worktree is occupied by an unresolved task")
 			}
 		}
@@ -419,121 +387,6 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 const inspectFailed = "worktree_inspection_failed"
 
 type active struct{ worktree string }
-
-// schedule runs the selection with bounded concurrency; one task per worktree; dependencies gate dispatch.
-func (c *Core) schedule(ctx context.Context, ids []string, orig map[string]string) {
-	pending := slices.Clone(ids)
-	queuedAt := time.Now() // every selected task is queued by the scheduler from this instant
-	running := map[string]active{}
-	slots := []bool{}
-	doneCh := make(chan struct {
-		id   string
-		slot int
-	}, len(ids))
-	tick := time.NewTicker(c.opts.Poll)
-	defer tick.Stop()
-	for len(pending) > 0 || len(running) > 0 {
-		if ctx.Err() != nil || c.isClosed() || c.isLost() {
-			if len(pending) > 0 && !c.isLost() {
-				_ = c.update(func(s *model.State) error {
-					for _, id := range pending {
-						if t := findTask(s, id); t != nil {
-							if o := orig[id]; o == model.TaskReady || o == model.TaskBlocked {
-								t.State = o
-							} else {
-								t.State, t.StateReason = model.TaskStopped, sp("controller_stopped")
-							}
-							t.UpdatedAt = now()
-						}
-					}
-					return nil
-				})
-			}
-			pending = nil
-			for len(running) > 0 {
-				d := <-doneCh
-				delete(running, d.id)
-			}
-			return
-		}
-		set, err := c.settings()
-		if err != nil {
-			set = model.DefaultSettings()
-		}
-		st, err := c.st.Read()
-		if err != nil {
-			time.Sleep(c.opts.Poll)
-			continue
-		}
-		type change struct{ state, reason string }
-		changes := map[string]change{}
-		for _, id := range slices.Clone(pending) {
-			t := findTask(st, id)
-			block, wait := c.depStatus(st, *t, pending, running, ids)
-			if block != "" {
-				pending = slices.DeleteFunc(pending, func(x string) bool { return x == id })
-				changes[id] = change{model.TaskBlocked, block}
-				continue
-			}
-			busy := false
-			for _, a := range running {
-				busy = busy || a.worktree == t.Worktree
-			}
-			reason := ""
-			switch {
-			case wait:
-				reason = "dependencies"
-			case busy:
-				reason = "worktree"
-			case len(running) >= set.MaxConcurrency:
-				reason = "concurrency"
-			}
-			if reason != "" {
-				if t.State != model.TaskQueued || deref(t.StateReason) != reason {
-					changes[id] = change{model.TaskQueued, reason}
-				}
-				continue
-			}
-			pending = slices.DeleteFunc(pending, func(x string) bool { return x == id })
-			slot := slices.Index(slots, false)
-			if slot < 0 {
-				slot = len(slots)
-				slots = append(slots, true)
-			}
-			slots[slot] = true
-			running[id] = active{worktree: t.Worktree}
-			agent := fmt.Sprintf("Agent-%02d", slot+1)
-			dispatched := time.Now()
-			go func(id string, slot int) {
-				c.runTask(ctx, id, agent, queueWait{at: queuedAt, until: dispatched})
-				doneCh <- struct {
-					id   string
-					slot int
-				}{id, slot}
-			}(id, slot)
-		}
-		if len(changes) > 0 {
-			_ = c.update(func(s *model.State) error {
-				for id, ch := range changes {
-					if t := findTask(s, id); t != nil && !model.IsActiveTaskState(t.State) {
-						t.State, t.StateReason, t.UpdatedAt = ch.state, sp(ch.reason), now()
-					}
-				}
-				return nil
-			})
-		}
-		if len(pending) == 0 && len(running) == 0 {
-			return
-		}
-		select {
-		case d := <-doneCh:
-			delete(running, d.id)
-			slots[d.slot] = false
-		case <-tick.C:
-		case <-ctx.Done():
-		}
-	}
-}
 
 // depStatus reports a blocking reason or whether to wait. Delivered candidates are verified in Git.
 func (c *Core) depStatus(st *model.State, t model.Task, pending []string, running map[string]active, selected []string) (string, bool) {
@@ -602,7 +455,7 @@ type queueWait struct{ at, until time.Time }
 
 // runTask drives one task's roles back to back. The scheduler queue wait is attributed only to the
 // first role run; later roles start right after the previous one in this goroutine (no queue).
-func (c *Core) runTask(ctx context.Context, id, agent string, qw queueWait) {
+func (c *Core) runTask(ctx context.Context, id, agent string, qw queueWait, operation *model.Operation) {
 	first := true
 	for i := 0; i < 20; i++ {
 		if c.isLost() {
@@ -618,6 +471,18 @@ func (c *Core) runTask(ctx context.Context, id, agent string, qw queueWait) {
 			return
 		}
 		t := findTask(st, id)
+		if t == nil {
+			return
+		}
+		if operation != nil {
+			member := slices.IndexFunc(operation.Tasks, func(m model.OperationTask) bool { return m.TaskID == id })
+			if member < 0 || taskContract(st, *t) != operation.Tasks[member].ContractDigest {
+				c.failTask(id, model.TaskFailed, "dispatch_contract_changed", "")
+				return
+			}
+			set.DefaultProfiles = nil
+			set.MaxFixRounds = operation.FrozenFixRounds
+		}
 		p := pipelineOf(st, id)
 		maxFix := set.MaxFixRounds
 		if t.Budget != nil && t.Budget.MaxFixRounds < maxFix {
@@ -1139,7 +1004,9 @@ func (c *Core) finalize(st *model.State, t model.Task, p pipeline) {
 		bad = "baseline_not_ancestor"
 	default:
 		ch := changedPaths(t.Worktree, p.startSha, cand)
-		if ch == nil || slices.ContainsFunc(ch, func(x string) bool { return !inScope(x, t.Scope) }) {
+		if ch == nil {
+			bad = "git_unverifiable"
+		} else if slices.ContainsFunc(ch, func(x string) bool { return !inScope(x, t.Scope) }) {
 			bad = "scope_violation"
 		}
 	}

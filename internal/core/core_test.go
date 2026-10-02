@@ -378,7 +378,12 @@ func TestViolations(t *testing.T) {
 		var payload string
 		db.QueryRow("SELECT payload FROM contexts").Scan(&payload)
 		db.Exec("UPDATE contexts SET payload = ?", strings.Replace(payload, "PRIVATE", "CHANGED", 1))
-		want(t, e.exec(task.ID), 0, model.TaskFailed, "context_changed")
+		if _, err := e.c.Execute(context.Background(), []string{task.ID}, false, false); err == nil || !strings.Contains(err.Error(), "context_changed") {
+			t.Fatal(err)
+		}
+		if len(e.state().Runs) != 0 {
+			t.Fatal("invalid frozen context started a run")
+		}
 	})
 }
 
