@@ -27,6 +27,8 @@ const SNAPSHOT = {
   controller: { state: 'running' },
 };
 const workflowState = (data = SNAPSHOT) => ({ kind: 'workflow', data, legacyActive: [], at: 1 });
+// Values returned from node:vm carry the context's Object/Array prototypes; copy into this realm before deep comparisons.
+const hostValue = (v) => JSON.parse(JSON.stringify(v));
 
 test('parsePort accepts only 1-65535 digit strings', () => {
   assert.equal(parsePort('9222'), 9222);
@@ -238,8 +240,19 @@ const CODEX_DOM = `<nav id="app-shell-sidebar"><div data-app-action-sidebar-scro
   <a href="/plugins" id="plugins" data-state="active" aria-selected="true"><span class="ic"><svg><path d="M0 0"/></svg></span><span>Plugins</span></a>
 </div></nav><main data-app-shell-main-content-layout><p>native</p></main>`;
 
-function codex() {
+// Every mounted DOM registers teardown first, so a failed assertion never leaves the shell's
+// observer debounce timer or listeners alive (tests must exit without --test-force-exit).
+function teardown(t, d) {
+  t.after(() => {
+    try { d.run(shellExpression('remove')); } catch { /* best effort */ }
+    try { d.window.__meerkat?.remove?.(); } catch { /* best effort */ }
+    for (const o of d.observers) o.disconnect();
+  });
+}
+
+function codex(t) {
   const d = createDom();
+  teardown(t, d);
   d.document.body.innerHTML = CODEX_DOM;
   const docListeners = () => d.document.listeners.length;
   const activeObservers = () => d.observers.filter((o) => o.active).length;
@@ -251,8 +264,9 @@ function codex() {
   return { ...d, $, view, shadow, ui, docListeners, activeObservers, eval: eval_ };
 }
 
-test('shell reports missing selectors and is idempotent per version', () => {
+test('shell reports missing selectors and is idempotent per version', (t) => {
   const d = createDom();
+  teardown(t, d);
   const r = d.run(shellExpression({ kind: 'error', message: 'x' }, { assets: true }));
   assert.equal(r.ok, false);
   assert.deepEqual([...r.missing], ['[data-app-action-sidebar-scroll]', '[data-app-shell-main-content-layout]']);
@@ -263,12 +277,11 @@ test('shell reports missing selectors and is idempotent per version', () => {
   assert.equal(d.document.listeners.length, 1);
   assert.equal(d.run(shellExpression('remove')).ok, true);
   assert.equal(d.window.__meerkat, undefined);
-  assert.deepEqual({ ...d.run(shellExpression(null)) }, { ok: false, needAssets: true, missing: ['Meerkat UI assets'] });
+  assert.deepEqual(hostValue(d.run(shellExpression(null))), { ok: false, needAssets: true, missing: ['Meerkat UI assets'] });
 });
 
 test('shell mounts the shared factory with app.css in a ShadowRoot of the overlay (read-only)', async (t) => {
-  const c = codex();
-  t.after(() => c.eval('remove'));
+  const c = codex(t);
   const r = c.eval(workflowState(), { assets: true });
   assert.equal(r.ok, true);
   assert.equal(r.version, ASSET_VERSION);
@@ -315,8 +328,7 @@ test('shell mounts the shared factory with app.css in a ShadowRoot of the overla
 });
 
 test('shell keeps the last snapshot visibly stale on errors; 503 before any snapshot shows unknown, not empty', async (t) => {
-  const c = codex();
-  t.after(() => c.eval('remove'));
+  const c = codex(t);
   c.eval({ kind: 'error', message: '工作流服务不可用（HTTP 503：workflow core not installed）' }, { assets: true });
   c.click(c.$('[data-meerkat-entry]'));
   let ui = c.ui();
@@ -345,8 +357,7 @@ test('shell keeps the last snapshot visibly stale on errors; 503 before any snap
 });
 
 test('shell reconnect only calls the injector binding and settles on the next state', async (t) => {
-  const c = codex();
-  t.after(() => c.eval('remove'));
+  const c = codex(t);
   const calls = [];
   c.context[RECONNECT_BINDING] = (payload) => calls.push(payload);
   c.window[RECONNECT_BINDING] = c.context[RECONNECT_BINDING];
@@ -363,8 +374,7 @@ test('shell reconnect only calls the injector binding and settles on the next st
 });
 
 test('shell factory options are read-only and reject stop/settings actions', async (t) => {
-  const c = codex();
-  t.after(() => c.eval('remove'));
+  const c = codex(t);
   c.eval(workflowState(), { assets: true });
   const monitor = c.window.__meerkat;
   const real = monitor.createUI;
@@ -379,12 +389,12 @@ test('shell factory options are read-only and reject stop/settings actions', asy
   await assert.rejects(seen.onAction({ type: 'reconnect' }), /未连接/, 'no binding → helpful error');
 });
 
-test('native navigation closes the overlay; sidebar rerenders re-attach; remove tears everything down', async () => {
-  const c = codex();
+test('native navigation closes the overlay; sidebar rerenders re-attach; remove tears everything down', async (t) => {
+  const c = codex(t);
   c.eval(workflowState(), { assets: true });
   c.click(c.$('[data-meerkat-entry]'));
   const ui = c.ui();
-  c.click(c.$('[data-sidebar-destination="builtin:chats"] span'));
+  c.click(c.$('[data-sidebar-destination="builtin:chats"]').querySelector('span'));
   assert.equal(c.view(), null);
   assert.equal(ui.innerHTML, '', 'factory destroyed');
   assert.equal(c.$('[data-app-shell-main-content-layout]').style.position, '');
@@ -409,8 +419,8 @@ test('native navigation closes the overlay; sidebar rerenders re-attach; remove 
   assert.equal(c.document.querySelectorAll('[data-meerkat-entry], [data-meerkat-view]').length, 0);
 });
 
-test('shell migrates from a pre-versioned or outdated monitor instead of reusing stale handlers', () => {
-  const c = codex();
+test('shell migrates from a pre-versioned or outdated monitor instead of reusing stale handlers', (t) => {
+  const c = codex(t);
   // Simulate the previous single-file shell: no version, its own entry, listener, and observer.
   const oldEntry = c.document.createElement('button');
   oldEntry.setAttribute('data-meerkat-entry', '');
