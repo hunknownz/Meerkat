@@ -146,3 +146,24 @@ test('--task-id must be a valid UUID or preflight rejects the run', () => {
   }
   assert.equal(existsSync(join(ctx.wt, '.pi-developer')), false);
 });
+
+test('dirty changedPaths keep the first character of every path', () => {
+  const ctx = setup();
+  const r = run(ctx, { scenario: 'modify' });
+  assert.equal(r.status, 1);
+  assert.deepEqual(summary(ctx.wt).changedPaths, ['AGENTS.md', 'feature.txt']);
+});
+
+test('CLI reviewer role with report file prints verdict and leaves HEAD unchanged', () => {
+  const ctx = setup();
+  const base = g(ctx.wt, 'rev-parse', 'HEAD');
+  const report = join(ctx.root, 'review.json');
+  const env = { ...process.env, FAKE_PI_SCENARIO: 'review', FAKE_PI_REPORT: 'pass', FAKE_PI_KEY: 'secret-value-123' };
+  const r = spawnSync(process.execPath, [runner, '--config', ctx.config, '--worktree', ctx.wt, '--task', ctx.task,
+    '--role', 'reviewer', '--report-file', report, '--context-digest', 'd1', '--candidate-sha', base, '--run-id', 'r1'], { env, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.verdict, 'pass'); assert.equal(out.role, 'reviewer'); assert.equal(out.runId, 'r1');
+  assert.equal(g(ctx.wt, 'rev-parse', 'HEAD'), base);
+  assert.ok(!r.stdout.includes('secret-value-123'));
+});

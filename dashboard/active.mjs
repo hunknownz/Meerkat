@@ -6,6 +6,15 @@ import { defaultDataDir } from "./store.mjs";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STALE_MS = 8000;
 const PUBLIC = ["id", "task", "model", "projectId", "worktree", "startedAt", "updatedAt"];
+// Optional public metadata (absent in older records; only emitted when present and valid).
+const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const ROLES = new Set(["developer", "reviewer", "polisher"]);
+const OPTIONAL = {
+  role: (v) => isStr(v) && ROLES.has(v),
+  runId: (v) => isStr(v) && SAFE_ID_RE.test(v),
+  agentId: (v) => isStr(v) && SAFE_ID_RE.test(v),
+  taskId: (v) => isStr(v) && UUID_RE.test(v),
+};
 
 const activeDir = (dataDir) => path.join(dataDir ?? defaultDataDir(), "active");
 const isStr = (v) => typeof v === "string";
@@ -26,13 +35,21 @@ function sanitize(record) {
     pid: r.pid,
     startedAt: isIso(r.startedAt) ? r.startedAt : now,
     updatedAt: isIso(r.updatedAt) ? r.updatedAt : now,
+    ...pickOptional(r),
   };
+}
+
+function pickOptional(r) {
+  const out = {};
+  for (const [k, ok] of Object.entries(OPTIONAL)) if (r[k] !== undefined && ok(r[k])) out[k] = r[k];
+  return out;
 }
 
 function valid(r, id) {
   return r && typeof r === "object" && r.id === id && isStr(r.task) && !/[\r\n]/.test(r.task) &&
     r.task.length <= 160 && isStr(r.model) && isStr(r.projectId) && isStr(r.worktree) &&
-    Number.isInteger(r.pid) && r.pid > 0 && isIso(r.startedAt) && isIso(r.updatedAt);
+    Number.isInteger(r.pid) && r.pid > 0 && isIso(r.startedAt) && isIso(r.updatedAt) &&
+    Object.entries(OPTIONAL).every(([k, ok]) => r[k] === undefined || ok(r[k]));
 }
 
 function alive(pid) {
@@ -78,7 +95,7 @@ export async function listActive(dataDir) {
       const r = JSON.parse(await readFile(file, "utf8"));
       if (!valid(r, m[1])) continue;
       if (now - Date.parse(r.updatedAt) > STALE_MS || !alive(r.pid)) continue;
-      out.push(Object.fromEntries(PUBLIC.map((k) => [k, r[k]])));
+      out.push({ ...Object.fromEntries(PUBLIC.map((k) => [k, r[k]])), ...pickOptional(r) });
     } catch { /* skip */ }
   }
   return out.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
