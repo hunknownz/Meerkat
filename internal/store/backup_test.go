@@ -6,12 +6,52 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/hunknownz/Meerkat/internal/model"
 )
 
 const uD2 = "00000000-0000-4000-8000-000000000017"
+
+func TestRestoreSupportedSchemaHistory(t *testing.T) {
+	for _, version := range []int{schemaV1, schemaV2} {
+		t.Run(map[int]string{schemaV1: "v1", schemaV2: "v2"}[version], func(t *testing.T) {
+			backup := filepath.Join(t.TempDir(), "history.db")
+			v1Fixture(t, backup, dsnBackupFile)
+			if version == schemaV2 {
+				db, err := sql.Open("sqlite", dsn(backup, dsnBackupFile))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec(migrationV2); err != nil {
+					t.Fatal(err)
+				}
+				db.Close()
+			}
+			before := dumpRows(t, backup)
+			if err := ValidateBackup(backup); err != nil {
+				t.Fatal(err)
+			}
+			dst := filepath.Join(t.TempDir(), "restored")
+			if err := Restore(backup, dst); err != nil {
+				t.Fatal(err)
+			}
+			if got := dumpRows(t, filepath.Join(dst, dbName)); !reflect.DeepEqual(before, got) {
+				t.Fatal("restore or migration changed history")
+			}
+			s, err := Open(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			assertV2History(t, s, filepath.Join(dst, dbName))
+			if v, _ := schemaInfo(t, backup); v != version {
+				t.Fatal("source backup modified")
+			}
+		})
+	}
+}
 
 // prepIssue stores a prepared body + receipt and returns the receipt and body.
 func prepIssue(t *testing.T, s *Store, id string, body []byte) IssueReceipt {

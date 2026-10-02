@@ -791,6 +791,54 @@ func TestDelegateRunsOnlyDeveloper(t *testing.T) {
 	}
 }
 
+// A settled delegate candidate releases its worktree: a second bounded delegate in the same clean linked worktree
+// succeeds and both candidate tasks and deliveries stay in history.
+func TestSequentialDelegatesReuseWorktree(t *testing.T) {
+	e := setup(t)
+	wt := e.worktree("seq")
+	first, err := e.c.Delegate(context.Background(), e.input(wt, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want(t, first, 0, model.TaskFirstDelivery, DelegateCandidate)
+	sha1 := sh(t, wt, "rev-parse", "HEAD")
+	second, err := e.c.Delegate(context.Background(), e.input(wt, func(m map[string]any) { m["title"] = "T2" }))
+	if err != nil {
+		t.Fatalf("second delegate in same worktree: %v", err)
+	}
+	want(t, second, 0, model.TaskFirstDelivery, DelegateCandidate)
+	sha2 := sh(t, wt, "rev-parse", "HEAD")
+	if second.Tasks[0].ID == first.Tasks[0].ID || sha1 == sha2 {
+		t.Fatal("second delegate did not produce a new candidate")
+	}
+	if got := strings.Join(e.fx.roles, ","); got != "developer,developer" {
+		t.Fatal("roles", got)
+	}
+	s := e.state()
+	t1, t2 := taskOf(s, first.Tasks[0].ID), taskOf(s, second.Tasks[0].ID)
+	if !isDelegateCandidate(t1) || !isDelegateCandidate(t2) || deref(t1.CandidateSha) != sha1 || deref(t2.CandidateSha) != sha2 {
+		t.Fatalf("tasks: %+v %+v", t1, t2)
+	}
+	if len(s.Deliveries) != 2 || len(s.Runs) != 2 || len(s.Reviews) != 0 {
+		t.Fatalf("history: %d deliveries %d runs %d reviews", len(s.Deliveries), len(s.Runs), len(s.Reviews))
+	}
+	got := map[string]string{}
+	for _, d := range s.Deliveries {
+		if d.State != "first" {
+			t.Fatalf("delivery state %s", d.State)
+		}
+		got[d.TaskID] = d.CandidateSha
+	}
+	if got[t1.ID] != sha1 || got[t2.ID] != sha2 {
+		t.Fatalf("deliveries: %v", got)
+	}
+	// A regular managed task in the same worktree is still allowed only while no other active task holds it.
+	managed := e.prepare(wt, func(m map[string]any) { m["title"] = "M" })
+	if managed.State == "" {
+		t.Fatal("managed task not prepared")
+	}
+}
+
 func TestDryPreparePure(t *testing.T) {
 	e := setup(t)
 	wt := e.worktree("dry")

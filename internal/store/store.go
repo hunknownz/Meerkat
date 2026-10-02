@@ -80,6 +80,37 @@ CREATE TABLE issue_receipts (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payl
 PRAGMA user_version = 1;
 `
 
+// Schema versions this binary can open. schemaVersion is the version a fresh or migrated store ends at.
+const (
+	schemaV1      = 1
+	schemaV2      = 2
+	schemaVersion = schemaV2
+)
+
+// Settled delegate candidates (core.OriginDelegate / core.DelegateCandidate). They stay in first_delivery for
+// history, but no longer hold their worktree. The store cannot import core, so the values are mirrored here and
+// exercised end to end by the core delegate tests.
+const (
+	delegateOrigin    = "native_delegate"
+	delegateCandidate = "delegate_candidate"
+)
+
+// activeWorktreePredicate is the partial-index predicate of tasks_active_worktree since v2: every active state
+// holds the worktree except a first_delivery row whose payload is a valid JSON object with origin native_delegate
+// and stateReason delegate_candidate. Malformed payloads and missing or non-matching values are never exempt.
+var activeWorktreePredicate = `state IN (` + quoteList(model.ActiveTaskStates) + `) AND NOT (state = '` + model.TaskFirstDelivery + `'
+  AND CASE WHEN json_valid(payload) AND json_type(payload) = 'object' THEN
+    COALESCE(json_extract(payload, '$.origin') = '` + delegateOrigin + `', 0)
+    AND COALESCE(json_extract(payload, '$.stateReason') = '` + delegateCandidate + `', 0)
+  ELSE 0 END)`
+
+// migrationV2 releases the worktree of settled delegate candidates. Rows are not touched; only the index changes.
+var migrationV2 = `
+DROP INDEX tasks_active_worktree;
+CREATE UNIQUE INDEX tasks_active_worktree ON tasks(worktree) WHERE ` + activeWorktreePredicate + `;
+PRAGMA user_version = 2;
+`
+
 func quoteList(v []string) string {
 	q := make([]string, len(v))
 	for i, s := range v {
@@ -212,17 +243,23 @@ func (s *Store) migrate() error {
 	if err := tx.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
 		return fmt.Errorf("store: read schema version")
 	}
-	switch v {
-	case 1:
+	if v < 0 || v > schemaVersion {
+		return fmt.Errorf("store: unsupported schema version %d", v)
+	}
+	if v == schemaVersion {
 		return nil
-	case 0:
+	}
+	if v < schemaV1 {
 		if _, err := tx.Exec(migrationV1); err != nil {
 			return fmt.Errorf("store: migration v1 failed")
 		}
-		return tx.Commit()
-	default:
-		return fmt.Errorf("store: unsupported schema version %d", v)
 	}
+	if v < schemaV2 {
+		if _, err := tx.Exec(migrationV2); err != nil {
+			return fmt.Errorf("store: migration v2 failed")
+		}
+	}
+	return tx.Commit()
 }
 
 // DataDir returns the absolute data directory.
