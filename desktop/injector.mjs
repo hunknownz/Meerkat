@@ -3,23 +3,56 @@
 //
 // Connects over CDP to a Codex instance the user already launched with
 //   --remote-debugging-address=127.0.0.1 --remote-debugging-port=<port>
-// polls the local Meerkat status API itself (so the renderer CSP is untouched), and
-// injects desktop/shell.js to show a read-only "Meerkat" sidebar entry.
+// polls the local Meerkat workflow API itself (so the renderer CSP is untouched), strips
+// the write session token, and injects desktop/shell.js to show a read-only "Meerkat"
+// sidebar entry. The overlay renders the shared dashboard/public/ui.js factory and
+// app.css inside a ShadowRoot; both are read from this local checkout (never fetched
+// from the status service) and passed to the renderer as a closure, not via app.js.
+//
+// GET /api/workflow is the primary source. Only an explicit HTTP 404 (an older
+// Meerkat service without the workflow API) falls back to GET /api/active; any other
+// failure (503, malformed, unreachable) is shown as disconnected with the run count
+// unknown and the last known snapshot marked stale.
 //
 // It never modifies app.asar or Codex user data, never starts Pi, and only talks to
 // literal loopback addresses. Renderer selectors are version-sensitive (see shell.js).
 //
 // Usage: node desktop/injector.mjs --cdp-port 9222 [--status-url http://127.0.0.1:47824/]
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { parseWorkflow, parseLegacy } from '../dashboard/public/app.js';
 
 export const DEFAULT_STATUS_URL = 'http://127.0.0.1:47824/';
 export const POLL_MS = 4000;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 const SHELL_SOURCE = readFileSync(new URL('./shell.js', import.meta.url), 'utf8');
 const ICON_DATA = `data:image/svg+xml;base64,${readFileSync(new URL('../assets/meerkat-sidebar.svg', import.meta.url)).toString('base64')}`;
+const UI_SOURCE = readFileSync(new URL('../dashboard/public/ui.js', import.meta.url), 'utf8');
+export const UI_CSS = readFileSync(new URL('../dashboard/public/app.css', import.meta.url), 'utf8');
+export const RECONNECT_BINDING = '__meerkatReconnect';
+const MAX_RESPONSE_CHARS = 4 * 1024 * 1024;
+// Only these declaration forms are exported by the shared factory module.
+const KNOWN_EXPORT = /^export (?=(?:async )?function\b|const\b|let\b|class\b)/gm;
+
+/**
+ * Turns the trusted local ES module source of dashboard/public/ui.js into a function
+ * expression that returns createMeerkatUI. Only the known `export` keywords are removed;
+ * any import, re-export, or dynamic import makes the source unsupported.
+ */
+export function factorySource(source = UI_SOURCE) {
+  if (/^\s*import\b/m.test(source) || /\bimport\s*\(/.test(source)) throw new Error('shared UI factory must not import modules');
+  const body = source.replace(KNOWN_EXPORT, '');
+  if (/^\s*export\b/m.test(body)) throw new Error('shared UI factory has an unsupported export form');
+  if (!/^function createMeerkatUI\(/m.test(body)) throw new Error('shared UI factory does not define createMeerkatUI');
+  return `(function meerkatUIFactory() {\n'use strict';\n${body}\nreturn createMeerkatUI;\n})`;
+}
+
+const FACTORY_SOURCE = factorySource();
+/** Changes whenever the shell, factory, or styles change; the renderer migrates on mismatch. */
+export const ASSET_VERSION = createHash('sha256').update(`${SHELL_SOURCE}\0${FACTORY_SOURCE}\0${UI_CSS}`).digest('hex').slice(0, 16);
 
 export class UsageError extends Error {}
 
@@ -69,7 +102,7 @@ export function parseCli(argv) {
   statusUrl.search = '';
   statusUrl.hash = '';
   if (!statusUrl.pathname.endsWith('/')) statusUrl.pathname += '/';
-  return { cdpPort, statusUrl, activeUrl: new URL('api/active', statusUrl) };
+  return { cdpPort, statusUrl, workflowUrl: new URL('api/workflow', statusUrl), activeUrl: new URL('api/active', statusUrl) };
 }
 
 /** Picks the main Codex renderer page from /json/list; excludes dictation/overlay windows. */
@@ -91,37 +124,122 @@ export function validateWsUrl(value, cdpPort) {
   return url;
 }
 
-/** Validates GET /api/active and reduces it to the state rendered by shell.js. */
+const clip = (v, n = 200) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, n);
+
+/** Validates legacy GET /api/active (older service) into the factory's legacyActive shape. */
 export function toShellState(payload, now = Date.now()) {
   if (!payload || typeof payload !== 'object' || payload.ok !== true
     || !Number.isInteger(payload.count) || payload.count < 0 || !Array.isArray(payload.agents)) {
     throw new Error('malformed status payload');
   }
-  const str = (v) => (typeof v === 'string' ? v.slice(0, 500) : '');
-  const agents = payload.agents.map((a) => {
-    if (!a || typeof a !== 'object') throw new Error('malformed status payload');
-    return { task: str(a.task), model: str(a.model), worktree: str(a.worktree), startedAt: str(a.startedAt) };
-  });
-  return { state: 'ok', count: payload.count, agents, at: now };
+  let legacyActive;
+  try {
+    legacyActive = parseLegacy(payload.agents);
+  } catch {
+    throw new Error('malformed status payload');
+  }
+  return { kind: 'legacy', count: payload.count, legacyActive, at: now };
 }
 
-export async function fetchStatus(activeUrl) {
+/** Validates GET /api/workflow (same contract as the dashboard) and drops the session token. */
+export function toWorkflowState(payload, now = Date.now()) {
+  const { data, legacyActive } = parseWorkflow(payload);
+  return { kind: 'workflow', data, legacyActive, at: now };
+}
+
+async function readJson(res) {
+  const text = await res.text();
+  if (text.length > MAX_RESPONSE_CHARS) throw new Error('response too large');
+  return JSON.parse(text);
+}
+
+/**
+ * Loads the state shown by the overlay. Never manufactures an empty snapshot:
+ * every failure becomes {kind:'error'} (run count unknown in the UI).
+ */
+export async function fetchState(urls, fetchImpl = fetch, now = Date.now) {
+  const get = (url) => fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(3000), headers: { accept: 'application/json' } });
+  const error = (message) => ({ kind: 'error', message, at: now() });
   let res;
   try {
-    res = await fetch(activeUrl, { redirect: 'error', signal: AbortSignal.timeout(3000), headers: { accept: 'application/json' } });
+    res = await get(urls.workflowUrl);
   } catch {
-    return { state: 'error', message: `Status service unreachable at ${activeUrl.origin}` };
+    return error(`无法连接本地状态服务 ${urls.workflowUrl.origin}`);
   }
-  if (!res.ok) return { state: 'error', message: `Status service unavailable (HTTP ${res.status})` };
+  if (res.status === 404) {
+    // Explicit "not found": an older Meerkat service without the workflow API.
+    let legacy;
+    try {
+      legacy = await get(urls.activeUrl);
+    } catch {
+      return error(`无法连接本地状态服务 ${urls.activeUrl.origin}`);
+    }
+    if (!legacy.ok) return error(`状态服务不可用（HTTP ${legacy.status}）`);
+    try {
+      return toShellState(await readJson(legacy), now());
+    } catch {
+      return error('状态服务返回了无效数据');
+    }
+  }
+  let body = null;
+  try { body = await readJson(res); } catch { /* handled below */ }
+  if (!res.ok) {
+    const why = body && typeof body.error === 'string' ? `：${clip(body.error, 120)}` : '';
+    return error(`工作流服务不可用（HTTP ${res.status}${why}）`);
+  }
   try {
-    return toShellState(await res.json());
+    return toWorkflowState(body, now());
   } catch {
-    return { state: 'error', message: 'Status service returned malformed data' };
+    return error('工作流服务返回了无效数据');
   }
 }
 
-export function shellExpression(state) {
-  return `(${SHELL_SOURCE.trim()})(${JSON.stringify(state)},${JSON.stringify(ICON_DATA)})`;
+/**
+ * Renderer expression for shell.js. With { assets: true } it also carries the shared UI
+ * factory closure and app.css; otherwise only the version, so an outdated or missing
+ * monitor answers {needAssets:true} and the caller resends with assets.
+ */
+export function shellExpression(state, { assets = false } = {}) {
+  const pack = assets
+    ? `{version:${JSON.stringify(ASSET_VERSION)},css:${JSON.stringify(UI_CSS)},load:${FACTORY_SOURCE}}`
+    : `{version:${JSON.stringify(ASSET_VERSION)}}`;
+  return `(${SHELL_SOURCE.trim()})(${JSON.stringify(state ?? null)},${JSON.stringify(ICON_DATA)},${pack})`;
+}
+
+/**
+ * Polling session (no timers; the caller schedules tick()). While the service is
+ * healthy every tick fetches; after a failure the stale state stays on screen and
+ * fetching resumes only after requestReconnect() (the overlay's "reconnect" button).
+ */
+export function createSession({ evaluate, loadState }) {
+  let installed = false;
+  let stale = false;
+  let reconnect = false;
+  let chain = Promise.resolve();
+  const push = async (state) => {
+    let r = await evaluate(shellExpression(state, { assets: !installed }));
+    if (r?.needAssets) r = await evaluate(shellExpression(state, { assets: true }));
+    installed = !!r && !r.needAssets;
+    return r;
+  };
+  const run = async () => {
+    let state = null;
+    if (!stale || reconnect) {
+      reconnect = false;
+      state = await loadState();
+      stale = state?.kind === 'error';
+    }
+    return push(state);
+  };
+  return {
+    requestReconnect() { reconnect = true; },
+    get stale() { return stale; },
+    tick() {
+      const next = chain.then(run, run);
+      chain = next.catch(() => {});
+      return next;
+    },
+  };
 }
 
 class Cdp {
@@ -129,9 +247,11 @@ class Cdp {
     this.ws = ws;
     this.nextId = 1;
     this.pending = new Map();
+    this.handlers = new Map();
     ws.addEventListener('message', (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      if (!msg.id && typeof msg.method === 'string') { this.handlers.get(msg.method)?.(msg.params); return; }
       const p = msg.id && this.pending.get(msg.id);
       if (!p) return;
       this.pending.delete(msg.id);
@@ -151,6 +271,8 @@ class Cdp {
       ws.addEventListener('error', () => reject(new Error(`cannot open CDP websocket ${url.origin}`)), { once: true });
     });
   }
+
+  on(method, fn) { this.handlers.set(method, fn); }
 
   send(method, params) {
     const id = this.nextId++;
@@ -189,11 +311,27 @@ async function main(argv) {
     return 0;
   }
   const cdp = await Cdp.connect(await findTarget(opts.cdpPort));
+  const session = createSession({
+    evaluate: (expr) => cdp.evaluate(expr),
+    loadState: () => fetchState(opts),
+  });
+  let wake = null;
+  const nap = (ms) => new Promise((r) => { const t = setTimeout(r, ms); wake = () => { clearTimeout(t); r(); }; });
+  // The overlay's "reconnect" button calls this binding; its payload is ignored and it can
+  // only trigger one more status poll (no commands are accepted from the renderer).
+  cdp.on('Runtime.bindingCalled', (p) => {
+    if (p?.name !== RECONNECT_BINDING) return;
+    session.requestReconnect();
+    wake?.();
+  });
+  await cdp.send('Runtime.enable', {}).catch(() => {});
+  await cdp.send('Runtime.addBinding', { name: RECONNECT_BINDING }).catch(() => {});
 
   // Wait briefly for the renderer to mount; fail loudly if the selectors never appear.
   let result;
   for (let i = 0; i < 10; i++) {
-    result = await cdp.evaluate(shellExpression(await fetchStatus(opts.activeUrl)));
+    session.requestReconnect();
+    result = await session.tick();
     if (result?.ok) break;
     await sleep(1000);
   }
@@ -203,15 +341,19 @@ async function main(argv) {
       + '\nThis adapter relies on version-sensitive Codex renderer selectors; update desktop/shell.js for this Codex version.');
     return 2;
   }
-  console.log(`Meerkat entry injected into Codex; polling ${opts.activeUrl.href} every ${POLL_MS / 1000}s. Ctrl+C to remove.`);
+  console.log(`Meerkat entry injected into Codex (NON-OFFICIAL, version-sensitive); polling ${opts.workflowUrl.href} `
+    + `every ${POLL_MS / 1000}s. Ctrl+C to remove.`);
 
   let closed = false;
-  cdp.ws.addEventListener('close', () => { closed = true; });
+  cdp.ws.addEventListener('close', () => { closed = true; wake?.(); });
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    if (!closed) await cdp.evaluate(shellExpression('remove')).catch(() => {});
+    if (!closed) {
+      await cdp.evaluate(shellExpression('remove')).catch(() => {});
+      await cdp.send('Runtime.removeBinding', { name: RECONNECT_BINDING }).catch(() => {});
+    }
     cdp.ws.close();
     process.exit(0);
   };
@@ -220,9 +362,9 @@ async function main(argv) {
 
   let warned = false;
   while (!closed) {
-    await sleep(POLL_MS);
+    await nap(POLL_MS);
     if (closed) break;
-    const r = await cdp.evaluate(shellExpression(await fetchStatus(opts.activeUrl))).catch((e) => ({ ok: false, missing: [e.message] }));
+    const r = await session.tick().catch((e) => ({ ok: false, missing: [e.message] }));
     if (!r?.ok && !warned) {
       console.error(`warning: Meerkat entry could not be attached (${(r?.missing || []).join(', ')})`);
       warned = true;

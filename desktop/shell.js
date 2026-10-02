@@ -1,5 +1,19 @@
-// Injected into the Codex renderer via CDP Runtime.evaluate as `(<this file>)(state, iconSrc)`.
-// Must be a single function expression. Idempotent: repeated calls reuse window.__meerkat.
+// Injected into the Codex renderer via CDP Runtime.evaluate as
+//   `(<this file>)(state, iconSrc, assets)`.
+// Must be a single function expression. Idempotent: repeated calls reuse window.__meerkat
+// while assets.version matches; a different (or missing, i.e. pre-versioned) monitor is torn
+// down first so stale render handlers are never reused after a code upgrade.
+//
+// assets = { version, css?, load? }: `load` is a function expression built by injector.mjs from
+// the locally trusted dashboard/public/ui.js source; calling it returns the shared
+// createMeerkatUI factory. `css` is dashboard/public/app.css. Both are rendered inside a
+// ShadowRoot on the overlay so the host page styles and the Meerkat styles do not mix.
+// When the monitor is missing or outdated and no `load` was sent, returns {needAssets:true}.
+//
+// state: null (only re-attach) | 'remove' | {kind:'workflow',data,legacyActive,at}
+//        | {kind:'legacy',legacyActive,count,at} | {kind:'error',message,at}
+// The host view is read-only: no stop/settings writes and no command execution. "Reconnect"
+// only asks the injector (via an optional CDP binding) to poll once more.
 //
 // VERSION-SENSITIVE: relies on Codex renderer internals that are not a public API:
 //   [data-app-action-sidebar-scroll]     sidebar navigation container
@@ -8,7 +22,7 @@
 //   [data-sidebar-destination="builtin:automations"] native "Scheduled" nav (Codex 26.924; outside the scroll)
 //   #app-shell-sidebar                   native sidebar root (clicks there close the overlay)
 // Any Codex update may rename these; the function then returns {ok:false, missing:[...]}.
-(function meerkatShell(state, iconSrc) {
+(function meerkatShell(state, iconSrc, assets) {
   const SIDEBAR = '[data-app-action-sidebar-scroll]';
   const MAIN = '[data-app-shell-main-content-layout]';
   const ENTRY = 'data-meerkat-entry';
@@ -17,9 +31,37 @@
   const SIDEBAR_ROOT = '#app-shell-sidebar';
   const NATIVE_DEST = '[data-sidebar-destination]';
   const PLUGIN_LABELS = ['Plugins', '插件'];
+  const BINDING = '__meerkatReconnect';
+  const RECONNECT_TIMEOUT_MS = 10000;
+  const READONLY_NOTE = 'Codex 桌面视图为只读（非官方适配器）：不能在这里停止运行或修改设置，请使用 coordinator CLI。';
   // Attributes that would make the clone impersonate the reference's route/selection state.
   const STRIP = ['id', 'href', 'aria-current', 'aria-selected', 'data-state', 'data-active', 'data-selected',
     'data-sidebar-destination'];
+  const version = assets && typeof assets.version === 'string' ? assets.version : '';
+
+  // Tears down any monitor, including pre-versioned ones that only know remove()/onClick/observer.
+  const teardown = (old) => {
+    if (!old || typeof old !== 'object') return;
+    try { if (typeof old.remove === 'function') old.remove(); } catch { /* best effort */ }
+    try { old.observer?.disconnect?.(); } catch { /* best effort */ }
+    try { old.ui?.destroy?.(); } catch { /* best effort */ }
+    clearTimeout(old.timer);
+    if (typeof old.onClick === 'function') document.removeEventListener('click', old.onClick, true);
+    document.querySelectorAll(`[${ENTRY}], [${VIEW}]`).forEach((n) => n.remove());
+    if (window.__meerkat === old) delete window.__meerkat;
+  };
+
+  if (state === 'remove') { teardown(window.__meerkat); return { ok: true }; }
+
+  let monitor = window.__meerkat;
+  if (monitor && (!version || monitor.version !== version)) {
+    if (!assets || typeof assets.load !== 'function') return { ok: false, needAssets: true, missing: ['Meerkat UI assets'] };
+    teardown(monitor);
+    monitor = null;
+  }
+  if (!monitor && (!assets || typeof assets.load !== 'function' || typeof assets.css !== 'string')) {
+    return { ok: false, needAssets: true, missing: ['Meerkat UI assets'] };
+  }
 
   const lineIcon = (size) => {
     const icon = document.createElement('span');
@@ -33,9 +75,13 @@
     return icon;
   };
 
-  let monitor = window.__meerkat;
   if (!monitor) {
-    monitor = window.__meerkat = { state: null, open: false, observer: null, timer: 0, savedPosition: null };
+    const createUI = assets.load();
+    if (typeof createUI !== 'function') return { ok: false, missing: ['Meerkat UI factory'] };
+    monitor = window.__meerkat = {
+      version, css: assets.css, createUI, state: null, last: null, error: null,
+      open: false, ui: null, observer: null, timer: 0, savedPosition: null, waiters: [],
+    };
 
     const findPlugins = (sidebar) => {
       for (const node of sidebar.querySelectorAll('button, a, [role="button"], [role="link"]')) {
@@ -45,6 +91,7 @@
       return null;
     };
 
+    // Replaces the cloned label/icon; the line icon inherits currentColor from the native entry.
     const relabel = (node) => {
       const oldIcon = node.querySelector('svg, img');
       const iconParent = oldIcon?.parentElement;
@@ -84,6 +131,7 @@
           monitor.show();
         });
         ref.after(entry);
+        if (monitor.open) entry.setAttribute('aria-current', 'page');
       }
       if (!entry.querySelector('[data-meerkat-icon]')) relabel(entry);
       // Re-create the overlay only if a rerender dropped it (avoids observer feedback loops).
@@ -91,30 +139,92 @@
       return { ok: true };
     };
 
+    const settle = (err) => {
+      for (const w of monitor.waiters.splice(0)) {
+        clearTimeout(w.timer);
+        if (err) w.reject(new Error(err)); else w.resolve();
+      }
+    };
+
+    // Read-only host: only "reconnect" is supported, and it merely asks the injector to poll.
+    const onAction = (action) => {
+      if (action?.type !== 'reconnect') return Promise.reject(new Error(READONLY_NOTE));
+      const call = window[BINDING];
+      if (typeof call !== 'function') return Promise.reject(new Error('桌面适配器未连接，请重新运行 desktop/injector.mjs'));
+      return new Promise((resolve, reject) => {
+        const w = { resolve, reject, timer: 0 };
+        w.timer = setTimeout(() => {
+          monitor.waiters = monitor.waiters.filter((x) => x !== w);
+          reject(new Error('重连超时'));
+        }, RECONNECT_TIMEOUT_MS);
+        monitor.waiters.push(w);
+        try { call('reconnect'); } catch { settle('无法通知桌面适配器'); }
+      });
+    };
+
+    // Applies the last known snapshot, then the current error (if any) so history stays visibly stale.
+    monitor.paint = () => {
+      const ui = monitor.ui;
+      if (!ui) return;
+      if (monitor.last) ui.update(monitor.last.data, monitor.last.legacyActive);
+      if (monitor.error) ui.setDisconnected(monitor.error);
+    };
+
+    monitor.apply = (s) => {
+      if (!s || typeof s !== 'object') return;
+      monitor.state = s;
+      if (s.kind === 'workflow' || s.kind === 'legacy') {
+        monitor.last = { data: s.kind === 'workflow' ? s.data : null, legacyActive: Array.isArray(s.legacyActive) ? s.legacyActive : [] };
+        monitor.error = null;
+        if (monitor.ui) monitor.ui.update(monitor.last.data, monitor.last.legacyActive);
+        settle(null);
+      } else {
+        monitor.error = (typeof s.message === 'string' && s.message) || '状态服务不可用';
+        if (monitor.ui) monitor.ui.setDisconnected(monitor.error);
+        settle(monitor.error);
+      }
+    };
+
     monitor.show = () => {
       const main = document.querySelector(MAIN);
       if (!main) return;
       let view = main.querySelector(`[${VIEW}]`);
       if (!view) {
+        if (monitor.ui) { try { monitor.ui.destroy(); } catch { /* detached by host rerender */ } monitor.ui = null; }
         view = document.createElement('section');
         view.setAttribute(VIEW, '');
         view.setAttribute('aria-label', 'Meerkat');
-        view.style.cssText = 'position:absolute;inset:0;z-index:50;overflow:auto;padding:24px 28px;'
-          + 'background:Canvas;color:CanvasText;font:14px/1.5 system-ui,-apple-system,sans-serif;';
+        // `contain` keeps the UI's fixed-position sheets inside the overlay.
+        view.style.cssText = 'position:absolute;inset:0;z-index:50;overflow:auto;contain:layout paint;';
         if (getComputedStyle(main).position === 'static') {
           monitor.savedPosition = main.style.position;
           main.style.position = 'relative';
         }
+        const shadow = view.attachShadow({ mode: 'open' });
+        if (typeof CSSStyleSheet === 'function' && 'adoptedStyleSheets' in shadow) {
+          const sheet = new CSSStyleSheet();
+          sheet.replaceSync(monitor.css);
+          shadow.adoptedStyleSheets = [sheet];
+        } else {
+          const style = document.createElement('style');
+          style.textContent = monitor.css;
+          shadow.append(style);
+        }
+        const root = document.createElement('div');
+        shadow.append(root);
         main.append(view);
+        const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+        monitor.ui = monitor.createUI(root, { readonly: true, readonlyNote: READONLY_NOTE, themeKey: null, theme: dark ? 'dark' : 'light', onAction });
+        monitor.paint();
       }
       monitor.open = true;
       const entry = document.querySelector(`[${ENTRY}]`);
       if (entry) entry.setAttribute('aria-current', 'page');
-      monitor.render(view);
     };
 
     monitor.close = () => {
       monitor.open = false;
+      if (monitor.ui) { try { monitor.ui.destroy(); } catch { /* already detached */ } monitor.ui = null; }
       document.querySelectorAll(`[${VIEW}]`).forEach((v) => {
         const main = v.parentElement;
         v.remove();
@@ -123,50 +233,6 @@
       monitor.savedPosition = null;
       const entry = document.querySelector(`[${ENTRY}]`);
       if (entry) entry.removeAttribute('aria-current');
-    };
-
-    monitor.render = (view) => {
-      const s = monitor.state || { state: 'error', message: 'Waiting for status…' };
-      const el = (tag, text, css) => {
-        const n = document.createElement(tag);
-        if (text !== undefined) n.textContent = text;
-        if (css) n.style.cssText = css;
-        return n;
-      };
-      const muted = 'opacity:.7;';
-      const heading = el('div', undefined, 'display:flex;align-items:center;gap:10px;margin:0 0 4px;');
-      const brandmark = lineIcon(28);
-      heading.append(brandmark, el('h2', 'Meerkat', 'margin:0;font-size:18px;font-weight:600;'));
-      const nodes = [heading];
-      const status = el('p', '', 'margin:0 0 16px;' + muted);
-      status.setAttribute('role', 'status');
-      nodes.push(status);
-      if (s.state !== 'ok') {
-        status.textContent = s.message || 'Status unavailable';
-        nodes.push(el('p', 'Running state unknown', 'font-weight:600;'));
-      } else {
-        status.textContent = 'Live · updated ' + new Date(s.at || Date.now()).toLocaleTimeString();
-        nodes.push(el('p', `${s.count} running`, 'margin:0 0 8px;font-weight:600;'));
-        const list = el('ul', undefined, 'list-style:none;margin:0;padding:0;');
-        for (const a of s.agents) {
-          const li = el('li', undefined, 'padding:10px 0;border-top:1px solid color-mix(in srgb, CanvasText 15%, transparent);');
-          li.append(
-            el('div', a.task || '(untitled task)', 'font-weight:500;overflow-wrap:anywhere;'),
-            el('div', [a.model || '—', a.worktree || '—', monitor.elapsed(a.startedAt)].join(' · '), muted + 'font-size:13px;overflow-wrap:anywhere;'),
-          );
-          list.append(li);
-        }
-        nodes.push(list);
-      }
-      view.replaceChildren(...nodes);
-    };
-
-    monitor.elapsed = (startedAt) => {
-      const t = Date.parse(startedAt);
-      if (!Number.isFinite(t)) return '—';
-      const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-      return h ? `${h}h ${String(m).padStart(2, '0')}m` : m ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
     };
 
     // Clicking any native sidebar navigation closes the overlay and reveals native content.
@@ -186,20 +252,16 @@
 
     monitor.remove = () => {
       monitor.close();
+      settle('Meerkat 已移除');
       monitor.observer.disconnect();
       clearTimeout(monitor.timer);
       document.removeEventListener('click', monitor.onClick, true);
       document.querySelectorAll(`[${ENTRY}]`).forEach((n) => n.remove());
-      delete window.__meerkat;
+      if (window.__meerkat === monitor) delete window.__meerkat;
     };
   }
 
-  if (state === 'remove') { monitor.remove(); return { ok: true }; }
-  if (state) monitor.state = state;
+  monitor.apply(state);
   const result = monitor.ensure();
-  if (result.ok && monitor.open) {
-    const view = document.querySelector(`[${VIEW}]`);
-    if (view) monitor.render(view);
-  }
-  return result;
+  return { ...result, version: monitor.version };
 })
