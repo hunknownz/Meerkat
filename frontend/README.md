@@ -18,3 +18,5 @@ Outputs (tracked, embedded by `internal/web/embed.go`, so Go builds need no npm)
   → `{update(snapshot, legacyActive), setDisconnected(message), destroy()}`. Renders in a ShadowRoot; no fetch.
   `options`: `onAction({type:'reconnect'|'stop'|'settings', ...})`, `readonly`, `readonlyNote`, `transport`, `theme`.
 - `mount/meerkat-ui.css` companion stylesheet (the same CSS is also injected into the ShadowRoot).
+- `app/THIRD_PARTY_NOTICES.md`, `mount/THIRD_PARTY_NOTICES.md`: Magpie MIT attribution, copied from
+  `../dashboard/public/THIRD_PARTY_NOTICES.md` (authoritative).
