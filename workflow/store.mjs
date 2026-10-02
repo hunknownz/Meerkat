@@ -5,6 +5,8 @@
 //                     written ONLY by the holder of the controller lease.
 //   settings.json     future-run settings; written by updateSettings (frontend-safe, never touches state).
 //   requests/         per-request command files (stop-<requestId>.json), written by requestStop.
+//   requests/processed/  private receipts of handled stop commands (same name), kept for requestId idempotence;
+//                     never listed as pending and never acted on again.
 //   controller.lock/  exclusive controller lock directory; owner.json holds {token,pid,heartbeatAt}.
 //
 // A malformed state/settings file is never replaced: reads throw StoreCorruptError and nothing is written.
@@ -21,6 +23,7 @@ export const COLLECTIONS = ['projects', 'contexts', 'tasks', 'runs', 'deliveries
 export const DEFAULT_STALE_MS = 30_000;
 export const MAX_RUN_EVENTS = 50;
 export const MAX_STOP_REQUESTS = 128;
+export const MAX_STOP_RECEIPTS = 1024;
 const MAX_STATE_BYTES = 32 * 1024 * 1024;
 const MAX_SMALL_FILE = 64 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -127,6 +130,7 @@ export class WorkflowStore {
     this.statePath = join(this.dir, 'state.json');
     this.settingsPath = join(this.dir, 'settings.json');
     this.requestsDir = join(this.dir, 'requests');
+    this.processedDir = join(this.requestsDir, 'processed');
     this.lockDir = join(this.dir, 'controller.lock');
     this.ownerPath = join(this.lockDir, 'owner.json');
     this.staleMs = staleMs;
@@ -285,17 +289,36 @@ export class WorkflowStore {
     return join(this.requestsDir, `stop-${requestId}.json`);
   }
 
-  readStopRequest(requestId) {
-    const p = this._requestPath(requestId);
+  _receiptPath(requestId) {
+    if (!UUID_RE.test(requestId)) throw new StoreError('requestId must be a lowercase UUID');
+    return join(this.processedDir, `stop-${requestId}.json`);
+  }
+
+  _readSmall(p) {
     if (!existsSync(p)) return null;
     try { return JSON.parse(readBounded(p, 4096)); } catch { throw new StoreCorruptError('stop request is malformed'); }
   }
 
-  /** Exclusive create (0600). Returns {created:false, existing} if the id already exists. */
+  /** Pending request or processed receipt for this requestId (null if never seen). */
+  readStopRequest(requestId) {
+    return this._readSmall(this._requestPath(requestId)) ?? this._readSmall(this._receiptPath(requestId));
+  }
+
+  /** Processed receipt only (the controller never acts on these). */
+  readStopReceipt(requestId) {
+    return this._readSmall(this._receiptPath(requestId));
+  }
+
+  /**
+   * Exclusive create (0600). Returns {created:false, existing} if the id already exists as a pending request
+   * or a processed receipt. The pending cap counts pending requests only.
+   */
   createStopRequest(req) {
     ensurePrivateDir(this.requestsDir);
     const p = this._requestPath(req.requestId);
-    const count = readdirSync(this.requestsDir).filter((f) => f.startsWith('stop-')).length;
+    const receipt = this.readStopReceipt(req.requestId);
+    if (receipt) return { created: false, existing: receipt };
+    const count = readdirSync(this.requestsDir).filter((f) => /^stop-.*\.json$/.test(f)).length;
     if (!existsSync(p) && count >= MAX_STOP_REQUESTS) throw new StoreError('too many pending stop requests');
     let fd;
     try { fd = openSync(p, 'wx', 0o600); } catch (e) {
@@ -306,19 +329,39 @@ export class WorkflowStore {
     return { created: true, existing: req };
   }
 
-  /** For the controller: pending, well-formed stop requests (malformed files are skipped, not deleted). */
+  /** For the controller: pending, well-formed stop requests only (processed receipts and malformed files are skipped). */
   listStopRequests() {
     if (!existsSync(this.requestsDir)) return [];
     const out = [];
     for (const f of readdirSync(this.requestsDir)) {
       const m = /^stop-([0-9a-f-]{36})\.json$/.exec(f);
       if (!m || !UUID_RE.test(m[1])) continue;
-      try { const r = this.readStopRequest(m[1]); if (r && r.requestId === m[1] && UUID_RE.test(r.runId)) out.push(r); } catch { /* skip */ }
+      try { const r = this._readSmall(this._requestPath(m[1])); if (r && r.requestId === m[1] && UUID_RE.test(r.runId)) out.push(r); } catch { /* skip */ }
     }
     return out;
   }
 
   removeStopRequest(requestId) {
     try { unlinkSync(this._requestPath(requestId)); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+  }
+
+  /**
+   * Moves a handled pending request to a private processed receipt (atomic rename), so the same requestId keeps
+   * returning its original acknowledgement while no longer counting toward the pending cap. Oldest receipts
+   * beyond MAX_STOP_RECEIPTS are pruned. Returns false if the pending request no longer exists.
+   */
+  markStopRequestProcessed(requestId) {
+    const from = this._requestPath(requestId);
+    ensurePrivateDir(this.processedDir);
+    try { renameSync(from, this._receiptPath(requestId)); } catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+    try {
+      const files = readdirSync(this.processedDir).filter((f) => /^stop-[0-9a-f-]{36}\.json$/.test(f));
+      if (files.length > MAX_STOP_RECEIPTS) {
+        const aged = files.map((f) => { try { return [f, statSync(join(this.processedDir, f)).mtimeMs]; } catch { return [f, 0]; } })
+          .sort((a, b) => a[1] - b[1]);
+        for (const [f] of aged.slice(0, files.length - MAX_STOP_RECEIPTS)) { try { unlinkSync(join(this.processedDir, f)); } catch { /* ignore */ } }
+      }
+    } catch { /* pruning is best effort */ }
+    return true;
   }
 }

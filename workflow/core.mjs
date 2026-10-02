@@ -702,7 +702,13 @@ export async function executeTasks({
   let state = null;
   let lastSettings = null;
   let wakeFn = null;
-  const wake = () => { const f = wakeFn; wakeFn = null; f?.(); };
+  let wakeTimer = null;
+  // Referenced timer: keeps the event loop alive while the scheduler waits (a pending executeTasks promise
+  // must not be dropped by an empty loop); cleared on every wake so no extra wait remains.
+  const wake = () => {
+    if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
+    const f = wakeFn; wakeFn = null; f?.();
+  };
   const abortAll = (reason) => {
     ctl.aborting ??= reason;
     for (const l of ctl.lanes.values()) { l.stopReason ??= reason; l.ac.abort(); }
@@ -985,7 +991,9 @@ export async function executeTasks({
         }
       } else {
         const run = state?.runs.find((r) => r.id === req.runId);
-        if (run && TERMINAL_RUN_STATES.has(run.state)) { try { ws.removeStopRequest(req.requestId); } catch { /* retry later */ } }
+        // Not owned by this controller's live lanes: never signalled. Once terminal, keep a private receipt
+        // (requestId idempotence) instead of deleting the command.
+        if (run && TERMINAL_RUN_STATES.has(run.state)) { try { ws.markStopRequestProcessed(req.requestId); } catch { /* retry later */ } }
       }
     }
   };
@@ -1046,7 +1054,7 @@ export async function executeTasks({
       }
       if (changed && !tryPersist()) continue;
       if (!pending.length && !active.size) break;
-      await new Promise((r) => { wakeFn = r; setTimeout(r, 1000).unref(); });
+      await new Promise((r) => { wakeFn = r; wakeTimer = setTimeout(wake, 1000); });
     }
   };
 
@@ -1130,6 +1138,7 @@ export async function executeTasks({
     pollStops();
   } finally {
     clearInterval(pollTimer);
+    if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
     if (handleSignals) { process.off('SIGINT', onSig); process.off('SIGTERM', onSig); }
     signal?.removeEventListener?.('abort', onSig);
     ws.releaseController(lease);

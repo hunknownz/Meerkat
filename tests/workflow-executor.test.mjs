@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,7 +65,7 @@ function fakeRunner(behave = () => ({}), log = []) {
   const fn = async (args) => {
     const { role, worktree, candidateSha, contextDigest, runId, signal, config } = args;
     const call = log.length;
-    log.push({ role, runId, agentId: args.agentId, taskId: args.taskId, worktree, candidateSha, limits: config.limits, model: config.model, brief: readFileSync(args.taskPath, 'utf8'), reportFile: args.reportFile });
+    log.push({ signal, role, runId, agentId: args.agentId, taskId: args.taskId, worktree, candidateSha, limits: config.limits, model: config.model, brief: readFileSync(args.taskPath, 'utf8'), reportFile: args.reportFile });
     assert.equal(g(worktree, 'rev-parse', 'HEAD'), candidateSha, 'runner starts on exact candidate');
     const b = { commit: role === 'developer', verdict: 'pass', report: 'ok', usage: OK_USAGE(), file: 'src/a.js', ...(behave(role, call, args) ?? {}) };
     stats.active += 1; stats.maxActive = Math.max(stats.maxActive, stats.active);
@@ -76,7 +76,8 @@ function fakeRunner(behave = () => ({}), log = []) {
       args.onStart({ pid: DEAD_PID, startedAt: new Date().toISOString() });
       args.onEvent({ type: 'tool', summary: 'read', observedAt: new Date().toISOString(), raw: 'SECRET-ARG' });
       await sleep(20);
-      if (b.hold) await Promise.race([b.hold, new Promise((r) => signal.addEventListener('abort', r, { once: true }))]);
+      // An already-aborted signal never fires 'abort' again; check it before subscribing.
+      if (b.hold && !signal.aborted) await Promise.race([b.hold, new Promise((r) => signal.addEventListener('abort', r, { once: true }))]);
       if (b.usage) args.onUsage(b.usage);
       const base = { runId, role, contextDigest, candidateSha, report: null, ...(b.usage ?? UNKNOWN_USAGE()) };
       if (signal.aborted) return { ...base, resultSha: g(worktree, 'rev-parse', 'HEAD'), outcome: 'stopped', errorCategory: 'aborted', reason: 'aborted' };
@@ -111,6 +112,20 @@ const noSecrets = (obj) => {
   for (const bad of ['secret-value-123', 'SECRET-ARG', '/etc/secret', 'FAKE_PI_KEY', 'authEnv', 'piCommand', 'configFile', 'instructions', '/cfg/']) {
     assert.ok(!s.includes(bad), `leaked ${bad}`);
   }
+};
+/**
+ * Private state.json: the credential value and raw runner output never appear anywhere; runner config properties
+ * (piCommand, authEnv name, instructions, configFile) are allowed ONLY inside the internal profile snapshots.
+ */
+const privateStateClean = (raw) => {
+  for (const bad of ['secret-value-123', 'SECRET-ARG', '/etc/secret']) assert.ok(!raw.includes(bad), `private state leaked ${bad}`);
+  const st = JSON.parse(raw);
+  for (const [coll, recs] of Object.entries(st)) {
+    if (!Array.isArray(recs) || coll === 'profiles') continue;
+    const s = JSON.stringify(recs);
+    for (const bad of ['FAKE_PI_KEY', '"authEnv"', '"piCommand"', '"configFile"', '"instructions"', '/cfg/']) assert.ok(!s.includes(bad), `private ${coll} leaked ${bad}`);
+  }
+  for (const p of st.profiles) assert.ok(typeof p.authEnv === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(p.authEnv), 'profile keeps env var name only');
 };
 const runsOf = (snap, taskId) => snap.runs.filter((r) => r.taskId === taskId);
 
@@ -406,7 +421,7 @@ test('controller signal aborts all owned runs, waits for summaries, then release
   assert.ok(snap.runs.every((r) => r.state === 'stopped'));
 });
 
-test('persistence callback failure aborts the run and success is impossible', { skip: process.getuid?.() === 0 }, async () => {
+test('persistence callback failure aborts the run and success is impossible', async () => {
   const ctx = setup();
   const task = await ctx.prepare();
   let release;
@@ -415,17 +430,28 @@ test('persistence callback failure aborts the run and success is impossible', { 
   const p = executeTasks({ dataDir: ctx.data, taskIds: [task.id], executeRunImpl: fr.fn });
   for (let i = 0; i < 200 && fr.log.length < 1; i += 1) await sleep(10);
   await sleep(40);
-  const dir = join(ctx.data, 'workflow');
-  chmodSync(dir, 0o500);
-  release();
+  // Deterministic injection (independent of uid/chmod repair): keep the last durable state aside and put a
+  // directory at state.json, so the atomic rename of the next authoritative write fails (EISDIR).
+  const statePath = join(ctx.data, 'workflow/state.json');
+  const durable = join(ctx.root, 'durable-state.json');
+  const durableBefore = readFileSync(statePath, 'utf8');
+  assert.equal(JSON.parse(durableBefore).runs[0].state, 'running', 'onStart was persisted before the failure');
+  renameSync(statePath, durable);
+  mkdirSync(statePath);
+  release(); // the runner's next callback (onUsage) persists and must fail
   let res;
-  try { res = await p; } finally { chmodSync(dir, 0o700); }
+  try { res = await p; } finally { rmSync(statePath, { recursive: true, force: true }); renameSync(durable, statePath); }
   assert.equal(res.fatal, 'persistence_failed');
   assert.notEqual(res.tasks[0].state, 'delivered');
   assert.equal(fr.log.length, 1, 'no further roles after fatal write failure');
+  assert.equal(fr.log[0].signal.aborted, true, 'owned run was aborted');
+  assert.equal(readFileSync(statePath, 'utf8'), durableBefore, 'no authoritative write succeeded after the failure');
+  assert.equal(existsSync(join(ctx.data, 'workflow/controller.lock')), false, 'lease released');
+  assert.ok(!readdirSync(join(ctx.data, 'workflow')).some((f) => f.endsWith('.tmp')), 'no temp files left');
   const snap = await readWorkflow(ctx.data);
-  assert.ok(!snap.deliveries.length);
+  assert.ok(!snap.deliveries.length, 'no delivery record');
   assert.equal(snap.runs[0].state, 'unknown', 'last durable record is unverified, not success');
+  assert.equal(snap.runs[0].recordedState, 'running');
 });
 
 test('lost controller lease aborts own runs and makes no further authoritative writes', async () => {
@@ -464,7 +490,7 @@ test('actual runner + fake Pi: full chain with fix, polish and recheck verified 
   assert.ok(runs.every((r) => r.usage.tokens.total === 116));
   assert.ok(runs.every((r) => r.events.some((e) => e.type === 'tool' && e.summary === 'read')));
   noSecrets(snap);
-  noSecrets(readFileSync(join(ctx.data, 'workflow/state.json'), 'utf8').replace(/"authEnv"[^,]*,|"piCommand":\[[^\]]*\],|"instructions":\[[^\]]*\],|"configFile":"[^"]*",/g, ''));
+  privateStateClean(readFileSync(join(ctx.data, 'workflow/state.json'), 'utf8'));
 });
 
 test('flow CLI: private data dir, prepare/execute/snapshot/stop/settings with small JSON', () => {
