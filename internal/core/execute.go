@@ -27,6 +27,7 @@ type TaskResult struct {
 
 // Result is the outcome of Execute.
 type Result struct {
+	Mode    string       `json:"mode,omitempty"` // "delegate": developer-only local candidate, not reviewed
 	Fatal   string       `json:"fatal,omitempty"`
 	Stopped string       `json:"stopped,omitempty"`
 	Tasks   []TaskResult `json:"tasks"`
@@ -242,6 +243,13 @@ func (c *Core) Execute(ctx context.Context, taskIDs []string, resume, acknowledg
 			ids = append(ids, id)
 		}
 	}
+	return c.dispatchLocked(ctx, func() ([]string, error) { return ids, nil }, resume, acknowledge, false)
+}
+
+// dispatchLocked takes the single dispatch slot, resolves the task ids (Delegate prepares here so a busy
+// core never leaves an orphaned task) and schedules them.
+func (c *Core) dispatchLocked(ctx context.Context, sel func() ([]string, error), resume, acknowledge, delegate bool) (Result, error) {
+	var res Result
 	if !c.dispatch.TryLock() {
 		return res, ErrBusy
 	}
@@ -258,6 +266,13 @@ func (c *Core) Execute(ctx context.Context, taskIDs []string, resume, acknowledg
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); c.dispatching = false; c.mu.Unlock() }()
 
+	ids, err := sel()
+	if err != nil {
+		return res, err
+	}
+	if delegate {
+		res.Mode = "delegate"
+	}
 	set, err := c.settings()
 	if err != nil {
 		return res, err
@@ -266,7 +281,7 @@ func (c *Core) Execute(ctx context.Context, taskIDs []string, resume, acknowledg
 	if err != nil {
 		return res, err
 	}
-	ack, states, err := c.validateSelection(st, set, ids, resume, acknowledge)
+	ack, states, err := c.validateSelection(st, set, ids, resume, acknowledge, delegate)
 	if err != nil {
 		return res, err
 	}
@@ -309,7 +324,7 @@ func (c *Core) Execute(ctx context.Context, taskIDs []string, resume, acknowledg
 func (c *Core) isClosed() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.closed }
 
 // validateSelection checks the selection on a snapshot (Git/process facts gathered here, outside SQL).
-func (c *Core) validateSelection(st *model.State, set model.Settings, ids []string, resume, acknowledge bool) ([]string, map[string]string, error) {
+func (c *Core) validateSelection(st *model.State, set model.Settings, ids []string, resume, acknowledge, delegate bool) ([]string, map[string]string, error) {
 	states := map[string]string{}
 	var ack []string
 	done, visiting := map[string]bool{}, map[string]bool{}
@@ -342,6 +357,9 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 		if err := visit(t); err != nil {
 			return nil, nil, err
 		}
+		if (t.Origin == OriginDelegate) != delegate {
+			return nil, nil, invalid("delegated tasks run only their developer via run; workflow execute refuses them")
+		}
 		resumable := slices.Contains([]string{model.TaskFailed, model.TaskStopped, model.TaskUnknown}, t.State)
 		readyLike := t.State == model.TaskReady || (t.State == model.TaskBlocked && strings.HasPrefix(deref(t.StateReason), "dependency_"))
 		if !readyLike && !resumable {
@@ -351,7 +369,7 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 			return nil, nil, invalid("task is %s; resume must be requested explicitly", t.State)
 		}
 		for _, o := range st.Tasks {
-			if o.ID != t.ID && o.Worktree == t.Worktree && !slices.Contains(ids, o.ID) && (o.State == model.TaskUnknown || model.IsActiveTaskState(o.State)) {
+			if o.ID != t.ID && o.Worktree == t.Worktree && !slices.Contains(ids, o.ID) && (o.State == model.TaskUnknown || model.IsActiveTaskState(o.State)) && !isDelegateCandidate(o) {
 				return nil, nil, invalid("worktree is occupied by an unresolved task")
 			}
 		}
@@ -567,6 +585,9 @@ func (c *Core) runTask(ctx context.Context, id, agent string) {
 		maxFix := set.MaxFixRounds
 		if t.Budget != nil && t.Budget.MaxFixRounds < maxFix {
 			maxFix = t.Budget.MaxFixRounds
+		}
+		if t.Origin == OriginDelegate && p.implemented {
+			return // delegate mode: the verified developer candidate is final; review is external
 		}
 		s := nextStep(p, maxFix)
 		if s.done == model.TaskDelivered {
@@ -901,6 +922,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		if s.purpose == "implement" {
 			st.Deliveries = append(st.Deliveries, delivery(*tt, after.Head, []string{runID}, checks(false, rep), rep.KnownGaps, "first", t2))
 			tt.State = model.TaskFirstDelivery
+			if tt.Origin == OriginDelegate {
+				tt.StateReason, tt.ResumeRole = sp(DelegateCandidate), nil
+			}
 		}
 		if s.role == "reviewer" {
 			findings := rep.Findings

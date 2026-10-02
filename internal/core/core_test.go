@@ -637,3 +637,80 @@ func TestPrepareValidationAndSettings(t *testing.T) {
 		t.Error("unknown settings key accepted")
 	}
 }
+
+func TestDelegateRunsOnlyDeveloper(t *testing.T) {
+	e := setup(t)
+	wt := e.worktree("dlg")
+	res, err := e.c.Delegate(context.Background(), e.input(wt, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Mode != "delegate" || len(res.Tasks) != 1 {
+		t.Fatalf("result: %+v", res)
+	}
+	want(t, res, 0, model.TaskFirstDelivery, DelegateCandidate)
+	if got := strings.Join(e.fx.roles, ","); got != "developer" {
+		t.Fatal("roles", got)
+	}
+	s := e.state()
+	tk := taskOf(s, res.Tasks[0].ID)
+	if tk.Origin != OriginDelegate || deref(tk.CandidateSha) != sh(t, wt, "rev-parse", "HEAD") || tk.ResumeRole != nil {
+		t.Fatalf("task: %+v", tk)
+	}
+	if len(s.Reviews) != 0 || len(s.Deliveries) != 1 || s.Deliveries[0].State != "first" || len(s.Runs) != 1 || s.Runs[0].Usage == nil {
+		t.Fatal("expected one run, one candidate delivery, no review")
+	}
+	// Never silently continued through the review flow.
+	if _, err := e.c.Execute(context.Background(), []string{tk.ID}, true, true); err == nil {
+		t.Fatal("execute accepted a delegated task")
+	}
+	snap, err := e.c.Snapshot()
+	if err != nil || snap.Tasks[0].State != model.TaskFirstDelivery || snap.Tasks[0].Usage.KnownSubtotal != 100 {
+		t.Fatalf("snapshot: %v %+v", err, snap.Tasks)
+	}
+	// Restart keeps the settled candidate (no reconcile to stopped).
+	e.c.Close()
+	e.c = e.newCore()
+	if got := taskOf(e.state(), tk.ID); !isDelegateCandidate(got) {
+		t.Fatalf("after restart: %s/%s", got.State, deref(got.StateReason))
+	}
+	if len(e.fx.roles) != 1 {
+		t.Fatal("extra executor invocations")
+	}
+}
+
+func TestDryPreparePure(t *testing.T) {
+	e := setup(t)
+	wt := e.worktree("dry")
+	before, _ := json.Marshal(e.state())
+	d, err := e.c.DryPrepare(e.input(wt, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Valid || d.Branch != "dry" || d.Head != sh(t, wt, "rev-parse", "HEAD") || d.Profiles["developer"].Model != "m-1" {
+		t.Fatalf("dry: %+v", d)
+	}
+	b, _ := json.Marshal(d)
+	for _, bad := range []string{ctxText, "FAKE_SECRET_ENV", "pi-private-cmd", e.profiles["developer"]} {
+		if strings.Contains(string(b), bad) {
+			t.Fatalf("dry run leaks %q", bad)
+		}
+	}
+	// Invalid profile and dirty worktree are refused.
+	if _, err := e.c.DryPrepare(e.input(wt, func(m map[string]any) {
+		m["profiles"].(map[string]any)["reviewer"] = filepath.Join(e.root, "missing.json")
+	})); err == nil {
+		t.Fatal("missing profile accepted")
+	}
+	os.WriteFile(filepath.Join(wt, "dirt"), []byte("x"), 0o644)
+	if _, err := e.c.DryPrepare(e.input(wt, nil)); err == nil || !strings.Contains(err.Error(), "clean") {
+		t.Fatalf("dirty worktree: %v", err)
+	}
+	if _, err := e.c.DryPrepare(e.input(e.repo, nil)); err == nil {
+		t.Fatal("primary worktree accepted")
+	}
+	after, _ := json.Marshal(e.state())
+	if string(before) != string(after) || len(e.fx.roles) != 0 {
+		t.Fatal("dry run changed state or spawned an executor")
+	}
+}

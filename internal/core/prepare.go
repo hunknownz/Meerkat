@@ -509,10 +509,25 @@ func checkInstructions(wt string, p model.Profile) error {
 	return nil
 }
 
+// validated is a fully checked prepare input; producing it never writes state.
+type validated struct {
+	projectID, projectName, title, goal string
+	scope, acceptance, deps             []string
+	changeID                            *string
+	issue                               *model.IssueRef
+	budget                              *model.Budget
+	ctx                                 model.Context
+	facts                               preparedFacts
+	frozen                              map[string]model.Profile
+}
+
 // Prepare validates a strict input and records a new ready task.
-func (c *Core) Prepare(raw []byte) (model.Task, error) {
+func (c *Core) Prepare(raw []byte) (model.Task, error) { return c.prepare(raw, model.OriginNative) }
+
+// validateInput performs every pure prepare check (files, Git, executors); no keys, processes or DB writes.
+func (c *Core) validateInput(raw []byte) (validated, error) {
 	var in Input
-	var task model.Task
+	var task validated
 	if err := decodeStrict(raw, &in, MaxInput); err != nil {
 		return task, err
 	}
@@ -612,17 +627,33 @@ func (c *Core) Prepare(raw []byte) (model.Task, error) {
 		return task, invalid("worktree changed during preparation")
 	}
 
-	err = c.update(func(st *model.State) error {
-		for _, d := range deps {
-			i := slices.IndexFunc(st.Tasks, func(t model.Task) bool { return t.ID == d })
-			if i < 0 {
-				return invalid("dependency does not exist")
-			}
-			if st.Tasks[i].ProjectID != projectID {
-				return invalid("dependency belongs to a different project")
-			}
+	return validated{projectID: projectID, projectName: projectName, title: title, goal: goal, scope: scope, acceptance: acceptance,
+		deps: deps, changeID: changeID, issue: issue, budget: budget, ctx: ctx, facts: facts, frozen: frozen}, nil
+}
+
+// checkRefs validates dependencies and the context version against st and resolves the context reference.
+func checkRefs(st *model.State, v validated) (model.ContextRef, error) {
+	for _, d := range v.deps {
+		i := slices.IndexFunc(st.Tasks, func(t model.Task) bool { return t.ID == d })
+		if i < 0 {
+			return model.ContextRef{}, invalid("dependency does not exist")
 		}
-		ref, err := resolveContext(st, projectID, ctx)
+		if st.Tasks[i].ProjectID != v.projectID {
+			return model.ContextRef{}, invalid("dependency belongs to a different project")
+		}
+	}
+	return resolveContext(st, v.projectID, v.ctx)
+}
+
+func (c *Core) prepare(raw []byte, origin string) (model.Task, error) {
+	var task model.Task
+	v, err := c.validateInput(raw)
+	if err != nil {
+		return task, err
+	}
+	projectID, projectName, facts, frozen := v.projectID, v.projectName, v.facts, v.frozen
+	err = c.update(func(st *model.State) error {
+		ref, err := checkRefs(st, v)
 		if err != nil {
 			return err
 		}
@@ -654,10 +685,10 @@ func (c *Core) Prepare(raw []byte) (model.Task, error) {
 			ids[role] = st.Profiles[i].ID
 		}
 		branch, base := facts.branch, facts.head
-		task = model.Task{ID: newUUID(), ProjectID: projectID, ChangeID: changeID, Repository: facts.repository, Worktree: facts.worktree,
-			Branch: &branch, Title: title, Goal: goal, Scope: scope, Acceptance: acceptance, Dependencies: deps, ContextRef: ref,
-			ProfileIDs: ids, State: model.TaskReady, BaselineSha: &base, CreatedAt: ts, UpdatedAt: ts, IssueRef: issue, Budget: budget,
-			Origin: model.OriginNative}
+		task = model.Task{ID: newUUID(), ProjectID: projectID, ChangeID: v.changeID, Repository: facts.repository, Worktree: facts.worktree,
+			Branch: &branch, Title: v.title, Goal: v.goal, Scope: v.scope, Acceptance: v.acceptance, Dependencies: v.deps, ContextRef: ref,
+			ProfileIDs: ids, State: model.TaskReady, BaselineSha: &base, CreatedAt: ts, UpdatedAt: ts, IssueRef: v.issue, Budget: v.budget,
+			Origin: origin}
 		st.Tasks = append(st.Tasks, task)
 		return nil
 	})

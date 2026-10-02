@@ -104,14 +104,15 @@ func cmdExecute(env Env, args []string) (int, error) {
 	var tasks multi
 	fs.Var(&tasks, "task", "task id (repeatable)")
 	resume := fs.Bool("resume", false, "resume interrupted tasks")
-	ack := fs.Bool("acknowledge", false, "acknowledge risk prompts")
+	ack := fs.Bool("acknowledge", false, "acknowledge an interrupted run (alias of --acknowledge-interruption)")
+	ackI := fs.Bool("acknowledge-interruption", false, "acknowledge an interrupted run after confirming its process is gone")
 	if err := parse(fs, args); err != nil {
 		return ExitUsage, err
 	}
 	if len(tasks) == 0 {
 		return ExitUsage, usageErr{"--task required"}
 	}
-	return execute(env, *dd, tasks, *resume, *ack)
+	return execute(env, *dd, tasks, *resume, *ack || *ackI)
 }
 
 func execute(env Env, dd string, tasks []string, resume, ack bool) (int, error) {
@@ -130,28 +131,31 @@ func execute(env Env, dd string, tasks []string, resume, ack bool) (int, error) 
 	if json.Unmarshal(data, &r) != nil {
 		return ExitFailed, errors.New("invalid daemon reply")
 	}
-	code = resultCode(r)
+	code = resultCode(r, model.TaskDelivered, "")
 	writeJSON(env.Stdout, map[string]any{"ok": code == ExitOK, "data": r})
 	return code, nil
 }
 
-func resultCode(r core.Result) int {
-	if r.Fatal != "" || r.Stopped != "" {
+// resultCode is 0 only when every task reached state (and reason, if set): delivered for workflow
+// execute, an accepted local candidate for run.
+func resultCode(r core.Result, state, reason string) int {
+	if r.Fatal != "" || r.Stopped != "" || len(r.Tasks) == 0 {
 		return ExitFailed
 	}
 	for _, t := range r.Tasks {
-		switch t.State {
-		case model.TaskFailed, model.TaskStopped, model.TaskUnknown, model.TaskBlocked:
+		if t.State != state || (reason != "" && (t.StateReason == nil || *t.StateReason != reason)) {
 			return ExitFailed
 		}
 	}
 	return ExitOK
 }
 
+// cmdRun delegates exactly one bounded developer run from a strict task input (the prepare schema).
+// --dry-run asks the daemon's core to validate without recording anything or starting a process.
 func cmdRun(env Env, args []string) (int, error) {
 	fs, dd := newFlags("run")
 	in := fs.String("input", "", "task input JSON file or -")
-	ack := fs.Bool("acknowledge", false, "acknowledge risk prompts")
+	dry := fs.Bool("dry-run", false, "validate input, profiles and worktree only")
 	if err := parse(fs, args); err != nil {
 		return ExitUsage, err
 	}
@@ -162,22 +166,27 @@ func cmdRun(env Env, args []string) (int, error) {
 	if err != nil {
 		return ExitUsage, err
 	}
+	if *dry {
+		return remote(env, *dd, server.Request{Op: "dry-prepare", Input: b})
+	}
 	dir, err := dataDir(*dd)
 	if err != nil {
 		return ExitUsage, err
 	}
-	data, code, err := call(env, dir, server.Request{Op: "prepare", Input: b})
+	data, code, err := call(env, dir, server.Request{Op: "delegate", Input: b})
 	if err != nil {
 		if err == errHandled {
 			return code, nil
 		}
 		return code, err
 	}
-	var t model.Task
-	if json.Unmarshal(data, &t) != nil || t.ID == "" {
+	var r core.Result
+	if json.Unmarshal(data, &r) != nil || r.Mode != "delegate" {
 		return ExitFailed, errors.New("invalid daemon reply")
 	}
-	return execute(env, dir, []string{t.ID}, false, *ack)
+	code = resultCode(r, model.TaskFirstDelivery, core.DelegateCandidate)
+	writeJSON(env.Stdout, map[string]any{"ok": code == ExitOK, "data": r})
+	return code, nil
 }
 
 func cmdSnapshot(env Env, args []string) (int, error) {

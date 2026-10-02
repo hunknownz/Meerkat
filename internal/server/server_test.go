@@ -324,3 +324,67 @@ func TestSanitize(t *testing.T) {
 		t.Fatal(c)
 	}
 }
+
+// delegCore adds the optional run surface to fakeCore and counts calls.
+type delegCore struct {
+	fakeCore
+	dry, deleg int
+}
+
+func (d *delegCore) DryPrepare(raw []byte) (core.DryRun, error) {
+	d.mu.Lock()
+	d.dry++
+	d.mu.Unlock()
+	return core.DryRun{Valid: true, Mode: "delegate"}, nil
+}
+func (d *delegCore) Delegate(ctx context.Context, raw []byte) (core.Result, error) {
+	d.mu.Lock()
+	d.deleg++
+	d.mu.Unlock()
+	return core.Result{Mode: "delegate", Tasks: []core.TaskResult{{ID: "t1", State: model.TaskFirstDelivery}}}, nil
+}
+
+func TestUnixDryPrepareAndDelegateSocketOnly(t *testing.T) {
+	dir := privDir(t)
+	dc := &delegCore{}
+	svc, _ := New(dc, nil, nil)
+	ln, err := ListenUnix(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go svc.ServeUnix(ln)
+	defer func() { ln.Close(); svc.Shutdown() }()
+	ctx := context.Background()
+	if r, _ := Call(ctx, dir, Request{Op: "dry-prepare"}); r.OK || r.Code != CodeInvalid {
+		t.Fatal("dry-prepare without input accepted")
+	}
+	r, _ := Call(ctx, dir, Request{Op: "dry-prepare", Input: json.RawMessage(`{}`)})
+	var d core.DryRun
+	if !r.OK || json.Unmarshal(r.Data, &d) != nil || !d.Valid {
+		t.Fatalf("dry %+v", r)
+	}
+	r, _ = Call(ctx, dir, Request{Op: "delegate", Input: json.RawMessage(`{}`)})
+	var res core.Result
+	if !r.OK || json.Unmarshal(r.Data, &res) != nil || res.Mode != "delegate" {
+		t.Fatalf("delegate %+v", r)
+	}
+	if dc.dry != 1 || dc.deleg != 1 {
+		t.Fatal("calls", dc.dry, dc.deleg)
+	}
+	// A core without the surface rejects the ops.
+	plain, _ := New(&fakeCore{}, nil, nil)
+	if r := plain.Do(Request{Op: "delegate", Input: json.RawMessage(`{}`)}); r.OK {
+		t.Fatal("plain core delegated")
+	}
+	// The browser API has no route to these ops.
+	srv, host := startHTTP(t, svc)
+	hdr := map[string]string{"Origin": "http://" + host, "X-Meerkat-Token": svc.Token(), "Content-Type": "application/json"}
+	for _, p := range []string{"/api/workflow/delegate", "/api/workflow/dry-prepare", "/api/delegate"} {
+		if res, _ := do(t, "POST", srv.URL+p, `{}`, hdr); res.StatusCode < 400 {
+			t.Fatalf("%s reachable over HTTP: %d", p, res.StatusCode)
+		}
+	}
+	if dc.dry != 1 || dc.deleg != 1 {
+		t.Fatal("HTTP reached the core")
+	}
+}

@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/core"
+	"github.com/hunknownz/Meerkat/internal/model"
 	"github.com/hunknownz/Meerkat/internal/server"
 )
 
@@ -135,5 +138,112 @@ func TestServeSocketCommandsAndOwnerExclusion(t *testing.T) {
 	}
 	if _, err := os.Lstat(server.SocketPath(d)); !os.IsNotExist(err) {
 		t.Fatal("socket left behind")
+	}
+}
+
+func TestRunFlagsAndResultCodes(t *testing.T) {
+	d := privDir(t)
+	// Alias parses (then fails preflight because no daemon), old alias preserved.
+	for _, f := range []string{"--acknowledge-interruption", "--acknowledge"} {
+		if c, _, e := run(t, "execute", "--data-dir", d, "--task", "x", f); c != ExitUsage || !strings.Contains(e, "daemon unavailable") {
+			t.Fatalf("%s: %d %s", f, c, e)
+		}
+	}
+	in := filepath.Join(d, "in.json")
+	os.WriteFile(in, []byte(`{}`), 0o600)
+	if c, _, e := run(t, "run", "--data-dir", d, "--input", in, "--dry-run"); c != ExitUsage || !strings.Contains(e, "daemon unavailable") {
+		t.Fatalf("dry-run without daemon: %d %s", c, e)
+	}
+	for _, a := range [][]string{{"run"}, {"run", "--input", in, "--config", "x"}, {"run", "--input", in, "--acknowledge"}} {
+		if c, _, e := run(t, append(a, "--data-dir", d)...); c != ExitUsage || strings.Contains(e, "daemon unavailable") {
+			t.Fatalf("%v -> %d %s", a, c, e)
+		}
+	}
+	reason := core.DelegateCandidate
+	cand := core.Result{Mode: "delegate", Tasks: []core.TaskResult{{State: model.TaskFirstDelivery, StateReason: &reason}}}
+	if resultCode(cand, model.TaskFirstDelivery, core.DelegateCandidate) != ExitOK || resultCode(cand, model.TaskDelivered, "") != ExitFailed {
+		t.Fatal("candidate codes")
+	}
+	if resultCode(core.Result{Tasks: []core.TaskResult{{State: model.TaskFirstDelivery}}}, model.TaskFirstDelivery, core.DelegateCandidate) != ExitFailed {
+		t.Fatal("candidate without reason accepted")
+	}
+	if resultCode(core.Result{Tasks: []core.TaskResult{{State: model.TaskDelivered}}}, model.TaskDelivered, "") != ExitOK ||
+		resultCode(core.Result{Tasks: []core.TaskResult{{State: model.TaskFinalCandidate}}}, model.TaskDelivered, "") != ExitFailed ||
+		resultCode(core.Result{}, model.TaskDelivered, "") != ExitFailed {
+		t.Fatal("execute codes")
+	}
+}
+
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v %s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestRunDryRunThroughDaemon(t *testing.T) {
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e", "GIT_CONFIG_GLOBAL": "/dev/null"} {
+		t.Setenv(k, v)
+	}
+	root, _ := filepath.EvalSymlinks(privDir(t))
+	repo, wt := filepath.Join(root, "repo"), filepath.Join(root, "wt")
+	os.Mkdir(repo, 0o755)
+	git(t, repo, "init", "-q", "-b", "main")
+	os.WriteFile(filepath.Join(repo, "README"), []byte("hi"), 0o644)
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "init")
+	git(t, repo, "worktree", "add", "-q", "-b", "feat", wt)
+	cfg := filepath.Join(root, "profile.json") // all roles may share one private config
+	os.WriteFile(cfg, []byte(`{"projectId":"demo","provider":"prov","model":"m-1","authEnv":"SECRET_KEY_ENV","piCommand":["pi-private"]}`), 0o600)
+	input := func(worktree string) string {
+		b, _ := json.Marshal(map[string]any{"project": map[string]any{"id": "demo", "name": "Demo"}, "repository": repo, "worktree": worktree,
+			"title": "T", "goal": "G", "scope": []any{"src"}, "acceptance": []any{"ok"}, "context": map[string]any{"version": 1, "text": "PRIVATE-CTX"},
+			"profiles": map[string]any{"developer": cfg, "reviewer": cfg, "polisher": cfg}})
+		p := filepath.Join(root, "in.json")
+		os.WriteFile(p, b, 0o600)
+		return p
+	}
+
+	d := privDir(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	var o, e syncBuf
+	done := make(chan int, 1)
+	go func() { done <- Run(Env{Stdout: &o, Stderr: &e, Ctx: ctx}, []string{"serve", "--data-dir", d}) }()
+	defer func() { cancel(); <-done }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !server.Alive(d) {
+		if time.Now().After(deadline) {
+			t.Fatalf("serve not up: %s", e.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	c, out, errOut := run(t, "run", "--data-dir", d, "--input", input(wt), "--dry-run")
+	if c != 0 || !strings.Contains(out, `"valid": true`) || !strings.Contains(out, `"branch": "feat"`) {
+		t.Fatalf("dry-run %d %s %s", c, out, errOut)
+	}
+	for _, bad := range []string{"PRIVATE-CTX", "SECRET_KEY_ENV", "pi-private", cfg} {
+		if strings.Contains(out, bad) {
+			t.Fatalf("dry-run leaks %q", bad)
+		}
+	}
+	if c, _, _ := run(t, "run", "--data-dir", d, "--input", input(repo), "--dry-run"); c != ExitUsage {
+		t.Fatal("primary worktree accepted")
+	}
+	os.WriteFile(filepath.Join(wt, "dirt"), []byte("x"), 0o644)
+	if c, _, errOut := run(t, "run", "--data-dir", d, "--input", input(wt), "--dry-run"); c != ExitUsage || !strings.Contains(errOut, "clean") {
+		t.Fatalf("dirty accepted %d %s", c, errOut)
+	}
+	_, snap, _ := run(t, "snapshot", "--data-dir", d)
+	var s struct {
+		Data struct {
+			Tasks, Runs, Profiles, Contexts, Projects []any
+		}
+	}
+	if json.Unmarshal([]byte(snap), &s) != nil || len(s.Data.Tasks)+len(s.Data.Runs)+len(s.Data.Profiles)+len(s.Data.Contexts)+len(s.Data.Projects) != 0 {
+		t.Fatalf("dry-run recorded state: %s", snap)
 	}
 }

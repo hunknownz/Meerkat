@@ -202,6 +202,12 @@ func fail(err error) Response {
 
 func bad(msg string) Response { return Response{Code: CodeInvalid, Error: msg} }
 
+// delegator is the optional core surface for `run` (dry validation and one developer-only run).
+type delegator interface {
+	DryPrepare(raw []byte) (core.DryRun, error)
+	Delegate(ctx context.Context, raw []byte) (core.Result, error)
+}
+
 // Do executes one command under the service-owned context.
 func (s *Service) Do(req Request) Response {
 	select {
@@ -234,6 +240,26 @@ func (s *Service) Do(req Request) Response {
 			return fail(err)
 		}
 		return ok(t)
+	case "dry-prepare", "delegate": // socket-only: the HTTP API never routes to Do
+		dc, can := s.core.(delegator)
+		if !can {
+			return bad("unknown op")
+		}
+		if len(req.Input) == 0 || len(req.Input) > core.MaxInput {
+			return bad("input required")
+		}
+		if req.Op == "dry-prepare" {
+			d, err := dc.DryPrepare(req.Input)
+			if err != nil {
+				return fail(err)
+			}
+			return ok(d)
+		}
+		r, err := dc.Delegate(s.ctx, req.Input)
+		if err != nil {
+			return fail(err)
+		}
+		return ok(r)
 	case "execute":
 		if len(req.Tasks) == 0 {
 			return bad("tasks required")

@@ -114,6 +114,7 @@ func reconcile(s *model.State) error {
 		switch {
 		case unknown[t.ID]:
 			t.RecordedState, t.State, t.StateReason, t.UpdatedAt = t.State, model.TaskUnknown, &reason, now()
+		case isDelegateCandidate(*t): // settled local candidate, nothing in flight
 		case model.IsActiveTaskState(t.State) || t.State == model.TaskQueued:
 			t.State = model.TaskReady
 			if slices.ContainsFunc(s.Runs, func(r model.Run) bool { return r.TaskID == t.ID }) {
@@ -476,7 +477,7 @@ func (c *Core) Snapshot() (Snapshot, error) {
 			ids[safeName(k)] = safeName(v)
 		}
 		pt.ProfileIDs = ids
-		if !live && model.IsActiveTaskState(t.State) {
+		if !live && model.IsActiveTaskState(t.State) && !isDelegateCandidate(t) {
 			pt.RecordedState, pt.State = t.State, model.TaskUnknown
 		}
 		if fi, err := os.Stat(t.Worktree); err == nil && fi.IsDir() {

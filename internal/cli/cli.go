@@ -33,8 +33,10 @@ Daemon:
   serve     [--port 0]                       run the daemon (127.0.0.1 browser API + private socket)
 Via daemon:
   prepare   --input FILE|-                   record a ready task
-  execute   --task ID [--task ID] [--resume] [--acknowledge]
-  run       --input FILE|- [--acknowledge]   prepare then execute
+  execute   --task ID [--task ID] [--resume] [--acknowledge-interruption]
+                                             full review workflow; exit 0 only when delivered
+  run       --input FILE|- [--dry-run]       one developer run -> local candidate (not reviewed);
+                                             --dry-run validates only, records nothing
   snapshot                                   public snapshot (+ local history summary)
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
