@@ -81,17 +81,17 @@ node plugins/meerkat/dashboard/server.mjs --port 3000          # prints URL and 
 node plugins/meerkat/dashboard/server.mjs --port 3000 --data-dir /abs/private/dir   # must match the flow's --data-dir
 ```
 
-A loopback-only (`127.0.0.1`) page that polls the workflow snapshot every 4 seconds. It shows the tasks, the role pipeline, shared context, deliveries/reviews, runs with their model and usage, and running Pi agents. If the status cannot be read, it shows an explicit unavailable state rather than stale data. It is a monitor, not a kanban board: it cannot create tasks, start runs, or accept repository/config paths. Its only writes are **stop request** for an active run and **future-run settings**. Both are token- and origin-guarded. The server also keeps legacy data APIs (`/api/state`, `/api/runs`, `/api/active`, collection CRUD) for existing callers.
+A loopback-only (`127.0.0.1`) page that polls the workflow snapshot every 4 seconds. It shows the tasks, the role pipeline, shared context, deliveries/reviews, runs with their model and usage, and running Pi agents. If the status cannot be read, it shows an explicit unavailable state and keeps the last known snapshot visible but clearly marked stale (run count shown as unknown); it never presents stale data as current. It is a monitor, not a kanban board: it cannot create tasks, start runs, or accept repository/config paths. Its only writes are **stop request** for an active run and **future-run settings**. Both are token- and origin-guarded. The server also keeps legacy data APIs (`/api/state`, `/api/runs`, `/api/active`, collection CRUD) for existing callers.
 
 ### Codex desktop adapter (optional, NON-OFFICIAL)
 
-`desktop/injector.mjs` is an experimental, version-dependent adapter, not an official Codex plugin UI. It attaches over the Chrome DevTools Protocol to a Codex desktop instance that you launched yourself with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222`. It adds a "Meerkat" sidebar entry that lists the running agents from `GET /api/active`. It relies on renderer selectors that a Codex update may break. It never modifies `app.asar` or Codex user data and accepts only loopback addresses.
+`desktop/injector.mjs` is an experimental, version-dependent adapter, not an official Codex plugin UI. It attaches over the Chrome DevTools Protocol to a Codex desktop instance that you launched yourself with `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222`, and accepts only loopback addresses. The injector polls `GET /api/workflow` itself (outside the renderer's CSP), strips the write token, and passes the snapshot into the shared, locally trusted `dashboard/public/ui.js` factory with its exact CSS, mounted as a read-only overlay in a ShadowRoot behind a "Meerkat" sidebar entry. It falls back to `GET /api/active` only when `/api/workflow` returns 404; any other failure shows the unknown/stale state. Native stop and settings controls are disabled; use the coordinator CLI (`flow.mjs stop`, `flow.mjs settings`) for actions. It relies on renderer selectors that a Codex update may break, and never modifies `app.asar` or Codex user data.
 
 ```bash
 node plugins/meerkat/desktop/injector.mjs --cdp-port 9222 --status-url http://127.0.0.1:3000/
 ```
 
-The browser monitor above is the supported fallback and the development/validation surface. It does not make Meerkat an official plugin UI. The full workflow UI (`dashboard/public/ui.js`) is a host-neutral factory designed for both the page and a ShadowRoot overlay. The current desktop adapter does not mount it yet and renders only its own read-only agent list. Live verification inside Codex desktop has not been performed for this version.
+The browser monitor above is the supported fallback and the development/validation surface. It does not make Meerkat an official plugin UI. The same host-neutral `ui.js` factory renders both the page and the desktop overlay. Live validation inside the native Codex desktop app has not been performed for this version (access was denied), so treat the adapter as unverified.
 
 ## Legacy standalone runner
 

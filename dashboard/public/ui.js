@@ -215,13 +215,26 @@ export const eventTime = (e) => e?.observedAt || e?.at || e?.time;
 /** resumeRole is a recovery cursor; it is pending only once the task failed, stopped or is unknown. */
 export const pendingResume = (t) => (t?.resumeRole && ['failed', 'stopped', 'unknown'].includes(t.state) ? t.resumeRole : null);
 
-/** Short safe text for a structured value (string or {name,status,message…}); never dumps raw objects. */
-function itemText(x) {
+/**
+ * Short plain text for a structured list item (string, controller check {name,status},
+ * agent-reported check {status:'reported',command,result}, finding {severity,message}…).
+ * Bounded; never dumps raw objects. Callers must still HTML-escape the result.
+ */
+export function itemText(x) {
   if (typeof x === 'string') return x.slice(0, 500);
   if (!x || typeof x !== 'object') return str(x);
+  const reported = x.status === 'reported';
   const head = str(x.name || x.title || x.check || x.path || x.severity, 160);
-  const body = str(x.status || x.result || x.message || x.summary || x.detail, 400);
-  return [head, body].filter(Boolean).join(' · ');
+  const command = str(x.command, 200);
+  const result = str(x.result || x.message || x.summary || x.detail, 400);
+  const status = reported ? '' : str(x.status, 60);
+  return [
+    reported ? 'Agent 上报（非控制器验证）' : '',
+    head,
+    command ? `命令：${command}` : '',
+    status,
+    result && result !== status ? (command ? `结果：${result}` : result) : '',
+  ].filter(Boolean).join(' · ');
 }
 
 // ---------------------------------------------------------------------------

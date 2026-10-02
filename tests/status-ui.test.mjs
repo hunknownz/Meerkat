@@ -5,7 +5,7 @@ import { parseWorkflow, parseLegacy, startDashboard, POLL_MS, TIMEOUT_MS } from 
 import {
   createMeerkatUI, esc, elapsedSeconds, formatDuration, formatLocalTime, safeHref,
   modelLabel, runUsage, runCost, summarizeUsage, taskCategory, liveRunSummary,
-  phaseIndex, eventText, eventTime, pendingResume,
+  phaseIndex, eventText, eventTime, pendingResume, itemText,
 } from '../dashboard/public/ui.js';
 
 const read = (p) => readFileSync(new URL(`../dashboard/public/${p}`, import.meta.url), 'utf8');
@@ -316,4 +316,20 @@ test('startDashboard: repeated manual reconnects share one request', async (t) =
   assert.equal(d.calls.update, 1);
   stop();
   assert.equal(f.pending.length, 2, 'scheduled retry cleared on teardown');
+});
+
+test('itemText shows agent-reported command + result, distinct from controller checks', () => {
+  const reported = itemText({ status: 'reported', command: 'npm test -- <x>', result: '12 passed' });
+  assert.match(reported, /^Agent 上报（非控制器验证） · 命令：npm test -- <x> · 结果：12 passed$/);
+  assert.doesNotMatch(reported, /reported/);
+  assert.equal(esc(reported).includes('&lt;x&gt;'), true, 'escaped by caller');
+  // controller check stays name · status with no agent label
+  assert.equal(itemText({ name: 'tests', status: 'passed' }), 'tests · passed');
+  // review check with command + result is readable; status kept when it differs
+  assert.equal(itemText({ status: 'failed', command: 'node --test', result: '1 failing' }), '命令：node --test · failed · 结果：1 failing');
+  assert.equal(itemText({ severity: 'high', message: 'bug' }), 'high · bug');
+  // bounded
+  const long = itemText({ status: 'reported', command: 'c'.repeat(1000), result: 'r'.repeat(1000) });
+  assert.ok(long.length < 700);
+  assert.equal(itemText(null), '');
 });
