@@ -8,7 +8,7 @@
       "name": "meerkat",
       "source": {
         "source": "local",
-        "path": "./.dist/meerkat"
+        "path": "./"
       },
       "policy": {
         "installation": "AVAILABLE",

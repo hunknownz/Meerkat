@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "meerkat": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "exec \"${CODEX_MCP_NODE_PATH:-node}\" \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-.}}/scripts/launch.mjs\" mcp",
+        "--"
+      ]
+    }
+  }
+}

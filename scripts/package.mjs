@@ -76,7 +76,7 @@ function main() {
   const sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], root).trim();
   const manifest = JSON.parse(run('git', ['show', `${sha}:.codex-plugin/plugin.json`], root));
   const version = manifest.version;
-  if (manifest.name !== 'meerkat' || typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version)) {
+  if (manifest.name !== 'meerkat' || typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/.test(version)) {
     fail('HEAD .codex-plugin/plugin.json must name "meerkat" with a semver version');
   }
 
