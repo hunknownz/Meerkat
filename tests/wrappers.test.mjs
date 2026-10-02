@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBinary } from '../scripts/lib/go-cli.mjs';
+import { resolveBinary, withDataDir } from '../scripts/lib/go-cli.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FAKE = join(root, 'tests/fixtures/fake-meerkat.mjs');
@@ -77,4 +77,76 @@ test('legacy run flags fail with honest help and do not spawn', async () => {
   assert.equal(r.rec, null);
   assert.match(r.stderr, /--config/);
   assert.match(r.stderr, /--input/);
+});
+
+test('launch.mjs forwards a read-only mcp command with MEERKAT_DATA_DIR and nothing else', async () => {
+  const r = await run('scripts/launch.mjs', ['mcp'], { MEERKAT_DATA_DIR: '/tmp/mk data' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.rec.argv, ['mcp', '--data-dir', '/tmp/mk data']);
+  assert.equal(r.stdout, '');
+  assert.equal(r.stderr, '');
+});
+
+test('launch.mjs keeps an explicit --data-dir and forwards SIGTERM', async () => {
+  const r = await run('scripts/launch.mjs', ['serve', '--data-dir=/x'], { MEERKAT_DATA_DIR: '/y', FAKE_WAIT: '1', FAKE_EXIT: '4' }, (child, record) => {
+    const poll = setInterval(() => { if (existsSync(record)) { clearInterval(poll); child.kill('SIGTERM'); } }, 20);
+  });
+  assert.equal(r.code, 4);
+  assert.deepEqual(r.rec.argv, ['serve', '--data-dir=/x']);
+  assert.equal(r.rec.signal, 'SIGTERM');
+});
+
+test('withDataDir inserts after the command, skips version/help, rejects relative dirs', () => {
+  const env = { MEERKAT_DATA_DIR: '/d' };
+  assert.deepEqual(withDataDir(['issue', 'read', '--url', 'u'], env), ['issue', 'read', '--data-dir', '/d', '--url', 'u']);
+  assert.deepEqual(withDataDir(['version'], env), ['version']);
+  assert.deepEqual(withDataDir(['snapshot', '--data-dir', '/e'], env), ['snapshot', '--data-dir', '/e']);
+  assert.deepEqual(withDataDir(['snapshot'], {}), ['snapshot']);
+  assert.throws(() => withDataDir(['snapshot'], { MEERKAT_DATA_DIR: 'rel' }), /absolute/);
+});
+
+function pluginRoot(version) {
+  const dir = mkdtempSync(join(tmpdir(), 'mk-plugin-'));
+  mkdirSync(join(dir, '.codex-plugin'));
+  writeFileSync(join(dir, '.codex-plugin', 'plugin.json'), JSON.stringify({ name: 'meerkat', version }));
+  return dir;
+}
+
+test('installed plugin root resolves the private runtime binary for the manifest version', () => {
+  const plugin = pluginRoot('0.4.0-beta.1');
+  const rt = mkdtempSync(join(tmpdir(), 'mk-rt-'));
+  const target = { os: 'linux', arch: 'amd64' };
+  const missing = resolveBinary({ MEERKAT_RUNTIME_DIR: rt }, plugin, target);
+  assert.ok(missing.error.includes(`node ${JSON.stringify(join(plugin, 'scripts', 'setup.mjs'))}`), missing.error);
+  const dest = join(rt, '0.4.0-beta.1', 'linux-amd64', 'meerkat');
+  mkdirSync(dirname(dest), { recursive: true, mode: 0o700 });
+  copyFileSync(FAKE, dest);
+  chmodSync(dest, 0o755);
+  assert.deepEqual(resolveBinary({ MEERKAT_RUNTIME_DIR: rt }, plugin, target), { path: dest });
+  assert.match(resolveBinary({ MEERKAT_RUNTIME_DIR: 'rel' }, plugin, target).error, /absolute/);
+  chmodSync(dest, 0o777);
+  assert.match(resolveBinary({ MEERKAT_RUNTIME_DIR: rt }, plugin, target).error, /private regular file/);
+  rmSync(dest);
+  symlinkSync(FAKE, dest);
+  assert.match(resolveBinary({ MEERKAT_RUNTIME_DIR: rt }, plugin, target).error, /private regular file/);
+  assert.match(resolveBinary({ MEERKAT_RUNTIME_DIR: rt }, plugin, null).error, /unsupported platform/);
+  rmSync(plugin, { recursive: true, force: true });
+  rmSync(rt, { recursive: true, force: true });
+});
+
+test('a source checkout bin/meerkat wins over the installed runtime binary', () => {
+  const plugin = pluginRoot('1.0.0');
+  mkdirSync(join(plugin, 'bin'));
+  copyFileSync(FAKE, join(plugin, 'bin', 'meerkat'));
+  chmodSync(join(plugin, 'bin', 'meerkat'), 0o755);
+  assert.deepEqual(resolveBinary({ MEERKAT_RUNTIME_DIR: '/nonexistent' }, plugin), { path: join(plugin, 'bin', 'meerkat') });
+  rmSync(plugin, { recursive: true, force: true });
+});
+
+test('launch.mjs never downloads: a missing install prints the setup command on stderr only', async () => {
+  const r = await run('scripts/launch.mjs', ['mcp'], { MEERKAT_BIN: '', MEERKAT_RUNTIME_DIR: mkdtempSync(join(tmpdir(), 'mk-empty-')) });
+  if (existsSync(join(root, 'bin', 'meerkat'))) return; // a local source build takes precedence
+  assert.equal(r.code, 2);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /scripts\/setup\.mjs/);
 });
