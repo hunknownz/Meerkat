@@ -1,6 +1,6 @@
 {
   "name": "meerkat",
-  "version": "0.2.0+local.20261002",
+  "version": "0.3.0",
   "description": "Meerkat coordinates bounded local task delivery: Codex prepares worktrees and frozen context, a configured execution adapter runs developer, reviewer and polisher roles, and a read-only monitor shows local agent runs.",
   "author": {
     "name": "Local developer"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Meerkat",
     "shortDescription": "Coordinate bounded development, review and polish runs with a live agent monitor.",
-    "longDescription": "Meerkat is a generic local plugin. Codex coordinates: it turns an Issue or local requirement into a bounded task with frozen shared context and prepares a linked Git worktree. A deterministic local controller then runs the managed workflow through the configured execution adapter: a developer run commits, a reviewer run reviews the exact candidate, bounded fixes follow, a polisher run makes optional small changes, and the reviewer rechecks. Token, time and fix-round budgets apply; history stays in a private local store; nothing is pushed, merged or deployed, and a delivered commit is a locally AI-reviewed commit, not QA, acceptance or deployment. A loopback browser monitor shows tasks, runs and local agents and only accepts stop requests and future-run settings. An optional, NON-OFFICIAL, version-dependent desktop adapter can show the same monitor inside Codex desktop. Skills: meerkat:workflow (multi-role delivery) and meerkat:delegate (one bounded run). Current limitation: only the Pi CLI execution adapter is implemented; other executors are not available.",
+    "longDescription": "Meerkat is a generic local plugin. Codex coordinates: it turns an Issue or local requirement into a bounded task with frozen shared context and prepares a linked Git worktree. A deterministic local controller then runs the managed workflow through the configured execution adapter: a developer run commits, a reviewer run reviews the exact candidate, bounded fixes follow, a polisher run makes optional small changes, and the reviewer rechecks. Token, time and fix-round budgets apply; history and usage stay in private SQLite storage; nothing is pushed, merged or deployed, and a delivered commit is a locally AI-reviewed commit, not QA, acceptance or deployment. A loopback browser monitor shows tasks, runs and local agents and only accepts stop requests and future-run settings. An optional, NON-OFFICIAL, version-dependent desktop adapter can show the same monitor inside Codex desktop. Skills: meerkat:workflow (multi-role delivery) and meerkat:delegate (one bounded run). Current limitation: only the Pi CLI execution adapter is implemented; other executors are not available.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [],
