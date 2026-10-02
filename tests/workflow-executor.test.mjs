@@ -326,7 +326,13 @@ test('stop request aborts only the targeted run; other task delivers', async () 
   assert.equal(res.tasks[1].state, 'delivered');
   const snap = await readWorkflow(ctx.data);
   assert.equal(snap.runs.find((r) => r.id === runA.id).state, 'stopped');
-  assert.equal(readdirSync(join(ctx.data, 'workflow/requests')).length, 0, 'handled request removed');
+  const ws = new WorkflowStore(ctx.data);
+  assert.deepEqual(ws.listStopRequests(), [], 'no pending stop requests remain');
+  const receipt = ws.readStopReceipt(reqId);
+  assert.ok(receipt, 'handled request kept as a processed receipt');
+  assert.deepEqual([receipt.type, receipt.requestId, receipt.runId], ['stop', reqId, runA.id]);
+  const again = await requestStop(ctx.data, runA.id, reqId);
+  assert.deepEqual([again.duplicate, again.runId, again.createdAt], [true, runA.id, st.createdAt], 'same requestId acks duplicate after terminal');
 });
 
 test('resume: explicit flag, refuses dirty/diverged worktree, preserves work; then continues from failed role', async () => {
