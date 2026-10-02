@@ -123,6 +123,11 @@ func TestServeSocketCommandsAndOwnerExclusion(t *testing.T) {
 	if c, _, _ := run(t, "stop", "--data-dir", d, "--run", "not-a-uuid"); c != ExitUsage {
 		t.Fatal("bad stop")
 	}
+	if c, out, e := mcpRun(t, d); c != 0 || e != "" {
+		t.Fatalf("mcp %d %s", c, e)
+	} else if r := mcpLines(t, out)[2]; r["result"].(map[string]any)["isError"] == true || r["result"].(map[string]any)["_meta"].(map[string]any)["snapshot"].(map[string]any)["schemaVersion"] != float64(1) || strings.Contains(out, "sessionToken") {
+		t.Fatalf("mcp snapshot %s", out)
+	}
 	for _, a := range [][]string{{"serve"}, {"export"}, {"backup", "--output", filepath.Join(d, "x.db")}, {"migrate", "--from", d}} {
 		if c, _, _ := run(t, append(a, "--data-dir", d)...); c != ExitUsage {
 			t.Fatalf("%v allowed while daemon active", a)
@@ -326,5 +331,57 @@ func TestMigrateProjectMovesAndConflictReport(t *testing.T) {
 	rows, _ := st.MetricsRows()
 	if len(rows) != 1 || rows[0].RunID != rid || rows[0].Input == nil || *rows[0].Input != 7 || rows[0].CostUsd != nil {
 		t.Fatalf("history usage %+v", rows)
+	}
+}
+
+const mcpSession = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_monitor_snapshot","arguments":{}}}
+`
+
+func mcpRun(t *testing.T, dir string) (int, string, string) {
+	t.Helper()
+	var o, e syncBuf
+	code := Run(Env{Stdin: strings.NewReader(mcpSession), Stdout: &o, Stderr: &e, Ctx: context.Background()}, []string{"mcp", "--data-dir", dir})
+	return code, o.String(), e.String()
+}
+
+// mcpLines requires every stdout line to be a JSON-RPC 2.0 message.
+func mcpLines(t *testing.T, out string) []map[string]any {
+	t.Helper()
+	var res []map[string]any
+	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil || m["jsonrpc"] != "2.0" {
+			t.Fatalf("non JSON-RPC stdout line %q", l)
+		}
+		res = append(res, m)
+	}
+	return res
+}
+
+func TestMCPCommandWithoutDaemon(t *testing.T) {
+	d := privDir(t)
+	c, out, e := mcpRun(t, d)
+	if c != 0 || e != "" {
+		t.Fatalf("mcp %d %s", c, e)
+	}
+	msgs := mcpLines(t, out)
+	if len(msgs) != 3 {
+		t.Fatalf("want 3 replies, got %s", out)
+	}
+	r := msgs[2]["result"].(map[string]any)
+	if r["isError"] != true || !strings.Contains(out, "meerkat serve") || strings.Contains(out, d) {
+		t.Fatalf("unavailable %s", out)
+	}
+	if _, err := os.Lstat(server.SocketPath(d)); !os.IsNotExist(err) {
+		t.Fatal("mcp must not start a daemon")
+	}
+	if c, _, _ := run(t, "mcp", "--data-dir", d, "extra"); c != ExitUsage {
+		t.Fatal("extra arg accepted")
+	}
+	if c, o, _ := run(t, "help"); c != 0 || !strings.Contains(o, "mcp") {
+		t.Fatal("help lacks mcp")
 	}
 }

@@ -41,6 +41,7 @@ Via daemon:
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
   issue update --task ID [--apply]           prepare update; post only with --apply
+  mcp                                        read-only MCP server on stdio (monitor tools)
 Offline:
   issue read --url URL --output FILE         read an Issue into an untrusted source file
   migrate   --from DIR [--run-root DIR]... [--backup FILE]
@@ -120,6 +121,7 @@ func init() {
 		"restore":      cmdRestore,
 		"export":       cmdExport,
 		"doctor":       cmdDoctor,
+		"mcp":          cmdMCP,
 	}
 }
 
