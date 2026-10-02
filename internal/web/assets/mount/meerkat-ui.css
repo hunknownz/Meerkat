@@ -81,8 +81,7 @@
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; gap: 8px;
   height: 48px; padding: 0 12px 0 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  background: var(--bg); border-bottom: 1px solid var(--line-2);
 }
 #meerkat-ui .brand { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; letter-spacing: .01em; }
 #meerkat-ui .logo { display: inline-flex; color: var(--fg); }
@@ -120,7 +119,7 @@
 #meerkat-ui .state-sum b { font-weight: 600; color: var(--fg); }
 #meerkat-ui .notice {
   margin-left: auto; display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px;
-  font-size: 12px; color: var(--amber); background: var(--amber-soft); white-space: nowrap;
+  font-size: 12px; color: var(--fg-2); background: var(--pill); white-space: nowrap;
 }
 
 /* ---- view & lists ---- */
@@ -156,7 +155,7 @@
 
 /* status dot */
 #meerkat-ui .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
-#meerkat-ui .dot.running { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+#meerkat-ui .dot.running { background: var(--green); }
 #meerkat-ui .dot.waiting { background: var(--amber); }
 #meerkat-ui .dot.blocked { background: var(--red); }
 #meerkat-ui .dot.stale { background: var(--faint); }
@@ -264,12 +263,14 @@
 @keyframes pop { from { transform: scale(.97) translateY(-6px); opacity: 0; } }
 #meerkat-ui .dlg-h {
   position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 10px; padding: 14px 14px 10px 18px;
-  background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  background: var(--bg); border-bottom: 1px solid var(--line-2);
 }
-#meerkat-ui .dlg-h h2 { font-size: 16px; font-weight: 600; line-height: 1.35; }
+#meerkat-ui .dlg-h > div { flex: 1 1 auto; min-width: 0; }
+#meerkat-ui .dlg-h h2 { font-size: 16px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+#meerkat-ui .dlg-h .sub code { min-width: 0; overflow-wrap: anywhere; }
 #meerkat-ui .dlg-h .sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 #meerkat-ui .dlg-h .icon { flex: none; margin-left: auto; }
-#meerkat-ui .dlg-b { padding: 0 18px 24px; }
+#meerkat-ui .dlg-b { padding: 12px 18px 24px; }
 #meerkat-ui .issue-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 5px; background: var(--pill); font-size: 12.5px; color: var(--fg-2); }
 #meerkat-ui .issue-chip:hover { background: var(--pill-hover); }
 #meerkat-ui .issue-prev { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--card); box-shadow: var(--card-edge); font-size: 13px; }
@@ -287,7 +288,7 @@
 #meerkat-ui .tabs { margin: 2px 0 12px; }
 #meerkat-ui .card { background: var(--card); border-radius: 12px; box-shadow: var(--card-edge); padding: 12px 14px; }
 #meerkat-ui .card + .card { margin-top: 10px; }
-#meerkat-ui .card h3 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+#meerkat-ui .card h3 { font-size: 14px; font-weight: 600; color: var(--fg); margin-bottom: 8px; }
 #meerkat-ui .card p, #meerkat-ui .card li { font-size: 13.5px; }
 #meerkat-ui .card ul { padding-left: 18px; display: grid; gap: 3px; }
 #meerkat-ui .timeline { list-style: none; display: grid; gap: 0; }
@@ -301,6 +302,9 @@
 #meerkat-ui .files li { font-family: var(--code); font-size: 12.5px; overflow-wrap: anywhere; }
 #meerkat-ui .concl { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 6px 10px; font-size: 13.5px; }
 #meerkat-ui .concl dt { color: var(--muted); }
+#meerkat-ui .concl dd { min-width: 0; overflow-wrap: anywhere; }
+#meerkat-ui .concl code, #meerkat-ui .run .rm { overflow-wrap: anywhere; word-break: break-word; }
+#meerkat-ui .boundary { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
 #meerkat-ui .run-table { display: grid; }
 #meerkat-ui .run { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 9px 0; border-top: 1px solid var(--line-2); font-size: 13px; }
 #meerkat-ui .run:first-child { border-top: 0; padding-top: 2px; }
@@ -365,7 +369,7 @@
   #meerkat-ui .timeline .tx { grid-column: 2; }
   #meerkat-ui .scrim.center { padding: 10px; }
   #meerkat-ui .sheet { max-height: calc(100vh - 20px); }
-  #meerkat-ui .dlg-b { padding: 0 14px 24px; }
+  #meerkat-ui .dlg-b { padding: 12px 14px 24px; }
 }
 @media (max-width: 420px) {
   #meerkat-ui .phases { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; }
