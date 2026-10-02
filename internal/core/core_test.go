@@ -465,6 +465,29 @@ func TestStopReceiptAndBudget(t *testing.T) {
 	}
 }
 
+func TestConcurrentCloseExecute(t *testing.T) {
+	e := setup(t)
+	task := e.prepare(e.worktree("race"), nil)
+	e.c.Close()
+	for i := 0; i < 20; i++ {
+		c := e.newCore()
+		errc := make(chan error, 1)
+		start := make(chan struct{})
+		go func() { <-start; _, err := c.Execute(context.Background(), []string{task.ID}, true, true); errc <- err }()
+		close(start)
+		if err := c.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-errc; err != nil && !errors.Is(err, ErrClosed) {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		if _, err := c.Execute(context.Background(), []string{task.ID}, false, false); !errors.Is(err, ErrClosed) {
+			t.Fatalf("execute after close: %v", err)
+		}
+	}
+	e.c = e.newCore()
+}
+
 func TestUnknownResume(t *testing.T) {
 	e := setup(t)
 	wt := e.worktree("unk")
@@ -549,14 +572,16 @@ func TestPrepareValidationAndSettings(t *testing.T) {
 	e := setup(t)
 	wt := e.worktree("prep")
 	bad := map[string]func(m map[string]any){
-		"unknown key":   func(m map[string]any) { m["extra"] = 1 },
-		"glob":          func(m map[string]any) { m["scope"] = []any{"src/*"} },
-		"traversal":     func(m map[string]any) { m["scope"] = []any{"../x"} },
-		"secret":        func(m map[string]any) { m["scope"] = []any{"config/.env"} },
-		"credential":    func(m map[string]any) { m["goal"] = "use sk-ant-abcdefghijklmnopqrstuvwxyz123" },
-		"primary":       func(m map[string]any) { m["worktree"] = e.repo },
-		"missing dep":   func(m map[string]any) { m["dependencies"] = []any{newUUID()} },
-		"issue query":   func(m map[string]any) { m["issueRef"] = map[string]any{"url": "https://github.com/o/r/issues/1?token=x", "title": "i"} },
+		"unknown key": func(m map[string]any) { m["extra"] = 1 },
+		"glob":        func(m map[string]any) { m["scope"] = []any{"src/*"} },
+		"traversal":   func(m map[string]any) { m["scope"] = []any{"../x"} },
+		"secret":      func(m map[string]any) { m["scope"] = []any{"config/.env"} },
+		"credential":  func(m map[string]any) { m["goal"] = "use sk-ant-abcdefghijklmnopqrstuvwxyz123" },
+		"primary":     func(m map[string]any) { m["worktree"] = e.repo },
+		"missing dep": func(m map[string]any) { m["dependencies"] = []any{newUUID()} },
+		"issue query": func(m map[string]any) {
+			m["issueRef"] = map[string]any{"url": "https://github.com/o/r/issues/1?token=x", "title": "i"}
+		},
 		"relative cfg":  func(m map[string]any) { m["profiles"].(map[string]any)["developer"] = "dev.json" },
 		"bad changeId":  func(m map[string]any) { m["changeId"] = "../x" },
 		"long title":    func(m map[string]any) { m["title"] = strings.Repeat("x", 201) },
