@@ -5,6 +5,7 @@ import { parseWorkflow, parseLegacy, startDashboard, POLL_MS, TIMEOUT_MS } from 
 import {
   createMeerkatUI, esc, elapsedSeconds, formatDuration, formatLocalTime, safeHref,
   modelLabel, runUsage, runCost, summarizeUsage, taskCategory, liveRunSummary,
+  phaseIndex, eventText, eventTime, pendingResume,
 } from '../dashboard/public/ui.js';
 
 const read = (p) => readFileSync(new URL(`../dashboard/public/${p}`, import.meta.url), 'utf8');
@@ -85,6 +86,52 @@ test('usage: unknown is never zero, fees only trusted USD, wall vs agent sum', (
   assert.equal(s.unknownFee, 1);
   assert.equal(s.agentSeconds, (30 + 60 + 5) * 60);
   assert.equal(s.wallSeconds, 70 * 60);
+});
+
+test('usage: core nested run.usage shape is read; partial is never complete; null fee stays unknown', () => {
+  const tokens = { input: 1200, output: 300, cacheRead: 50, cacheWrite: 0, total: 1550 };
+  const complete = { startedAt: '2026-10-01T23:00:00Z', endedAt: '2026-10-01T23:10:00Z', usage: { tokens, usageCompleteness: 'complete', estimatedCostUsd: null } };
+  const partial = { startedAt: '2026-10-01T23:00:00Z', endedAt: '2026-10-01T23:10:00Z', usage: { tokens: { ...tokens }, usageCompleteness: 'partial', estimatedCostUsd: null } };
+  const unknown = { startedAt: '2026-10-01T23:00:00Z', usage: { tokens: { input: null, output: null, cacheRead: null, cacheWrite: null, total: null }, usageCompleteness: 'unknown', estimatedCostUsd: null } };
+  assert.deepEqual(runUsage(complete), { input: 1200, output: 300, cacheRead: 50, cacheWrite: 0, completeness: 'complete' });
+  assert.deepEqual(runUsage(partial), { input: 1200, output: 300, cacheRead: 50, cacheWrite: 0, completeness: 'partial' });
+  assert.equal(runUsage(unknown), null);
+  assert.equal(runUsage({ usage: { tokens: { input: 5, output: null }, usageCompleteness: 'complete' } }).completeness, 'partial');
+  assert.equal(runUsage({ usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } }).completeness, 'complete');
+  assert.deepEqual(runCost(complete), { kind: 'unknown', usd: null });
+  const s = summarizeUsage([complete, partial, unknown], Date.parse('2026-10-01T23:20:00Z'));
+  assert.equal(s.reported, 2);
+  assert.equal(s.full, 1);
+  assert.equal(s.known.input, 2400);
+  assert.equal(s.missing.input, 1);
+  assert.equal(s.unknownFee, 3);
+});
+
+test('task phase follows the workflow states; resume is pending only after failure', () => {
+  const want = { implementing: 1, first_delivery: 2, checking: 3, fixing: 3, final_candidate: 4, polishing: 5, rechecking: 5, delivered: 5 };
+  for (const [state, p] of Object.entries(want)) assert.equal(phaseIndex({ state }, []), p, state);
+  assert.equal(phaseIndex({ state: 'queued' }, []), 0);
+  assert.equal(pendingResume({ state: 'implementing', resumeRole: 'developer' }), null);
+  assert.equal(pendingResume({ state: 'checking', resumeRole: 'reviewer' }), null);
+  for (const state of ['failed', 'stopped', 'unknown']) assert.equal(pendingResume({ state, resumeRole: 'developer' }), 'developer');
+  assert.equal(pendingResume({ state: 'failed' }), null);
+  assert.match(UI, /pendingResume\(t\)/);
+  assert.doesNotMatch(UI, /t\.resumeRole \?/);
+});
+
+test('events: core {type, summary, observedAt} rendered bounded; legacy fields still work', () => {
+  const e = { type: 'tool', summary: 'bash', observedAt: '2026-10-01T23:00:00Z', args: { command: 'secret-cmd' }, transcript: 'raw' };
+  assert.equal(eventText(e), 'tool · bash');
+  assert.equal(eventTime(e), '2026-10-01T23:00:00Z');
+  assert.equal(eventText({ type: 'lifecycle', summary: 'x'.repeat(500) }).length, 'lifecycle · '.length + 200);
+  assert.equal(eventText({ kind: 'state', message: 'running' }), 'state · running');
+  assert.equal(eventTime({ at: 'a' }), 'a');
+  assert.equal(eventTime({ time: 't' }), 't');
+  assert.match(UI, /timeEl\(eventTime\(e\)\)/);
+  assert.match(UI, /e\.summary \|\| e\.message/);
+  // header concurrency limit applies to managed workflow runs only
+  assert.match(UI, /工作流并发上限/);
+  assert.doesNotMatch(UI, /· 并发上限/);
 });
 
 test('task categories: delivered means final code only', () => {

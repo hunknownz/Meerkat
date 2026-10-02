@@ -94,13 +94,23 @@ export function modelLabel(snap) {
 
 const COUNTERS = ['input', 'output', 'cacheRead', 'cacheWrite'];
 
-/** Usage counters for one run: each counter is a number or null (unknown). */
+/**
+ * Usage counters for one run: each counter is a number or null (unknown).
+ * Accepts the core shape { tokens: {input,…}, usageCompleteness } and legacy flat
+ * counters. `completeness` is 'complete' only when every counter is known and the
+ * record does not declare itself partial/unknown.
+ */
 export function runUsage(run) {
   const u = run?.usage ?? run?.summary?.usage;
   if (!u || typeof u !== 'object') return null;
+  const src = u.tokens && typeof u.tokens === 'object' ? u.tokens : u;
   const out = {};
-  for (const k of COUNTERS) out[k] = isNum(u[k]) && u[k] >= 0 ? u[k] : null;
-  return COUNTERS.some((k) => out[k] !== null) ? out : null;
+  for (const k of COUNTERS) out[k] = isNum(src[k]) && src[k] >= 0 ? src[k] : null;
+  if (!COUNTERS.some((k) => out[k] !== null)) return null;
+  const declared = u.usageCompleteness;
+  const declaredOk = declared === undefined || declared === 'complete';
+  out.completeness = declaredOk && COUNTERS.every((k) => out[k] !== null) ? 'complete' : 'partial';
+  return out;
 }
 
 /**
@@ -127,12 +137,11 @@ export function summarizeUsage(runs, now = Date.now()) {
   for (const r of runs) {
     const u = runUsage(r);
     if (u) s.reported += 1;
-    let full = !!u;
     for (const k of COUNTERS) {
       if (u && u[k] !== null) s.known[k] += u[k];
-      else { s.missing[k] += 1; full = false; }
+      else s.missing[k] += 1;
     }
-    if (full) s.full += 1;
+    if (u?.completeness === 'complete') s.full += 1;
     const c = runCost(r);
     if (c.kind === 'reported') { s.usd += c.usd; s.usdRuns += 1; } else if (c.kind === 'estimated') { s.estUsd += c.usd; s.estRuns += 1; } else s.unknownFee += 1;
     const sec = elapsedSeconds(r.startedAt, r.endedAt, now);
@@ -179,8 +188,15 @@ export function taskCategory(t) {
   return 'active';
 }
 
-function phaseIndex(t, deliveries) {
-  const st = str(t.state);
+// Explicit phase for the workflow's task states; fixing is a fix round inside the check loop.
+const STATE_PHASE = {
+  implementing: 1, first_delivery: 2, checking: 3, fixing: 3, final_candidate: 4, polishing: 5, rechecking: 5, delivered: 5,
+};
+
+/** Phase index (into PHASES) for a task, given its deliveries. */
+export function phaseIndex(t, deliveries = []) {
+  const st = str(t?.state);
+  if (Object.hasOwn(STATE_PHASE, st)) return STATE_PHASE[st];
   if (st === 'delivered' || /polish|recheck/.test(st)) return 5;
   if (deliveries.some((d) => d.state === 'final_candidate')) return 4;
   if (/review|check/.test(st)) return 3;
@@ -188,6 +204,16 @@ function phaseIndex(t, deliveries) {
   if (/develop|fix|running|dev/.test(st)) return 1;
   return 0;
 }
+
+/** Bounded event text: type plus summary (or legacy message); never arguments or transcripts. */
+export function eventText(e) {
+  return [str(e?.type || e?.kind, 60), str(e?.summary || e?.message || e?.detail || e?.reason, 200)].filter(Boolean).join(' · ');
+}
+/** Event timestamp: core observedAt, legacy at/time. */
+export const eventTime = (e) => e?.observedAt || e?.at || e?.time;
+
+/** resumeRole is a recovery cursor; it is pending only once the task failed, stopped or is unknown. */
+export const pendingResume = (t) => (t?.resumeRole && ['failed', 'stopped', 'unknown'].includes(t.state) ? t.resumeRole : null);
 
 /** Short safe text for a structured value (string or {name,status,message…}); never dumps raw objects. */
 function itemText(x) {
@@ -355,7 +381,6 @@ export function createMeerkatUI(root, options = {}) {
   const runLabel = (st) => RUN_LABEL[st] || str(st) || '未知';
   const roleLabel = (r) => ROLE[r] || str(r) || '—';
   const lastEvent = (r) => { const e = arr(r.events); return e.length ? e[e.length - 1] : null; };
-  const eventText = (e) => [str(e?.type || e?.kind, 60), str(e?.message || e?.detail || e?.reason, 200)].filter(Boolean).join(' · ');
   const timeEl = (iso) => (parseTime(iso) === null ? '<time>—</time>' : `<time datetime="${esc(iso)}" title="${esc(new Date(parseTime(iso)).toLocaleString())}">${esc(formatLocalTime(iso, now()))}</time>`);
   const since = (start, end) => {
     const sec = elapsedSeconds(start, end, now());
@@ -377,7 +402,7 @@ export function createMeerkatUI(root, options = {}) {
     }
     if (!state.loaded) { conn.textContent = '正在加载…'; el.textContent = ''; return; }
     conn.textContent = `实时 · 更新于 ${formatLocalTime(I().observedAt)}`;
-    const limit = I().settings && Number.isInteger(I().settings.maxConcurrency) ? ` · 并发上限 ${I().settings.maxConcurrency}` : '';
+    const limit = I().settings && Number.isInteger(I().settings.maxConcurrency) ? ` · 工作流并发上限 ${I().settings.maxConcurrency}` : '';
     el.innerHTML = `${liveCountText((v) => `<b>${v === null ? '未知' : v}</b>`)}${limit}`;
   }
 
@@ -424,7 +449,7 @@ export function createMeerkatUI(root, options = {}) {
         <span class="dot ${dot}" title="${esc(stale ? '快照（已过期）' : runLabel(r.state))}"></span>
         <span class="who">
           <span class="line1"><span class="role">${esc(str(r.agentId, 40) || '—')} · ${esc(roleLabel(r.role))}</span><span class="task">${esc(str(t.title, 200) || '未知任务')}</span></span>
-          <span class="sub">${esc(projName(t.projectId))} · ${esc(issueText(t))}${ev ? ` · <span class="act">${esc(eventText(ev))}</span> · ${esc(formatLocalTime(ev.at || ev.time, now()))}` : ''}${stale ? ' · 快照' : ''}</span>
+          <span class="sub">${esc(projName(t.projectId))} · ${esc(issueText(t))}${ev ? ` · <span class="act">${esc(eventText(ev))}</span> · ${esc(formatLocalTime(eventTime(ev), now()))}` : ''}${stale ? ' · 快照' : ''}</span>
         </span>
         <span class="fields">
           <span class="field"><span class="v">${esc(modelLabel(r.modelSnapshot) || '模型未记录')}</span></span>
@@ -435,7 +460,7 @@ export function createMeerkatUI(root, options = {}) {
       <div class="agent-more" id="mk-more-${esc(key)}" ${open ? '' : 'hidden'}>
         <div>
           <h4>最近 ${events.length} 条结构化事件${stale ? '（快照）' : ''}</h4>
-          ${events.length ? `<ul class="events">${events.map((e) => `<li>${timeEl(e.at || e.time)}<span class="ek">${esc(str(e.type || e.kind, 60))}</span><span>${esc(str(e.message || e.detail || e.reason, 200))}</span></li>`).join('')}</ul>` : '<p class="k small">尚无事件。</p>'}
+          ${events.length ? `<ul class="events">${events.map((e) => `<li>${timeEl(eventTime(e))}<span class="ek">${esc(str(e.type || e.kind, 60))}</span><span>${esc(str(e.summary || e.message || e.detail || e.reason, 200))}</span></li>`).join('')}</ul>` : '<p class="k small">尚无事件。</p>'}
           ${r.state === 'unknown' ? '<p class="local-note mt">状态未知：控制器心跳过期或重启后未能核实，不会自动重放。</p>' : ''}
         </div>
         <div>
@@ -584,7 +609,7 @@ export function createMeerkatUI(root, options = {}) {
     const runRows = runs.map((r) => {
       const u = runUsage(r);
       const c = runCost(r);
-      const full = u && COUNTERS.every((k) => u[k] !== null);
+      const full = u?.completeness === 'complete';
       return `<div class="row stat-row">
         <span class="who"><span class="name"><code>${esc(short(r.id))}</code> · ${esc(str(r.agentId, 40))} · ${esc(roleLabel(r.role))} · ${esc(runLabel(r.state))}</span>
         <span class="sub">${esc(modelLabel(r.modelSnapshot) || '模型未记录')} · ${esc(tokTxt(u, r))}</span></span>
@@ -637,7 +662,7 @@ export function createMeerkatUI(root, options = {}) {
         <div class="card"><h3>范围</h3>${listOr(t.scope, '未声明范围。', 'files')}</div>
         <div class="card"><h3>可观察的验收标准</h3>${listOr(t.acceptance, '未声明验收标准。')}</div>
         <div class="card"><h3>状态</h3><dl class="concl">
-          <dt>任务状态</dt><dd>${esc(str(t.state, 60) || '未知')}${t.resumeRole ? ` · 待恢复：${esc(roleLabel(t.resumeRole))}` : ''}</dd>
+          <dt>任务状态</dt><dd>${esc(str(t.state, 60) || '未知')}${pendingResume(t) ? ` · 待恢复：${esc(roleLabel(pendingResume(t)))}` : ''}</dd>
           <dt>依赖</dt><dd>${deps.length ? esc(deps.join('；')) : '无'}</dd>
           <dt>预算</dt><dd>${b ? `${isNum(b.maxTokens) ? `${num(b.maxTokens)} tokens` : 'tokens 未设'} · ${isNum(b.maxWallSeconds) ? esc(formatDuration(b.maxWallSeconds)) : '时限未设'} · 修复 ${isNum(b.maxFixRounds) ? b.maxFixRounds : '—'} 轮` : '未记录'}</dd>
           <dt>创建 / 更新</dt><dd>${timeEl(t.createdAt)} / ${timeEl(t.updatedAt)}</dd>
