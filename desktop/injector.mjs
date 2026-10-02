@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Optional, NON-OFFICIAL Codex desktop adapter.
+// Optional, NON-OFFICIAL, EXPERIMENTAL Codex desktop adapter (not a Codex plugin/extension API).
 //
 // Connects over CDP to a Codex instance the user already launched with
 //   --remote-debugging-address=127.0.0.1 --remote-debugging-port=<port>
-// polls the local Meerkat workflow API itself (so the renderer CSP is untouched), strips
-// the write session token, and injects desktop/shell.js to show a read-only "Meerkat"
-// sidebar entry. The overlay renders the shared dashboard/public/ui.js factory and
-// app.css inside a ShadowRoot; both are read from this local checkout (never fetched
-// from the status service) and passed to the renderer as a closure, not via app.js.
+// polls the local Meerkat workflow API itself (so the renderer CSP is untouched), validates it
+// against contracts/workflow.schema.json, strips the write session token, and injects
+// desktop/shell.js to show a read-only "Meerkat" sidebar entry. The overlay renders the React
+// mount bundle internal/web/assets/mount/meerkat-ui.js (window.MeerkatUI IIFE, built by
+// frontend/) which creates its own ShadowRoot with its inlined CSS. The bundle is read from this
+// local checkout (never fetched over HTTP) and passed to the renderer as a trusted closure.
 //
 // GET /api/workflow is the primary source. Only an explicit HTTP 404 (an older
 // Meerkat service without the workflow API) falls back to GET /api/active; any other
@@ -23,36 +24,64 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { parseWorkflow, parseLegacy } from '../dashboard/public/app.js';
+import { parseLegacy } from '../dashboard/public/app.js';
+import { validateEnvelope } from '../frontend/src/generated/validate.js';
 
 export const DEFAULT_STATUS_URL = 'http://127.0.0.1:47824/';
 export const POLL_MS = 4000;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 const SHELL_SOURCE = readFileSync(new URL('./shell.js', import.meta.url), 'utf8');
 const ICON_DATA = `data:image/svg+xml;base64,${readFileSync(new URL('../assets/meerkat-sidebar.svg', import.meta.url)).toString('base64')}`;
-const UI_SOURCE = readFileSync(new URL('../dashboard/public/ui.js', import.meta.url), 'utf8');
-export const UI_CSS = readFileSync(new URL('../dashboard/public/app.css', import.meta.url), 'utf8');
+export const MOUNT_JS_URL = new URL('../internal/web/assets/mount/meerkat-ui.js', import.meta.url);
+export const MOUNT_CSS_URL = new URL('../internal/web/assets/mount/meerkat-ui.css', import.meta.url);
+const MOUNT_JS = readFileSync(MOUNT_JS_URL, 'utf8');
+/** Companion stylesheet; the bundle inlines the same CSS into its ShadowRoot. Only hashed into ASSET_VERSION. */
+export const MOUNT_CSS = readFileSync(MOUNT_CSS_URL, 'utf8');
 export const RECONNECT_BINDING = '__meerkatReconnect';
 const MAX_RESPONSE_CHARS = 4 * 1024 * 1024;
-// Only these declaration forms are exported by the shared factory module.
-const KNOWN_EXPORT = /^export (?=(?:async )?function\b|const\b|let\b|class\b)/gm;
+// The trusted bundle must be the plain Vite IIFE and must not load or evaluate other code.
+const IIFE_START = /^var MeerkatUI=\(function\(/;
+const IIFE_END = /\}\)\(\{\}\);?$/;
+const FORBIDDEN = /\bimport\s*\(|^\s*(?:import|export)\b|\beval\s*\(|\bnew\s+Function\b|\bfetch\s*\(|XMLHttpRequest|EventSource|WebSocket|importScripts/m;
 
 /**
- * Turns the trusted local ES module source of dashboard/public/ui.js into a function
- * expression that returns createMeerkatUI. Only the known `export` keywords are removed;
- * any import, re-export, or dynamic import makes the source unsupported.
+ * Wraps the trusted local mount bundle into a function expression returning an adapter
+ * `(container, {onAction, theme, readonlyNote}) => {update, setDisconnected, destroy}` that
+ * always mounts read-only via MeerkatUI.mount(container, {snapshot: null}, {readonly: true, ...}).
  */
-export function factorySource(source = UI_SOURCE) {
-  if (/^\s*import\b/m.test(source) || /\bimport\s*\(/.test(source)) throw new Error('shared UI factory must not import modules');
-  const body = source.replace(KNOWN_EXPORT, '');
-  if (/^\s*export\b/m.test(body)) throw new Error('shared UI factory has an unsupported export form');
-  if (!/^function createMeerkatUI\(/m.test(body)) throw new Error('shared UI factory does not define createMeerkatUI');
-  return `(function meerkatUIFactory() {\n'use strict';\n${body}\nreturn createMeerkatUI;\n})`;
+export function mountSource(source = MOUNT_JS) {
+  const body = String(source).trim();
+  if (!IIFE_START.test(body) || !IIFE_END.test(body)) throw new Error('mount bundle is not the expected MeerkatUI IIFE');
+  if (FORBIDDEN.test(body)) throw new Error('mount bundle contains module loading, eval, or network code');
+  return `(function meerkatMountLoader() {
+'use strict';
+${body}
+const mount = MeerkatUI && MeerkatUI.mount;
+if (typeof mount !== 'function') return null;
+const legacyNote = (list) => \`旧版状态服务仅提供 /api/active（\${Array.isArray(list) ? list.length : 0} 个独立运行）；工作流运行数未知\`;
+return function meerkatMountAdapter(container, options) {
+  const o = options || {};
+  const handle = mount(container, { snapshot: null }, {
+    readonly: true,
+    readonlyNote: typeof o.readonlyNote === 'string' ? o.readonlyNote : undefined,
+    onAction: typeof o.onAction === 'function' ? o.onAction : undefined,
+    theme: o.theme === 'dark' ? 'dark' : 'light',
+  });
+  return {
+    update(snapshot, legacyActive) {
+      if (snapshot == null) handle.setDisconnected(legacyNote(legacyActive));
+      else handle.update(snapshot, Array.isArray(legacyActive) ? legacyActive : []);
+    },
+    setDisconnected(message) { handle.setDisconnected(message); },
+    destroy() { handle.destroy(); },
+  };
+};
+})`;
 }
 
-const FACTORY_SOURCE = factorySource();
-/** Changes whenever the shell, factory, or styles change; the renderer migrates on mismatch. */
-export const ASSET_VERSION = createHash('sha256').update(`${SHELL_SOURCE}\0${FACTORY_SOURCE}\0${UI_CSS}`).digest('hex').slice(0, 16);
+const MOUNT_LOADER = mountSource();
+/** Changes whenever the shell, mount bundle (loader), or styles change; the renderer migrates on mismatch. */
+export const ASSET_VERSION = createHash('sha256').update(`${SHELL_SOURCE}\0${MOUNT_LOADER}\0${MOUNT_CSS}`).digest('hex').slice(0, 16);
 
 export class UsageError extends Error {}
 
@@ -141,9 +170,14 @@ export function toShellState(payload, now = Date.now()) {
   return { kind: 'legacy', count: payload.count, legacyActive, at: now };
 }
 
-/** Validates GET /api/workflow (same contract as the dashboard) and drops the session token. */
+/**
+ * Validates GET /api/workflow against contracts/workflow.schema.json (the React mount's contract)
+ * and copies only the public snapshot and legacyActive: the session write token never leaves Node.
+ */
 export function toWorkflowState(payload, now = Date.now()) {
-  const { data, legacyActive } = parseWorkflow(payload);
+  if (!validateEnvelope(payload)) throw new Error('malformed workflow payload');
+  const data = structuredClone(payload.data);
+  const legacyActive = structuredClone(payload.legacyActive ?? []);
   return { kind: 'workflow', data, legacyActive, at: now };
 }
 
@@ -195,13 +229,13 @@ export async function fetchState(urls, fetchImpl = fetch, now = Date.now) {
 }
 
 /**
- * Renderer expression for shell.js. With { assets: true } it also carries the shared UI
- * factory closure and app.css; otherwise only the version, so an outdated or missing
- * monitor answers {needAssets:true} and the caller resends with assets.
+ * Renderer expression for shell.js. With { assets: true } it also carries the trusted mount
+ * loader closure; otherwise only the version, so an outdated or missing monitor answers
+ * {needAssets:true} and the caller resends with assets.
  */
 export function shellExpression(state, { assets = false } = {}) {
   const pack = assets
-    ? `{version:${JSON.stringify(ASSET_VERSION)},css:${JSON.stringify(UI_CSS)},load:${FACTORY_SOURCE}}`
+    ? `{version:${JSON.stringify(ASSET_VERSION)},load:${MOUNT_LOADER}}`
     : `{version:${JSON.stringify(ASSET_VERSION)}}`;
   return `(${SHELL_SOURCE.trim()})(${JSON.stringify(state ?? null)},${JSON.stringify(ICON_DATA)},${pack})`;
 }

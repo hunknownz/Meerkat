@@ -4,11 +4,13 @@
 // while assets.version matches; a different (or missing, i.e. pre-versioned) monitor is torn
 // down first so stale render handlers are never reused after a code upgrade.
 //
-// assets = { version, css?, load? }: `load` is a function expression built by injector.mjs from
-// the locally trusted dashboard/public/ui.js source; calling it returns the shared
-// createMeerkatUI factory. `css` is dashboard/public/app.css. Both are rendered inside a
-// ShadowRoot on the overlay so the host page styles and the Meerkat styles do not mix.
-// When the monitor is missing or outdated and no `load` was sent, returns {needAssets:true}.
+// assets = { version, load? }: `load` is a function expression built by injector.mjs around the
+// locally trusted React mount bundle (internal/web/assets/mount/meerkat-ui.js); calling it returns
+// an adapter `(container, {readonlyNote, theme, onAction}) => {update, setDisconnected, destroy}`
+// backed by MeerkatUI.mount(..., {readonly: true}). The mount attaches its own ShadowRoot (with its
+// inlined CSS) to the container, nested inside the overlay's ShadowRoot, so host and Meerkat
+// styles never mix. When the monitor is missing or outdated and no `load` was sent, returns
+// {needAssets:true}.
 //
 // state: null (only re-attach) | 'remove' | {kind:'workflow',data,legacyActive,at}
 //        | {kind:'legacy',legacyActive,count,at} | {kind:'error',message,at}
@@ -33,7 +35,7 @@
   const PLUGIN_LABELS = ['Plugins', '插件'];
   const BINDING = '__meerkatReconnect';
   const RECONNECT_TIMEOUT_MS = 10000;
-  const READONLY_NOTE = 'Codex 桌面视图为只读（非官方适配器）：不能在这里停止运行或修改设置，请使用 coordinator CLI。';
+  const READONLY_NOTE = 'Codex 桌面视图为只读（非官方实验适配器）：不能在这里停止运行或修改设置，请使用 coordinator CLI。';
   // Attributes that would make the clone impersonate the reference's route/selection state.
   const STRIP = ['id', 'href', 'aria-current', 'aria-selected', 'data-state', 'data-active', 'data-selected',
     'data-sidebar-destination'];
@@ -59,7 +61,7 @@
     teardown(monitor);
     monitor = null;
   }
-  if (!monitor && (!assets || typeof assets.load !== 'function' || typeof assets.css !== 'string')) {
+  if (!monitor && (!assets || typeof assets.load !== 'function')) {
     return { ok: false, needAssets: true, missing: ['Meerkat UI assets'] };
   }
 
@@ -75,11 +77,20 @@
     return icon;
   };
 
+  // Codex marks its theme on <html> in some versions; otherwise follow the OS preference.
+  const hostTheme = () => {
+    const el = document.documentElement;
+    const cls = el ? el.classList : null;
+    if (cls && cls.contains('dark')) return 'dark';
+    if (cls && cls.contains('light')) return 'light';
+    return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  };
+
   if (!monitor) {
     const createUI = assets.load();
-    if (typeof createUI !== 'function') return { ok: false, missing: ['Meerkat UI factory'] };
+    if (typeof createUI !== 'function') return { ok: false, missing: ['Meerkat UI mount'] };
     monitor = window.__meerkat = {
-      version, css: assets.css, createUI, state: null, last: null, error: null,
+      version, createUI, state: null, last: null, error: null,
       open: false, ui: null, observer: null, timer: 0, savedPosition: null, waiters: [],
     };
 
@@ -168,6 +179,7 @@
       if (!ui) return;
       if (monitor.last) ui.update(monitor.last.data, monitor.last.legacyActive);
       if (monitor.error) ui.setDisconnected(monitor.error);
+      else if (!monitor.last) ui.setDisconnected('正在等待本地状态服务');
     };
 
     monitor.apply = (s) => {
@@ -200,21 +212,19 @@
           monitor.savedPosition = main.style.position;
           main.style.position = 'relative';
         }
+        // Outer ShadowRoot isolates the host; the React mount nests its own ShadowRoot in `root`.
         const shadow = view.attachShadow({ mode: 'open' });
-        if (typeof CSSStyleSheet === 'function' && 'adoptedStyleSheets' in shadow) {
-          const sheet = new CSSStyleSheet();
-          sheet.replaceSync(monitor.css);
-          shadow.adoptedStyleSheets = [sheet];
-        } else {
-          const style = document.createElement('style');
-          style.textContent = monitor.css;
-          shadow.append(style);
-        }
         const root = document.createElement('div');
+        root.setAttribute('data-meerkat-mount', '');
+        root.style.cssText = 'display:block;min-height:100%;';
         shadow.append(root);
         main.append(view);
-        const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
-        monitor.ui = monitor.createUI(root, { readonly: true, readonlyNote: READONLY_NOTE, themeKey: null, theme: dark ? 'dark' : 'light', onAction });
+        try {
+          monitor.ui = monitor.createUI(root, { readonly: true, readonlyNote: READONLY_NOTE, theme: hostTheme(), onAction });
+        } catch (e) {
+          monitor.close();
+          throw e;
+        }
         monitor.paint();
       }
       monitor.open = true;
