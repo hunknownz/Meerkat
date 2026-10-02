@@ -150,11 +150,17 @@ func expectedHead(s *model.State, t model.Task, p pipeline, head string) string 
 	if !isAncestor(t.Worktree, base, head) {
 		return ""
 	}
-	for _, o := range s.Tasks {
-		if o.ID != t.ID && o.Repository == t.Repository {
-			if d := deliveredCandidate(s, o.ID); d != nil && d.CandidateSha == head {
-				return head
-			}
+	// The baseline is frozen at prepare. HEAD may only have moved to the exact
+	// delivered candidate of an explicitly declared dependency in the same
+	// project and repository; unrelated tasks' candidates are never adopted.
+	for _, id := range t.Dependencies {
+		o := findTask(s, id)
+		if o == nil || o.ID == t.ID || o.ProjectID != t.ProjectID || o.Repository != t.Repository || o.State != model.TaskDelivered {
+			continue
+		}
+		d := deliveredCandidate(s, o.ID)
+		if d != nil && d.CandidateSha == head && deref(o.CandidateSha) == head && d.Repository == t.Repository {
+			return head
 		}
 	}
 	return ""

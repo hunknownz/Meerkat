@@ -399,14 +399,16 @@ func TestSchedulingParallelQueueDependencies(t *testing.T) {
 		t.Fatal("independent worktrees did not run concurrently")
 	}
 
-	// Same worktree: strictly serialized; second task starts from the first delivered candidate.
+	// Same worktree: strictly serialized. Both tasks froze the same baseline at
+	// prepare and c2 declares no dependency on c1, so c2 must NOT implicitly adopt
+	// c1's delivered candidate; it fails until the coordinator prepares again.
 	e.fx.gate, e.fx.maxActive = nil, atomic.Int32{}
 	wt := e.worktree("same")
 	c1 := e.prepare(wt, nil)
 	c2 := e.prepare(wt, nil)
 	res = e.exec(c1.ID, c2.ID)
 	want(t, res, 0, model.TaskDelivered, "")
-	want(t, res, 1, model.TaskDelivered, "")
+	want(t, res, 1, model.TaskFailed, "baseline_changed_requires_prepare")
 	if e.fx.maxActive.Load() != 1 {
 		t.Fatal("same worktree ran concurrently")
 	}
