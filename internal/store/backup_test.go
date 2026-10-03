@@ -15,8 +15,8 @@ import (
 const uD2 = "00000000-0000-4000-8000-000000000017"
 
 func TestRestoreSupportedSchemaHistory(t *testing.T) {
-	for _, version := range []int{schemaV1, schemaV2, schemaV3} {
-		t.Run(map[int]string{schemaV1: "v1", schemaV2: "v2", schemaV3: "v3"}[version], func(t *testing.T) {
+	for _, version := range []int{schemaV1, schemaV2, schemaV3, schemaV4} {
+		t.Run(map[int]string{schemaV1: "v1", schemaV2: "v2", schemaV3: "v3", schemaV4: "v4"}[version], func(t *testing.T) {
 			backup := filepath.Join(t.TempDir(), "history.db")
 			v1Fixture(t, backup, dsnBackupFile)
 			if version >= schemaV2 {
@@ -29,6 +29,11 @@ func TestRestoreSupportedSchemaHistory(t *testing.T) {
 				}
 				if version >= schemaV3 {
 					if _, err := db.Exec(migrationV3); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if version >= schemaV4 {
+					if _, err := db.Exec(migrationV4); err != nil {
 						t.Fatal(err)
 					}
 				}

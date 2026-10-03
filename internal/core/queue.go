@@ -127,20 +127,7 @@ func (c *Core) submit(req model.DispatchRequest, mode string) (model.DispatchRec
 // taskContract includes frozen task and profile records but excludes execution
 // progress. It is checked before every role, not just when entering the queue.
 func taskContract(st *model.State, t model.Task) string {
-	t.State, t.RecordedState, t.CreatedAt, t.UpdatedAt = "", "", "", ""
-	t.StateReason, t.ResumeRole, t.CandidateSha = nil, nil, nil
-	profiles := []model.Profile{}
-	for _, role := range model.Roles {
-		id := t.ProfileIDs[role]
-		for _, p := range st.Profiles {
-			if p.ID == id {
-				profiles = append(profiles, p)
-				break
-			}
-		}
-	}
-	b, _ := json.Marshal([]any{t, profiles})
-	return fmt.Sprintf("%x", sha256.Sum256(b))
+	return model.FrozenTaskDigest(st, t)
 }
 
 func (c *Core) wakeQueue() {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/requestbudget"
 )
 
 // Failure categories. All failures leave the worktree untouched (dirty code is preserved).
@@ -33,6 +34,8 @@ const (
 	CatDecisionMismatch = "decision_mismatch"
 	CatGit              = "git_error"
 	CatSessionUnknown   = "session_unknown"
+	CatBudgetUnknown    = "budget_unknown"
+	CatBudgetGate       = "budget_gate_unavailable"
 )
 
 var catMessages = map[string]string{
@@ -45,6 +48,8 @@ var catMessages = map[string]string{
 	CatNoCommit: "no new commit on task branch", CatDirty: "working tree left dirty",
 	CatDecisionMismatch: "report decision does not match Git state", CatGit: "git inspection failed",
 	CatSessionUnknown: "session outcome could not be verified",
+	CatBudgetUnknown:  "request budget outcome could not be verified",
+	CatBudgetGate:     "request budget bridge is unavailable",
 }
 
 // Error is a safe executor error. Message is fixed text or names a field, never a raw value.
@@ -74,8 +79,9 @@ type Request struct {
 	ContextDigest   string // digest the report must bind to ("" means null)
 	RemainingTokens int64
 	RemainingWall   time.Duration
-	Env             []string        // child environment; nil means os.Environ()
-	Session         *SessionBinding // private, verified history for a stateful executor
+	Env             []string                // child environment; nil means os.Environ()
+	Session         *SessionBinding         // private, verified history for a stateful executor
+	Budget          requestbudget.Authority // private request authority, never serialized
 }
 
 // Capabilities describe implemented operations, not planned adapters or policy.

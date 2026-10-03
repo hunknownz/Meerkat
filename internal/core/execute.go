@@ -725,8 +725,23 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		binding := c.sessionBinding(*ss, t.Worktree)
 		req.Session = &binding
 	}
+	var authority *requestAuthority
+	var budgetErr error
+	if ss != nil {
+		if x, ok := c.reg[execName(prof)].(interface{ Capabilities() executor.Capabilities }); ok && x.Capabilities().RequestBudgetGate {
+			authority, budgetErr = c.openRequestBudget(t, prof, ss, runID, capTok, capSec)
+			req.Budget = authority
+		}
+	}
 	started := time.Now()
-	xr, xerr := c.reg[execName(prof)].Execute(lctx, req, onEvent, onStart)
+	var xr executor.Result
+	var xerr error
+	if budgetErr == nil {
+		xr, xerr = c.reg[execName(prof)].Execute(lctx, req, onEvent, onStart)
+	} else {
+		xerr = &executor.Error{Category: executor.CatBudgetUnknown, Message: "request authority could not be established"}
+		xr.Session = &executor.SessionOutcome{ID: ss.ID, ProviderID: ss.ProviderID, Digest: ss.FileDigest, Confirmed: true}
+	}
 	wall := time.Since(started).Seconds()
 	cause := context.Cause(lctx)
 	if lctx.Err() == nil {
@@ -734,6 +749,20 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	}
 	if c.isLost() || errors.Is(cause, ErrLeaseLost) {
 		return false // fenced out: state stays active and is projected unknown
+	}
+	budgetKnown, budgetOverrun := budgetErr == nil, false
+	if authority != nil {
+		outcome, err := c.closeRequestBudget(runID)
+		budgetKnown, budgetOverrun = err == nil && outcome.Confirmed, outcome.Overrun
+		if err == nil {
+			xr.Usage = outcome.Usage
+		}
+		if c.isLost() {
+			return false
+		}
+	}
+	if xr.Category == executor.CatBudgetUnknown {
+		budgetKnown = false
 	}
 
 	// Git facts before the final transaction.
@@ -785,6 +814,12 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if !sessionKnown {
 		cat, reason, stopped = executor.CatSessionUnknown, "session_unverifiable", false
 	}
+	if sessionKnown && budgetOverrun {
+		cat, reason, stopped = executor.CatTokenLimit, "budget_request_overrun", true
+	}
+	if !budgetKnown {
+		cat, reason, stopped = executor.CatBudgetUnknown, "request_budget_unverifiable", false
+	}
 	rep := xr.Report
 	if cat == "" {
 		if _, why := frozenOK(st, t); why != "" {
@@ -831,7 +866,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			if stopped {
 				r.State, tt.State = model.RunStopped, model.TaskStopped
 			}
-			if !sessionKnown {
+			if !sessionKnown || !budgetKnown {
 				r.State, tt.State = model.RunUnknown, model.TaskUnknown
 			}
 			sm.Outcome, sm.ErrorCategory = r.State, cat

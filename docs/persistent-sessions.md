@@ -18,15 +18,15 @@ The adapter clears queued messages, aborts, checks for idle, closes stdin and wa
 
 Unconfirmed session outcomes and session claims left running after a service restart become `unknown`. They cannot be reused merely by adding `--acknowledge-interruption`. The history and ownership evidence remain available for investigation. No automatic reconciliation or replay of unknown sessions is implemented yet.
 
-This implementation still requires a clean worktree to start. It preserves execution history; it does not yet authorize resuming uncommitted changes. Existing token/time limits can stop a Run. Request budget reservations, automatic wrap-up and checkpoint-based recovery are subsequent work in the [complete design](../design/session-budget-coordination-20261003.md).
+This implementation still requires a clean worktree to start. It preserves execution history; it does not yet authorize resuming uncommitted changes. Token/time limits can stop a Run. [Request budget reservations and settlement](request-budgets.md) are implemented for the supported Pi HTTP bridge. Automatic wrap-up and checkpoint-based recovery remain subsequent work in the [complete design](../design/session-budget-coordination-20261003.md).
 
 ## Storage and usage
 
 SQLite V4 records Session identity, frozen contract, file reference/digest, verified SHA, state and Run bindings. History files live under the private data directory at `sessions/<id>/history.jsonl`, with directories `0700` and files `0600`. The Pi adapter accepts the verified v3 session format; unknown formats are rejected.
 
-Public snapshots, MCP results and default metric exports exclude raw history and private session paths. Current Run usage comes from current events; Pi's historical session total is not added again. Missing token fields and prices remain unknown. Pi-reported cost is an estimate, not a confirmed bill; automatic compaction/retries make usage completeness partial when hidden calls cannot be accounted for.
+Public snapshots, MCP results and default metric exports exclude raw history and private session paths. Ledger-backed Run usage comes from raw request settlement; other executor runs retain current event accounting. Pi's historical session total is not added again. Missing token fields and prices remain unknown. Pi-reported cost is an estimate, not a confirmed bill.
 
-Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1/V2/V3 stores and backups migrate to V4 without changing their legacy histories.
+Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V4 stores and backups migrate to V5, retaining session and request-budget history.
 
 ## Verification scope
 

@@ -190,7 +190,7 @@ func verifyBackupBodies(q querier, fn func(IssueReceipt, []byte) error) error {
 }
 
 // ValidateBackup checks integrity, foreign keys, schema and bundled private files of a backup file. Backups of every
-// supported schema version (v1, v2, v3, v4) are accepted; Restore migrates older ones when it opens the restored store.
+// supported schema version (v1 through v5) are accepted; Restore migrates older ones when it opens the restored store.
 func ValidateBackup(path string) error {
 	fi, err := os.Lstat(path)
 	if err != nil || !fi.Mode().IsRegular() {
@@ -213,6 +213,9 @@ func ValidateBackup(path string) error {
 		return ErrBadBackup
 	}
 	tables := append([]string{}, schemaTables...)
+	if v >= schemaV5 {
+		tables = append(tables, budgetTables...)
+	}
 	if v >= schemaV4 {
 		tables = append(tables, sessionTables...)
 	}
@@ -232,6 +235,11 @@ func ValidateBackup(path string) error {
 	}
 	if v >= schemaV4 {
 		if err := verifySessionBundle(db, nil); err != nil {
+			return err
+		}
+	}
+	if v >= schemaV5 {
+		if err := validateBudgetBackup(db); err != nil {
 			return err
 		}
 	}

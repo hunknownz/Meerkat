@@ -78,7 +78,7 @@ See [task input](skills/workflow/references/task-input.md). The monitor displays
 
 The development branch also supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits. The installed release has not been replaced by this development work.
 
-The development branch binds scheduler-driven Pi runs to [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. Budget wrap-up and recovery of uncommitted changes remain pending.
+The development branch binds scheduler-driven Pi runs to [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. [Request budget authorization](docs/request-budgets.md) reserves allowance before supported Pi HTTP requests and settles raw usage. Automatic wrap-up and recovery of uncommitted changes remain pending.
 
 Single delegation runs only the developer and records a first local candidate, unreviewed:
 

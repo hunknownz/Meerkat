@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/executor/pibudget"
 	"github.com/hunknownz/Meerkat/internal/executor/pirpc"
 	"github.com/hunknownz/Meerkat/internal/model"
 )
@@ -47,6 +48,18 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	if ctx.Err() != nil {
 		o.stop = CatCanceled
 		return o
+	}
+	var bridge *pibudget.Server
+	if req.Budget != nil {
+		var err error
+		bridge, err = pibudget.Start(req.Profile.Provider, req.Profile.Model, req.Budget)
+		if err != nil {
+			o.stop = CatBudgetGate
+			return o
+		}
+		defer bridge.Close()
+		pp.argv = append(pp.argv, "--extension", bridge.Extension())
+		pp.env = append(append([]string{}, pp.env...), bridge.Env())
 	}
 	cmd := exec.Command(pp.argv[0], pp.argv[1:]...)
 	cmd.Dir, cmd.Env = pp.worktree, pp.env
@@ -127,8 +140,21 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	defer cancel()
 	verified := false
 	uncertain := false
+	var budgetHalt <-chan struct{}
+	if bridge != nil {
+		budgetHalt = bridge.Halt()
+	}
 	state, e := client.State(rctx)
-	if e == nil && rpcIdle(state, *req.Session, req) {
+	bridgeReady := true
+	if bridge != nil {
+		readyCtx, readyCancel := context.WithTimeout(rctx, 5*time.Second)
+		bridgeReady = bridge.WaitReady(readyCtx)
+		readyCancel()
+		if !bridgeReady {
+			o.stop = CatBudgetGate
+		}
+	}
+	if e == nil && rpcIdle(state, *req.Session, req) && bridgeReady {
 		rc, e := client.Prompt(rctx, pp.prompt)
 		if e == nil && rc.Disposition == "started" {
 			select {
@@ -137,6 +163,13 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 				verified = e == nil && rpcIdle(state, *req.Session, req)
 			case <-limit:
 				o.stop = CatTokenLimit
+			case <-budgetHalt:
+				denied, unknown := bridge.Outcome()
+				if unknown {
+					o.stop = CatBudgetUnknown
+				} else if denied {
+					o.stop = CatTokenLimit
+				}
 			case <-rctx.Done():
 				o.stop = CatWallTimeout
 				if ctx.Err() != nil {
@@ -151,8 +184,12 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 			o.protocolErr = true
 		}
 	} else {
-		o.protocolErr = true
-		uncertain = true
+		if !bridgeReady && e == nil && rpcIdle(state, *req.Session, req) {
+			verified = true // no prompt was submitted; the original history is idle
+		} else {
+			o.protocolErr = true
+			uncertain = true
+		}
 	}
 	grace := p.Grace
 	if grace <= 0 {
@@ -194,6 +231,14 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	<-drained
 	if o.t.liveTotal() > pp.tokens {
 		o.stop = CatTokenLimit
+	}
+	if bridge != nil {
+		denied, unknown := bridge.Outcome()
+		if unknown {
+			o.stop = CatBudgetUnknown
+		} else if denied && o.stop == "" {
+			o.stop = CatTokenLimit
+		}
 	}
 	if ps := cmd.ProcessState; ps != nil {
 		if code := ps.ExitCode(); code >= 0 {

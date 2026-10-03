@@ -97,6 +97,10 @@ func New(st *store.Store, reg Registry, opts ...Options) (*Core, error) {
 		_ = st.ReleaseLease(l.Token)
 		return nil, err
 	}
+	if err := st.ReconcileRequestBudgetsOwned(l.Token); err != nil {
+		_ = st.ReleaseLease(l.Token)
+		return nil, err
+	}
 	if err := c.reconcileQueue(); err != nil {
 		_ = st.ReleaseLease(l.Token)
 		return nil, err
