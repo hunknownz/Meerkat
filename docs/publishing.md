@@ -1,6 +1,6 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.2`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.3`.
 
 ## GitHub repository (current)
 
@@ -12,7 +12,7 @@ Meerkat has two independent distribution paths. Only the first is used for `0.4.
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.2` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.3` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
   Until then, use the documented source build in [install](install.md); no
   nonexistent release download is required for the repository installation.
 

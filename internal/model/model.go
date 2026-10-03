@@ -48,6 +48,7 @@ const (
 	TaskDelivered      = "delivered"
 	TaskFailed         = "failed"
 	TaskStopped        = "stopped"
+	TaskPaused         = "paused"
 	TaskUnknown        = "unknown"
 )
 
@@ -72,7 +73,7 @@ const (
 var (
 	// TaskStates lists every valid task state.
 	TaskStates = []string{TaskReady, TaskQueued, TaskBlocked, TaskImplementing, TaskFirstDelivery, TaskChecking,
-		TaskFinalCandidate, TaskPolishing, TaskRechecking, TaskFixing, TaskDelivered, TaskFailed, TaskStopped, TaskUnknown}
+		TaskFinalCandidate, TaskPolishing, TaskRechecking, TaskFixing, TaskDelivered, TaskFailed, TaskStopped, TaskPaused, TaskUnknown}
 	// ActiveTaskStates are "in progress under a controller"; at most one per worktree.
 	ActiveTaskStates = []string{TaskImplementing, TaskFirstDelivery, TaskChecking, TaskFinalCandidate, TaskPolishing,
 		TaskRechecking, TaskFixing}

@@ -18,7 +18,7 @@ The adapter clears queued messages, aborts, checks for idle, closes stdin and wa
 
 Unconfirmed session outcomes and session claims left running after a service restart become `unknown`. They cannot be reused merely by adding `--acknowledge-interruption`. The history and ownership evidence remain available for investigation. No automatic reconciliation or replay of unknown sessions is implemented yet.
 
-This implementation still requires a clean worktree to start. It preserves execution history; it does not yet authorize resuming uncommitted changes. Token/time limits can stop a Run. [Request budget reservations and settlement](request-budgets.md) are implemented for the supported Pi HTTP bridge. Automatic wrap-up and checkpoint-based recovery remain subsequent work in the [complete design](../design/session-budget-coordination-20261003.md).
+New tasks require a clean worktree. An explicit continuation may retain uncommitted work only through a verified [checkpoint](checkpoints.md). Token/time limits can stop a Run; [request reservations and settlement](request-budgets.md) and [early wrap-up](stage-budgets.md) apply to the supported Pi HTTP bridge. Unknown history is not automatically repaired or replayed.
 
 ## Storage and usage
 
@@ -26,10 +26,10 @@ SQLite V4 records Session identity, frozen contract, file reference/digest, veri
 
 Public snapshots, MCP results and default metric exports exclude raw history and private session paths. Ledger-backed Run usage comes from raw request settlement; other executor runs retain current event accounting. Pi's historical session total is not added again. Missing token fields and prices remain unknown. Pi-reported cost is an estimate, not a confirmed bill.
 
-Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V4 stores and backups migrate to V5, retaining session and request-budget history.
+Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V5 stores and backups migrate to V6, retaining session, request-budget and checkpoint history.
 
 ## Verification scope
 
 Real local child-process fixtures exercise RPC, Git delivery, reuse, current usage, stop ordering, caller cancellation, token-limit stopping, missing receipts and private data filtering. Scheduler tests exercise independent review, fixes after polish and restart uncertainty. Storage tests exercise ownership, migrations, private file backup/restore and corruption rejection.
 
-The opt-in installed Pi 0.99.1 probe reopens a seeded history twice in offline mode without submitting a model prompt. It verifies protocol and file compatibility. Real model coding, budget pause/resume and native Codex display still require their separate integration acceptance.
+Opt-in installed Pi 0.99.1 checks reopen seeded history offline and exercise actual local write/bash tools, request denial, dirty checkpoint continuation and a final commit against an isolated loopback fake model. They use dummy credentials and do not prove delivery with a paid provider. Standard native monitor acceptance is recorded separately in [host evidence](codex-ui-acceptance.md).

@@ -133,7 +133,7 @@ func sessionSHAProgress(st *model.State, t model.Task, old, head string) bool {
 	return false
 }
 
-func (c *Core) startRoleRecord(s *model.Session, runID string, fresh bool, fn func(*model.State) error) error {
+func (c *Core) startRoleRecord(s *model.Session, runID string, fresh bool, fn func(*model.State) error, saved ...model.Checkpoint) error {
 	if s == nil {
 		return c.update(fn)
 	}
@@ -142,14 +142,14 @@ func (c *Core) startRoleRecord(s *model.Session, runID string, fresh bool, fn fu
 	if c.isLost() {
 		return ErrLeaseLost
 	}
-	err := c.st.StartSessionRunOwned(c.token, *s, runID, fresh, fn)
+	err := c.st.StartSessionRunOwned(c.token, *s, runID, fresh, fn, saved...)
 	if errors.Is(err, store.ErrLeaseLost) {
 		c.loseLease()
 	}
 	return err
 }
 
-func (c *Core) finishRoleRecord(s *model.Session, runID string, fn func(*model.State) error) error {
+func (c *Core) finishRoleRecord(s *model.Session, runID string, fn func(*model.State) error, saved ...model.Checkpoint) error {
 	if s == nil {
 		return c.update(fn)
 	}
@@ -158,7 +158,7 @@ func (c *Core) finishRoleRecord(s *model.Session, runID string, fn func(*model.S
 	if c.isLost() {
 		return ErrLeaseLost
 	}
-	err := c.st.FinishSessionRunOwned(c.token, *s, runID, fn)
+	err := c.st.FinishSessionRunOwned(c.token, *s, runID, fn, saved...)
 	if errors.Is(err, store.ErrLeaseLost) {
 		c.loseLease()
 	}

@@ -354,6 +354,10 @@ func (c *Core) queueLoop() {
 						_ = c.finishMember(op.ID, m.TaskID, "dispatch_contract_changed", false)
 						continue
 					}
+					if c.checkpointOccupied(*t) {
+						_ = c.finishMember(op.ID, m.TaskID, "worktree_reserved_checkpoint", true)
+						continue
+					}
 					if slices.ContainsFunc(st.Tasks, func(other model.Task) bool {
 						return other.ID != t.ID && other.Worktree == t.Worktree && other.State == model.TaskUnknown
 					}) {

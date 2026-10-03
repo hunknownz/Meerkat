@@ -15,7 +15,7 @@ export const ACTIVE_RUN = new Set(['queued', 'pending', 'starting', 'running', '
 export const TASK_LABEL: Record<string, string> = {
   ready: '就绪', queued: '排队中', blocked: '受阻', implementing: '开发中', developing: '开发中',
   first_delivery: '初次交付（未审查）', checking: '审查中', final_candidate: '交付候选', polishing: '精修中',
-  rechecking: '复审中', fixing: '修复中', delivered: '最终代码交付', failed: '失败', stopped: '已停止', unknown: '未知',
+  rechecking: '复审中', fixing: '修复中', delivered: '最终代码交付', failed: '失败', stopped: '已停止', paused: '已暂停', unknown: '未知',
 };
 
 export const roleLabel = (r: string | undefined): string => (r ? ROLE_LABEL[r] ?? r : '未知角色');
@@ -52,6 +52,7 @@ export function dedupLegacy(snapshot: Snapshot | null, legacy: LegacyActive[]): 
 export const lastEvent = (r: Run) => (r.events && r.events.length ? r.events[r.events.length - 1] : undefined);
 
 export function eventLabel(e: { type: string; summary?: string }): string {
+	if(e.type==='checkpoint'&&e.summary==='saved') return '检查点已保存，等待显式恢复';
   if (e.type === 'budget' && e.summary === 'wrap_up_requested') return '预算临界，已请求收尾';
   if (e.type === 'budget' && e.summary === 'wrap_up_accepted') return '收尾请求已接受，等待执行结束';
   return e.summary || e.type;

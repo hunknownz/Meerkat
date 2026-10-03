@@ -40,6 +40,7 @@ The monitor labels active wrap-up and shows task authorization, conservative
 available allowance, pending/unknown requests and safe session summaries. It
 does not expose prompts, private history paths, credentials or write tokens.
 
-This release does not implement dirty-worktree checkpoint recovery or additional
+Verified dirty-worktree continuation is described in [checkpoints](checkpoints.md).
+This release does not implement additional
 budget authorization. Preserved files and an idle session alone do not authorize
 continuation. See the [complete plan](../design/session-budget-coordination-20261003.md).

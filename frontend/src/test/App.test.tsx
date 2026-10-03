@@ -2,12 +2,26 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, type AppActions } from '../App';
 import { RUN_A, snapshot } from './fixtures';
+import { validateEnvelope } from '../generated/validate';
 
 afterEach(cleanup);
 const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: false, stop: vi.fn(async () => ({})), settings: vi.fn(async () => ({})), ...over });
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('shows saved progress without claiming delivery or exposing a resume control', () => {
+    const s=snapshot();s.tasks[0]!.state='paused';
+    s.tasks[0]!.checkpoints=[{id:'checkpoint-1',runId:RUN_A,role:'developer',headSha:'a'.repeat(40),fileCount:2,state:'saved',resumedRunId:null,createdAt:'2025-01-01T00:10:00Z'}];
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(true);
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({readonly:true})} />);
+    view('Tasks');fireEvent.click(screen.getByText('Fix parser'));
+    const text=screen.getByRole('dialog').textContent!;
+    expect(text).toContain('已暂停');expect(text).toContain('检查点已保存');expect(text).toContain('2 个文件变更');
+    expect(text).toContain('保存进度不代表交付');expect(text).toContain('暂存区');
+    expect(screen.queryByRole('button',{name:/恢复|续跑/})).toBeNull();
+    s.tasks[0]!.checkpoints[0]={...s.tasks[0]!.checkpoints[0]!,...{fileRef:'/private/checkpoint'}};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(false);
+  });
   it('shows wrap-up without claiming completion, and unknown budget evidence stays unknown', () => {
     const s = snapshot();
     s.runs[0]!.events = [{ type: 'budget', summary: 'wrap_up_accepted' }];

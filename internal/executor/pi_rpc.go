@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/executor/pibudget"
 	"github.com/hunknownz/Meerkat/internal/executor/pirpc"
 	"github.com/hunknownz/Meerkat/internal/model"
@@ -111,6 +112,8 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 		return o
 	}
 	var mu sync.Mutex
+	activeTools := map[string]bool{}
+	uncertainTools := false
 	settled := make(chan struct{}, 1)
 	limit := make(chan struct{}, 1)
 	drained := make(chan struct{})
@@ -118,6 +121,19 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 		defer close(drained)
 		for ev := range client.Events() {
 			mu.Lock()
+			switch ev.Type {
+			case "tool_execution_start":
+				if ev.ToolID == "" || activeTools[ev.ToolID] {
+					uncertainTools = true
+				} else {
+					activeTools[ev.ToolID] = true
+				}
+			case "tool_execution_end":
+				if !activeTools[ev.ToolID] || !ev.ToolOutcomeKnown || ev.ToolFailed {
+					uncertainTools = true
+				}
+				delete(activeTools, ev.ToolID)
+			}
 			o.t.rpc(ev)
 			over := o.t.liveTotal() > pp.tokens
 			mu.Unlock()
@@ -165,7 +181,8 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 			o.stop = CatBudgetGate
 		}
 	}
-	if e == nil && rpcIdle(state, *req.Session, req) && bridgeReady {
+	checkpointOK := req.Checkpoint == nil || checkpoint.Verify(req.Worktree, *req.Checkpoint) == nil
+	if e == nil && rpcIdle(state, *req.Session, req) && bridgeReady && checkpointOK {
 		rc, e := client.Prompt(rctx, pp.prompt)
 		if e == nil && rc.Disposition == "started" {
 			wrapUp := req.WrapUp
@@ -304,6 +321,7 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	snap, se := p.InspectSession(*req.Session)
 	if verified && !uncertain && shutdownErr == nil && se == nil && o.exitCode != nil && *o.exitCode == 0 {
 		o.session.Digest, o.session.Confirmed = snap.Digest, true
+		o.checkpointSafe = len(activeTools) == 0 && !uncertainTools && groupGone(pid)
 	}
 	return o
 }

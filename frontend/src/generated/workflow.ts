@@ -107,6 +107,7 @@ export interface Task {
   budget?: Budget;
   budgetEvidence?: BudgetEvidence;
   sessions?: SessionSummary[];
+  checkpoints?: CheckpointSummary[];
   stateReason?: NullableString;
   resumeRole?: NullableString;
   candidateSha?: NullableString;
@@ -166,6 +167,20 @@ export interface SessionSummary {
   activeRunId: NullableString;
   lastSha: string;
   updatedAt: string;
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "CheckpointSummary".
+ */
+export interface CheckpointSummary {
+  id: Id;
+  runId: Id;
+  role: string;
+  headSha: string;
+  fileCount: number;
+  state: 'saved' | 'consumed';
+  resumedRunId: string | null;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema

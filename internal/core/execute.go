@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/executor"
 	"github.com/hunknownz/Meerkat/internal/model"
 )
@@ -71,6 +73,7 @@ type runSummary struct {
 	Verdict       string      `json:"verdict,omitempty"`
 	Decision      string      `json:"decision,omitempty"`
 	Report        *reportView `json:"report,omitempty"`
+	CheckpointID  string      `json:"checkpointId,omitempty"`
 }
 
 func summaryOf(r model.Run) runSummary {
@@ -334,13 +337,16 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 		if (t.Origin == OriginDelegate) != delegate {
 			return nil, nil, invalid("delegated tasks run only their developer via run; workflow execute refuses them")
 		}
-		resumable := slices.Contains([]string{model.TaskFailed, model.TaskStopped, model.TaskUnknown}, t.State)
+		resumable := slices.Contains([]string{model.TaskFailed, model.TaskStopped, model.TaskPaused, model.TaskUnknown}, t.State)
 		readyLike := t.State == model.TaskReady || (t.State == model.TaskBlocked && strings.HasPrefix(deref(t.StateReason), "dependency_"))
 		if !readyLike && !resumable {
-			return nil, nil, invalid("task is %s; only ready, failed, stopped or acknowledged unknown tasks can execute", t.State)
+			return nil, nil, invalid("task is %s; only ready, failed, stopped, paused or acknowledged unknown tasks can execute", t.State)
 		}
 		if resumable && !resume {
 			return nil, nil, invalid("task is %s; resume must be requested explicitly", t.State)
+		}
+		if c.checkpointOccupied(*t) {
+			return nil, nil, invalid("worktree is reserved by another task's checkpoint")
 		}
 		for _, o := range st.Tasks {
 			if o.ID != t.ID && o.Worktree == t.Worktree && !slices.Contains(ids, o.ID) && o.State == model.TaskUnknown {
@@ -367,6 +373,32 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 			}
 		}
 		if resumable {
+			cp, e := c.savedCheckpoint(t.ID)
+			if e != nil {
+				return nil, nil, e
+			}
+			if cp != nil {
+				p := pipelineOf(st, t.ID)
+				maxFix := set.MaxFixRounds
+				b := model.DefaultBudget()
+				if t.Budget != nil {
+					b = *t.Budget
+					maxFix = min(maxFix, b.MaxFixRounds)
+				}
+				s := nextStep(p, maxFix)
+				if e := c.verifyCheckpoint(st, *t, *cp, s); e != nil {
+					return nil, nil, e
+				}
+				u, sec := budgetUse(st, t.ID)
+				if b.MaxTokens-u-futureStageReserve(*t, p, s) < 1 || float64(b.MaxWallSeconds)-sec < 1 {
+					return nil, nil, invalid("checkpoint requires a new budget decision; original allowance is exhausted")
+				}
+				states[t.ID] = t.State
+				continue
+			}
+			if t.State == model.TaskPaused {
+				return nil, nil, invalid("paused task has no verified saved checkpoint")
+			}
 			f := inspect(t.Worktree)
 			if f.Err != nil {
 				return nil, nil, invalid("task worktree could not be inspected (%s); refusing to resume", inspectFailed)
@@ -573,6 +605,10 @@ func frozenOK(st *model.State, t model.Task) (model.Context, string) {
 // runRole runs one role. qw is the measured scheduler queue interval for the task's first role; a zero
 // value means no queue preceded this role (it starts on intention), recorded as a known 0 wait.
 func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings, t model.Task, p pipeline, s step, agent string, qw queueWait) bool {
+	if c.checkpointOccupied(t) {
+		c.failTask(t.ID, model.TaskBlocked, "worktree_reserved_checkpoint", s.role)
+		return false
+	}
 	prof, why := c.verifiedProfile(st, set, t, s.role)
 	if why != "" {
 		c.failTask(t.ID, model.TaskFailed, why, s.role)
@@ -589,12 +625,21 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		budget = *t.Budget
 	}
 	remTok, remSec := budget.MaxTokens-usedTok-futureStageReserve(t, p, s), int64(float64(budget.MaxWallSeconds)-usedSec)
+	resumeCP, checkpointErr := c.savedCheckpoint(t.ID)
+	if checkpointErr != nil {
+		c.failTask(t.ID, model.TaskFailed, "checkpoint_unreadable", s.role)
+		return false
+	}
 	if remTok < 1 || remSec < 1 {
 		reason := "budget_tokens"
 		if remTok >= 1 {
 			reason = "budget_time"
 		}
-		c.failTask(t.ID, model.TaskStopped, reason, s.role)
+		state := model.TaskStopped
+		if resumeCP != nil {
+			state = model.TaskPaused
+		}
+		c.failTask(t.ID, state, reason, s.role)
 		return false
 	}
 	capTok, capSec := min(int64(prof.Limits.MaxTokens), remTok), min(int64(prof.Limits.MaxWallSeconds), remSec)
@@ -608,7 +653,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		pre = "worktree_missing"
 	case f.Branch != deref(t.Branch):
 		pre = "branch_changed"
-	case !f.Clean:
+	case !f.Clean && resumeCP == nil:
 		pre = "dirty_worktree_preserved"
 	default:
 		base = expectedHead(st, t, p, f.Head)
@@ -625,9 +670,17 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		c.failTask(t.ID, model.TaskFailed, pre, s.role)
 		return false
 	}
+	if resumeCP != nil && c.verifyCheckpoint(st, t, *resumeCP, s) != nil {
+		c.failTask(t.ID, model.TaskPaused, "checkpoint_mismatch", s.role)
+		return false
+	}
 	ss, fresh, sessionErr := c.selectSession(st, t, prof, s.role, base)
 	if sessionErr != nil {
 		c.failTask(t.ID, model.TaskUnknown, "session_unverifiable", s.role)
+		return false
+	}
+	if resumeCP != nil && (ss == nil || ss.ID != resumeCP.SessionID || ss.FileDigest != resumeCP.SessionDigest) {
+		c.failTask(t.ID, model.TaskPaused, "checkpoint_session_mismatch", s.role)
 		return false
 	}
 	var findings []executor.Finding
@@ -661,6 +714,11 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	defer func() { c.mu.Lock(); delete(c.lanes, runID); c.mu.Unlock() }()
 
 	sm := runSummary{Purpose: s.purpose, Limits: limits{MaxTokens: capTok, MaxWallSeconds: capSec}}
+	var resumeRecords []model.Checkpoint
+	if resumeCP != nil {
+		sm.CheckpointID = resumeCP.ID
+		resumeRecords = append(resumeRecords, *resumeCP)
+	}
 	if s.purpose == "fix" {
 		sm.FixRound = p.fixRounds + 1
 	}
@@ -683,7 +741,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		st.Runs = append(st.Runs, run)
 		tt.State, tt.StateReason, tt.ResumeRole, tt.UpdatedAt = s.taskState, nil, sp(s.role), ts
 		return nil
-	})
+	}, resumeRecords...)
 	if err != nil {
 		if !c.isLost() {
 			c.failTask(t.ID, model.TaskFailed, "persistence_failed", s.role)
@@ -704,7 +762,13 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			cancel(ErrLeaseLost)
 		}
 	}
-	onEvent := func(e model.RunEvent) { guard(func(r *model.Run) { pushEvent(r, e.Type, e.Summary) }) }
+	var wrapRequested atomic.Bool
+	onEvent := func(e model.RunEvent) {
+		if e.Type == "budget" && e.Summary == "wrap_up_requested" {
+			wrapRequested.Store(true)
+		}
+		guard(func(r *model.Run) { pushEvent(r, e.Type, e.Summary) })
+	}
 	onStart := func(pr executor.Process) {
 		guard(func(r *model.Run) {
 			if pr.PID > 0 {
@@ -724,6 +788,10 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if ss != nil {
 		binding := c.sessionBinding(*ss, t.Worktree)
 		req.Session = &binding
+	}
+	if resumeCP != nil {
+		req.Checkpoint = &checkpoint.Binding{Digest: resumeCP.FileDigest, Scope: slices.Clone(t.Scope)}
+		req.TaskBrief += "\nContinue the exact verified local checkpoint and this session's history. Preserve existing staged and unstaged work, inspect only what the task needs, and finish the original role contract. Past checks and incomplete work are not delivery. The original task allowance still applies."
 	}
 	if budget.StageReserves != nil {
 		req.WrapUpTokens = min(budget.StageReserves.WrapUpTokens, capTok-1)
@@ -833,6 +901,14 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			cat, reason = why, why
 		}
 	}
+	var saved []model.Checkpoint
+	partial := cat == executor.CatTokenLimit || cat == executor.CatWallTimeout || wrapRequested.Load() && slices.Contains([]string{executor.CatReportMissing, executor.CatDirty, executor.CatNoCommit}, cat)
+	if partial && cause == nil && ss != nil && sessionKnown && budgetKnown && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil && s.role != "reviewer" && after.Head == base {
+		if cp, e := c.captureCheckpoint(st, t, *ss, runID, base, s); e == nil {
+			saved = append(saved, *cp)
+			stopped = true
+		}
+	}
 	t2 := now()
 	var stopReqs []string
 	c.mu.Lock()
@@ -872,6 +948,11 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			tt.State = model.TaskFailed
 			if stopped {
 				r.State, tt.State = model.RunStopped, model.TaskStopped
+			}
+			if len(saved) == 1 {
+				tt.State = model.TaskPaused
+				sm.CheckpointID = saved[0].ID
+				pushEvent(r, "checkpoint", "saved")
 			}
 			if !sessionKnown || !budgetKnown {
 				r.State, tt.State = model.RunUnknown, model.TaskUnknown
@@ -918,7 +999,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		}
 		tt.UpdatedAt = t2
 		return nil
-	})
+	}, saved...)
 	if err != nil {
 		if !c.isLost() {
 			c.failTask(t.ID, model.TaskFailed, "persistence_failed", s.role)

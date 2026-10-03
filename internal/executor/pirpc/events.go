@@ -20,13 +20,16 @@ type TokenSample struct {
 // text, reasoning, tool arguments/results, queue text or provider diagnostics.
 // Only Settled marks Pi will not continue automatically; task delivery is separate.
 type Event struct {
-	Type            string
-	Tool            string
-	ObservedAt      time.Time
-	Settled         bool
-	ProviderFailure bool
-	Assistant       bool
-	Usage           *TokenSample
+	Type             string
+	Tool             string
+	ToolID           string // private structural identity; never projected into Run events
+	ToolOutcomeKnown bool
+	ToolFailed       bool
+	ObservedAt       time.Time
+	Settled          bool
+	ProviderFailure  bool
+	Assistant        bool
+	Usage            *TokenSample
 }
 
 var eventTypes = map[string]bool{
@@ -43,9 +46,11 @@ func eventSummary(typ string, b []byte) (Event, bool) {
 	}
 	ev := Event{Type: typ, ObservedAt: time.Now().UTC(), Settled: typ == "agent_settled"}
 	var v struct {
-		ToolName string          `json:"toolName"`
-		Usage    json.RawMessage `json:"usage"`
-		Message  *struct {
+		ToolName   string          `json:"toolName"`
+		ToolCallID string          `json:"toolCallId"`
+		IsError    *bool           `json:"isError"`
+		Usage      json.RawMessage `json:"usage"`
+		Message    *struct {
 			Role       string          `json:"role"`
 			Usage      json.RawMessage `json:"usage"`
 			StopReason string          `json:"stopReason"`
@@ -54,6 +59,11 @@ func eventSummary(typ string, b []byte) (Event, bool) {
 	if json.Unmarshal(b, &v) != nil {
 		return ev, true
 	}
+	if len(v.ToolCallID) <= 128 {
+		ev.ToolID = v.ToolCallID
+	}
+	ev.ToolOutcomeKnown = v.IsError != nil
+	ev.ToolFailed = v.IsError != nil && *v.IsError
 	switch v.ToolName {
 	case "read", "bash", "edit", "write", "grep", "find", "ls", "powershell":
 		ev.Tool = v.ToolName

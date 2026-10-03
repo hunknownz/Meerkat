@@ -33,7 +33,7 @@ Stop acceptance and confirmed stopping remain separate. There is no operation-ca
 
 The service records member start before invoking the executor. On restart, a dispatch that started but lacks a settled result becomes `unknown`; it is never automatically replayed. Original run identity and dirty files remain available for investigation. A queued dispatch that never started may continue after frozen-contract checks. A changed queued contract prevents recovery.
 
-For failed or stopped tasks, inspect the cause, files and recorded SHA before an explicit `dispatch --resume`. Unknown runs additionally require `--acknowledge-interruption` after verifying the recorded process is gone. Dirty worktree recovery through checkpoints is pending; it is not enabled by this queue.
+For paused tasks, explicitly `dispatch --resume` with a new request UUID; a verified [checkpoint](checkpoints.md) may authorize the exact saved dirty worktree. Failed/stopped tasks without a checkpoint still require a clean worktree at the recorded SHA. Unknown runs additionally require `--acknowledge-interruption` after verifying the old process is gone; this does not repair unknown session history.
 
 Future profile defaults do not replace prepared task profiles. The fix-round setting is captured at submission; changing it later does not expand the operation. The task's token and time limits still apply. Dynamic concurrency changes affect scheduling and do not terminate already running work.
 
@@ -43,4 +43,4 @@ The model control tools are `dispatch_tasks`, `get_operation` and `wait_operatio
 
 Operations and task memberships introduced in SQLite V3 retain a unique claim for each queued/running task. V4 adds [private execution sessions](persistent-sessions.md), and V5 adds [request budget authorization](request-budgets.md). Older stores and supported backups migrate without rewriting historical records. Backups preserve request matching, memberships and nullable usage; inconsistent payload/index records are rejected before restore.
 
-This is the dispatch part of the [complete session and budget design](../design/session-budget-coordination-20261003.md). Persistent Pi sessions and request budget reservations are implemented separately. Automatic wrap-up, checkpoints, message controls, interface extensions and native-host acceptance remain unfinished work packages.
+This is the dispatch part of the [complete session and budget design](../design/session-budget-coordination-20261003.md). Persistent sessions, request reservations, early wrap-up, verified checkpoints and the standard Codex monitor are implemented separately. Extra-budget decisions, full durable message controls and unknown-session resolution remain subsequent work.

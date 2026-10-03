@@ -305,6 +305,11 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               <div className="run" key={s.id}><span className="rt">{roleLabel(s.role)} · {s.executor}</span><span className="rr">{s.state === 'idle' ? '已核实空闲' : s.state === 'running' ? '执行中' : '身份未知'}</span>
                 <span className="rm"><code>{short(s.id)}</code> · HEAD <code>{short(s.lastSha)}</code>{s.activeRunId ? <> · Run <code>{short(s.activeRunId)}</code></> : null}</span></div>
             ))}</div><p className="k small">会话空闲不代表任务已完成。</p></div> : null}
+            {task.checkpoints?.length ? <div className="card"><h3>保存的进度</h3><div className="run-table">{task.checkpoints.map((cp)=>(
+              <div className="run" key={cp.id}><span className="rt">{roleLabel(cp.role)} · {cp.fileCount} 个文件变更</span>
+                <span className="rr">{cp.state==='saved'?'检查点已保存':'已用于续跑'}</span>
+                <span className="rm"><code>{short(cp.id)}</code> · HEAD <code>{short(cp.headSha)}</code> · {formatTime(cp.createdAt)}{cp.resumedRunId?<> · Run <code>{short(cp.resumedRunId)}</code></>:null}</span></div>
+            ))}</div><p className="k small">保存进度不代表交付。显式恢复前会核对文件、暂存区、会话和剩余额度；面板保持只读。</p></div>:null}
             {deliveries.map((d) => (
               <div className="card" key={d.id}><h3>{DELIVERY_LABEL[d.state] ?? d.state}</h3><dl className="concl">
                 <dt>候选 SHA</dt><dd><code>{d.candidateSha}</code></dd>

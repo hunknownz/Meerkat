@@ -146,7 +146,7 @@ ON CONFLICT(id) DO UPDATE SET state=excluded.state,active_run_id=excluded.active
 
 // StartSessionRunOwned atomically records the run and its exclusive history
 // claim. File inspection and executor/network calls must happen before this.
-func (s *Store) StartSessionRunOwned(token string, session model.Session, runID string, fresh bool, fn func(*model.State) error) error {
+func (s *Store) StartSessionRunOwned(token string, session model.Session, runID string, fresh bool, fn func(*model.State) error, saved ...model.Checkpoint) error {
 	return s.tx(func(tx *sql.Tx) error {
 		if err := checkToken(tx, token); err != nil {
 			return err
@@ -169,6 +169,31 @@ func (s *Store) StartSessionRunOwned(token string, session model.Session, runID 
 		if err := fn(st); err != nil {
 			return err
 		}
+		var worktree string
+		for _, task := range st.Tasks {
+			if task.ID == session.TaskID {
+				worktree = task.Worktree
+			}
+		}
+		var occupied int
+		if tx.QueryRow("SELECT count(*) FROM worktree_checkpoints WHERE state='saved' AND worktree=? AND task_id!=?", worktree, session.TaskID).Scan(&occupied) != nil || occupied > 0 {
+			return ErrConflict
+		}
+		if len(saved) > 1 {
+			return ErrConflict
+		}
+		var ownSaved int
+		if tx.QueryRow("SELECT count(*) FROM worktree_checkpoints WHERE state='saved' AND task_id=?", session.TaskID).Scan(&ownSaved) != nil || ownSaved != len(saved) {
+			return ErrConflict
+		}
+		if len(saved) == 1 {
+			if fresh {
+				return ErrConflict
+			}
+			if err := consumeCheckpoint(tx, saved[0], session, runID); err != nil {
+				return err
+			}
+		}
 		if err := writeState(tx, st); err != nil {
 			return err
 		}
@@ -185,7 +210,7 @@ func (s *Store) StartSessionRunOwned(token string, session model.Session, runID 
 
 // FinishSessionRunOwned settles the run and history together. An uncertain
 // process/file remains unknown; it never becomes a resumable idle session.
-func (s *Store) FinishSessionRunOwned(token string, session model.Session, runID string, fn func(*model.State) error) error {
+func (s *Store) FinishSessionRunOwned(token string, session model.Session, runID string, fn func(*model.State) error, saved ...model.Checkpoint) error {
 	return s.tx(func(tx *sql.Tx) error {
 		if err := checkToken(tx, token); err != nil {
 			return err
@@ -205,7 +230,16 @@ func (s *Store) FinishSessionRunOwned(token string, session model.Session, runID
 		if err := writeState(tx, st); err != nil {
 			return err
 		}
-		return putSession(tx, session)
+		if err := putSession(tx, session); err != nil {
+			return err
+		}
+		if len(saved) > 1 {
+			return ErrConflict
+		}
+		if len(saved) == 1 {
+			return putCheckpoint(tx, saved[0], st, session)
+		}
+		return nil
 	})
 }
 

@@ -303,6 +303,22 @@
         "overrun": { "type": "boolean" }
       }
     },
+    "CheckpointSummary": {
+      "title": "CheckpointSummary",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "runId", "role", "headSha", "fileCount", "state", "resumedRunId", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/definitions/Id" },
+        "runId": { "$ref": "#/definitions/Id" },
+        "role": { "type": "string", "maxLength": 100 },
+        "headSha": { "type": "string", "maxLength": 64 },
+        "fileCount": { "type": "integer", "minimum": 0, "maximum": 512 },
+        "state": { "enum": ["saved", "consumed"] },
+        "resumedRunId": { "type": ["string", "null"], "maxLength": 200 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      }
+    },
     "Task": {
       "title": "Task",
       "type": "object",
@@ -371,6 +387,7 @@
         "budget": { "$ref": "#/definitions/Budget" },
         "budgetEvidence": { "$ref": "#/definitions/BudgetEvidence" },
         "sessions": { "type": "array", "items": { "$ref": "#/definitions/SessionSummary" } },
+        "checkpoints": { "type": "array", "items": { "$ref": "#/definitions/CheckpointSummary" } },
         "stateReason": {
           "$ref": "#/definitions/NullableString"
         },

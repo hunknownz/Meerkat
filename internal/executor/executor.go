@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/model"
 	"github.com/hunknownz/Meerkat/internal/requestbudget"
 )
@@ -84,7 +85,8 @@ type Request struct {
 	Budget          requestbudget.Authority // private request authority, never serialized
 	WrapUpTokens    int64
 	WrapUpBefore    time.Duration
-	WrapUp          <-chan struct{} // authority notification; adapter converts it to its protocol
+	WrapUp          <-chan struct{}     // authority notification; adapter converts it to its protocol
+	Checkpoint      *checkpoint.Binding // private authority for an exact dirty start
 }
 
 // Capabilities describe implemented operations, not planned adapters or policy.
@@ -158,24 +160,25 @@ type Report struct {
 
 // Result is the outcome of one step. Category is empty on success.
 type Result struct {
-	RunID       string              `json:"runId"`
-	Executor    string              `json:"executor"`
-	Role        string              `json:"role"`
-	Model       model.ModelSnapshot `json:"modelSnapshot"`
-	StartedAt   time.Time           `json:"startedAt"`
-	EndedAt     time.Time           `json:"endedAt"`
-	Process     *Process            `json:"process,omitempty"`
-	ExitCode    *int                `json:"exitCode"`
-	Signal      string              `json:"signal,omitempty"`
-	Usage       model.Usage         `json:"usage"`
-	Outcome     string              `json:"outcome"` // model.RunSucceeded | RunFailed | RunStopped
-	Category    string              `json:"category,omitempty"`
-	BaselineSHA string              `json:"baselineSha"`
-	ResultSHA   string              `json:"resultSha"`
-	Committed   bool                `json:"committed"`
-	Clean       bool                `json:"clean"`
-	Report      *Report             `json:"report"`
-	Session     *SessionOutcome     `json:"-"`
+	RunID          string              `json:"runId"`
+	Executor       string              `json:"executor"`
+	Role           string              `json:"role"`
+	Model          model.ModelSnapshot `json:"modelSnapshot"`
+	StartedAt      time.Time           `json:"startedAt"`
+	EndedAt        time.Time           `json:"endedAt"`
+	Process        *Process            `json:"process,omitempty"`
+	ExitCode       *int                `json:"exitCode"`
+	Signal         string              `json:"signal,omitempty"`
+	Usage          model.Usage         `json:"usage"`
+	Outcome        string              `json:"outcome"` // model.RunSucceeded | RunFailed | RunStopped
+	Category       string              `json:"category,omitempty"`
+	BaselineSHA    string              `json:"baselineSha"`
+	ResultSHA      string              `json:"resultSha"`
+	Committed      bool                `json:"committed"`
+	Clean          bool                `json:"clean"`
+	Report         *Report             `json:"report"`
+	Session        *SessionOutcome     `json:"-"`
+	CheckpointSafe bool                `json:"-"` // confirmed idle exit with no unresolved/failed tool operation
 }
 
 // Executor runs one role step.

@@ -535,11 +535,11 @@ func TestOpenFreshIsV2AndRefusesFuture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("CREATE TABLE x (a); PRAGMA user_version = 6"); err != nil {
+	if _, err := db.Exec("CREATE TABLE x (a); PRAGMA user_version = 7"); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
-	if s, err := Open(future); err == nil || !strings.Contains(err.Error(), "unsupported schema version 6") {
+	if s, err := Open(future); err == nil || !strings.Contains(err.Error(), "unsupported schema version 7") {
 		if s != nil {
 			s.Close()
 		}
@@ -550,7 +550,7 @@ func TestOpenFreshIsV2AndRefusesFuture(t *testing.T) {
 		defer db.Close()
 		var v int
 		return v, db.QueryRow("PRAGMA user_version").Scan(&v)
-	}(); v != 6 {
+	}(); v != 7 {
 		t.Fatal("future store modified")
 	}
 }

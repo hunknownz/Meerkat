@@ -56,6 +56,9 @@ func (s *Store) Backup(destination string) (err error) {
 	if err := s.bundleSessions(dest); err != nil {
 		return err
 	}
+	if err := s.bundleCheckpoints(dest); err != nil {
+		return err
+	}
 	return ValidateBackup(dest)
 }
 
@@ -213,6 +216,9 @@ func ValidateBackup(path string) error {
 		return ErrBadBackup
 	}
 	tables := append([]string{}, schemaTables...)
+	if v >= schemaV6 {
+		tables = append(tables, checkpointTable)
+	}
 	if v >= schemaV5 {
 		tables = append(tables, budgetTables...)
 	}
@@ -240,6 +246,11 @@ func ValidateBackup(path string) error {
 	}
 	if v >= schemaV5 {
 		if err := validateBudgetBackup(db); err != nil {
+			return err
+		}
+	}
+	if v >= schemaV6 {
+		if err := verifyCheckpointBundle(db, nil); err != nil {
 			return err
 		}
 	}
@@ -293,6 +304,10 @@ func Restore(backup, dst string) (err error) {
 		return err
 	}
 	if err := s.materializeSessions(); err != nil {
+		s.Close()
+		return err
+	}
+	if err := s.materializeCheckpoints(); err != nil {
 		s.Close()
 		return err
 	}

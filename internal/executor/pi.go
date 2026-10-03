@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/model"
 )
 
@@ -138,7 +139,11 @@ func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
 	if slices.Contains(protectedBranches, out.branch) {
 		return nil, invalid("refusing protected branch")
 	}
-	if st, err := gitOut(ctx, wt, "status", "--porcelain"); err != nil || st != "" {
+	if req.Checkpoint != nil {
+		if req.Session == nil || req.Role == "reviewer" || checkpoint.Verify(wt, *req.Checkpoint) != nil {
+			return nil, invalid("checkpoint worktree does not match")
+		}
+	} else if st, err := gitOut(ctx, wt, "status", "--porcelain"); err != nil || st != "" {
 		return nil, invalid("worktree is not clean")
 	}
 	if out.baseline, err = gitOut(ctx, wt, "rev-parse", "HEAD"); err != nil || out.baseline != req.ExpectedSHA {
@@ -274,14 +279,15 @@ func safeEvent(fn func(model.RunEvent), typ, summary string) {
 }
 
 type procOutcome struct {
-	t           *tracker
-	proc        *Process
-	exitCode    *int
-	signal      string
-	stop        string // "", CatCanceled, CatWallTimeout, CatTokenLimit
-	spawnErr    bool
-	session     *SessionOutcome
-	protocolErr bool
+	t              *tracker
+	proc           *Process
+	exitCode       *int
+	signal         string
+	stop           string // "", CatCanceled, CatWallTimeout, CatTokenLimit
+	spawnErr       bool
+	session        *SessionOutcome
+	protocolErr    bool
+	checkpointSafe bool
 }
 
 func (p *Pi) run(ctx context.Context, pp *prepared, onEvent func(model.RunEvent), onStart func(Process)) procOutcome {
@@ -393,6 +399,7 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	res.EndedAt = time.Now().UTC()
 	res.Process, res.ExitCode, res.Signal = o.proc, o.exitCode, o.signal
 	res.Session = o.session
+	res.CheckpointSafe = o.checkpointSafe
 	res.Usage = o.t.usage(o.stop != "" || o.spawnErr)
 
 	// Inspect Git state even when the parent context is canceled; never modify the worktree.
