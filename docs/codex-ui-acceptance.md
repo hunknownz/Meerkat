@@ -132,3 +132,21 @@ These are installed-transport checks. Native rendering of the new recovery detai
 has not been accepted; an already expanded panel may cache an earlier resource.
 Open Meerkat in a fresh chat to load the new tools and UI. Paid model execution
 remains paused as requested.
+
+## Beta.6 bounded control details (2026-10-03)
+
+Plugin and live service are now `0.4.0-beta.6`, installed from implementation
+commit `5b0cc0afa1d46d8546cf09cb535407d3cbc6fe62`. All 18 MCP tools, model-only
+control visibility, resource loading, live snapshots, read-only control receipt
+lookup and authority filtering passed installed stdio checks. The UI adds public
+control receipts while keeping the monitor read-only; 22 frontend tests passed.
+
+A stopped V8 backup, isolated V9 restore and live migration preserved all history
+and usage. Installation evidence and hashes are recorded in
+[the bounded control record](../design/durable-controls-20261003.md).
+
+The base native panel acceptance remains the earlier result. New control details
+have not yet been accepted inside a freshly loaded real Codex panel. Existing
+panels may still hold old resources: start a new chat and reopen `open_monitor`
+for this version. No browser, stdio or generated-resource result is counted as
+new native rendering evidence. Paid full delivery remains deferred.

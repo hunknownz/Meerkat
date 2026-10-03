@@ -75,3 +75,32 @@ records. Public receipt rendering and private-field rejection were checked.
 The changed control details still require refreshed native Codex acceptance.
 Automated rendering, installed stdio and resource checks cannot substitute for
 that evidence. Arbitrary messages/follow-ups and paid full delivery remain pending.
+
+## Installation and history reconciliation
+
+Implementation commit: `5b0cc0afa1d46d8546cf09cb535407d3cbc6fe62`.
+All four release artifacts were built from its clean Git archive. macOS arm64
+binary SHA-256: `04a670ebeda417e20c963689ac3e5b109907f13bd2b205686dca85aa24f4c769`.
+The GitHub marketplace is pinned to that commit; the installed plugin and live
+service report `0.4.0-beta.6`.
+
+The idle beta.5 service was identified by PID, start time and exact command
+before termination. A stopped schema V8 backup was restored into a fresh
+isolated V9 directory before switching the live service. Backup, restored and
+live databases passed integrity and foreign-key checks. Every original live
+row except the renewed controller lease matched the backup; restored Issue body
+paths were rebased as intended, with original IDs, fields and bytes preserved.
+Public task/run/delivery/review history and usage also matched: 14 tasks, 21 runs,
+11 deliveries and 6 reviews. No synthetic control or paid run was added.
+
+Installed stdio checks passed initialization, all 18 tools, model-only control
+visibility, read-only receipt lookup, resource loading, `open_monitor`, missing
+historical receipt handling and private-authority filtering. Installed MCP HTML
+matches the committed asset, SHA-256:
+`3c83c83e180e2c9380390b1b272952b1671a6ae7f52781b8cb3a95aabda06585`.
+
+Private backup and reconciliation receipts are retained outside this repository.
+Native acceptance of the new details remains pending: reopen the monitor in a
+new Codex chat to load the updated plugin/resource. These installation checks do
+not replace a refreshed host screenshot or DOM result. No tag, GitHub binary
+release or public-directory submission was made.
