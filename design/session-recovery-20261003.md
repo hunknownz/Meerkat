@@ -80,3 +80,33 @@ Verification on 2026-10-03:
 
 These checks do not establish paid-provider delivery or native rendering of the
 new recovery detail. Installation and live-history reconciliation follow below.
+
+## Installed delivery
+
+Implementation commit: `d74cdcc34d175c4d2afcbb6a4b7de2bf8ac7a5c7`.
+Four supported platform artifacts were built from clean committed HEAD. The
+GitHub marketplace was pinned to that commit and installed as `0.4.0-beta.5`;
+the local service and installed stdio server report the same version.
+
+The idle beta.4 runtime produced a consistent schema V7 backup before cutover.
+Beta.5 restored it into a new isolated directory and upgraded the live store to
+V8. Both passed integrity and foreign-key checks. All original live table rows
+except the controller lease matched the backup; restored history matched too,
+with the Issue body's private path correctly relocated and its exact bytes
+preserved. Public projects, Contexts, Profiles, settings, 14 Tasks, 21 Runs and
+their usage, 11 Deliveries and 6 Reviews matched before and after upgrade.
+No live completion, recovery or budget decision was added during verification.
+
+Installed MCP initialization, all 16 tools, resource loading, `open_monitor` and
+read-only recovery inspection passed. The latter returned blocked for a settled
+historical task and made no proposal. Recovery/budget tools are model-only;
+monitor data has no private authority/history. The installed MCP App resource is
+byte-identical to the committed HTML, includes the recovery detail and has SHA-256
+`3d7b09db1dc0a9fd06d0569efbddf56ae625d671da34140b0927e7129f1e40fe`.
+The installed darwin-arm64 runtime binary SHA-256 is
+`6a6c5999336d141c92ebc80e5185acd1714bbe645e55c5f6dae3a993981a8f9f`.
+
+No paid request or remote Issue write was made. The newly installed resource
+still needs fresh-chat/native acceptance for its changed detail; installed
+transport checks supplement the previously accepted standard Codex monitor.
+This bounded delivery completes the recovery item, not all 20 work packages.

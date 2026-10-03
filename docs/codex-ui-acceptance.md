@@ -107,3 +107,28 @@ This verifies the installed transport and resource. It does not establish that
 an already open Codex panel reloaded the new budget/checkpoint detail. Reopen in a
 fresh chat to load the new stdio tools and UI; native detail acceptance remains
 separate from the already accepted base monitor.
+
+## Installed beta.5 verification
+
+The marketplace is pinned to implementation commit
+`d74cdcc34d175c4d2afcbb6a4b7de2bf8ac7a5c7`. The installed plugin, stdio server
+and running service report `0.4.0-beta.5`. Initialization, discovery of all
+16 tools, resource loading, `open_monitor` and read-only recovery inspection
+passed. The three recovery tools are model-only; Tasks exposes summaries without
+recovery controls or private authority. Installed HTML matches the committed
+resource byte for byte, with SHA-256
+`3d7b09db1dc0a9fd06d0569efbddf56ae625d671da34140b0927e7129f1e40fe`.
+The installed runtime binary SHA-256 is
+`6a6c5999336d141c92ebc80e5185acd1714bbe645e55c5f6dae3a993981a8f9f`.
+
+A stopped beta.4 schema V7 backup, isolated beta.5 restore and live schema V8
+store passed integrity/foreign-key checks. The original 14 tasks, 21 runs and
+usage, 11 deliveries, 6 reviews, profiles, contexts and settings matched exactly.
+Issue receipt body bytes were also preserved, with its restored private path
+relocated. No live task was recovered or given additional budget. See
+[the delivery record](../design/session-recovery-20261003.md).
+
+These are installed-transport checks. Native rendering of the new recovery detail
+has not been accepted; an already expanded panel may cache an earlier resource.
+Open Meerkat in a fresh chat to load the new tools and UI. Paid model execution
+remains paused as requested.
