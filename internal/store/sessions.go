@@ -117,15 +117,19 @@ func (s *Store) SessionForRun(runID string) (model.Session, error) {
 		return model.Session{}, fmt.Errorf("store: session read failed")
 	}
 	defer tx.Rollback()
+	return sessionForRun(tx, runID)
+}
+
+func sessionForRun(q querier, runID string) (model.Session, error) {
 	var id string
-	err = tx.QueryRow("SELECT session_id FROM session_runs WHERE run_id=?", runID).Scan(&id)
+	err := q.QueryRow("SELECT session_id FROM session_runs WHERE run_id=?", runID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return model.Session{}, ErrNotFound
 	}
 	if err != nil {
 		return model.Session{}, fmt.Errorf("store: session read failed")
 	}
-	return loadSession(tx, id)
+	return loadSession(q, id)
 }
 
 func immutableSession(a, b model.Session) bool {

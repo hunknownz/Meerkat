@@ -407,6 +407,7 @@ func (s *Server) toolList() []any {
 		tools = append(tools, dispatchTools()...)
 		tools = append(tools, budgetTools()...)
 		tools = append(tools, recoveryTools()...)
+		tools = append(tools, runControlTools()...)
 	}
 	return tools
 }
@@ -480,6 +481,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		}
 		if p.Name == ToolInspectRecovery || p.Name == ToolApplyRecovery || p.Name == ToolGetRecovery {
 			return s.recoveryTool(ctx, p.Name, p.Arguments)
+		}
+		if p.Name == ToolRequestWrapUp || p.Name == ToolGetControlReceipt {
+			return s.runControlTool(ctx, p.Name, p.Arguments)
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
 	}

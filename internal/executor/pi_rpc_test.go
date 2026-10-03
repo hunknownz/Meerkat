@@ -82,7 +82,7 @@ func TestPiRPCFixtureChild(t *testing.T) {
 				emit(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "usage": map[string]any{"input": 200, "output": 20, "cacheRead": 5, "cacheWrite": 1}}})
 				continue
 			}
-			if mode == "block" || mode == "end_only" || mode == "wrap" || mode == "wrap_lost_reply" {
+			if mode == "block" || mode == "end_only" || mode == "wrap" || mode == "wrap_lost_reply" || mode == "wrap_rejected" || mode == "wrap_handled" {
 				if mode == "end_only" {
 					emit(map[string]any{"type": "agent_end"})
 				}
@@ -117,10 +117,23 @@ func TestPiRPCFixtureChild(t *testing.T) {
 		case "clear_queue":
 			response(q.ID, q.Type, nil)
 		case "steer":
+			if path := os.Getenv("CONTROL_BEFORE_SEND"); path != "" {
+				if _, e := os.Stat(path); e != nil {
+					os.Exit(9)
+				}
+			}
 			if mode == "wrap_lost_reply" {
 				continue
 			}
-			response(q.ID, q.Type, map[string]string{"disposition": "queued"})
+			if mode == "wrap_rejected" {
+				emit(map[string]any{"type": "response", "id": q.ID, "command": q.Type, "success": false, "error": "PRIVATE_REJECTION"})
+				continue
+			}
+			disposition := "queued"
+			if mode == "wrap_handled" {
+				disposition = "handled"
+			}
+			response(q.ID, q.Type, map[string]string{"disposition": disposition})
 		case "abort":
 			streaming = false
 			response(q.ID, q.Type, nil)
@@ -130,6 +143,82 @@ func TestPiRPCFixtureChild(t *testing.T) {
 		}
 	}
 	os.Exit(0)
+}
+
+type fixtureControlAuthority struct {
+	path                string
+	states              []string
+	disposition, reason string
+	failFinish          bool
+}
+
+func (a *fixtureControlAuthority) Begin(id string) error {
+	a.states = append(a.states, model.ControlSending)
+	return os.WriteFile(a.path, []byte(id), 0o600)
+}
+func (a *fixtureControlAuthority) Finish(id, state, disposition, reason string) error {
+	if a.failFinish {
+		return fmt.Errorf("private persistence failure")
+	}
+	a.states = append(a.states, state)
+	a.disposition, a.reason = disposition, reason
+	return nil
+}
+
+func TestPiRPCDurableControlReceiptAndBudgetCoalescing(t *testing.T) {
+	for _, mode := range []string{"wrap", "wrap_handled", "wrap_rejected", "wrap_lost_reply", "persist_failure"} {
+		t.Run(mode, func(t *testing.T) {
+			e := setup(t)
+			fixtureMode := mode
+			if mode == "persist_failure" {
+				fixtureMode = "wrap"
+			}
+			req := rpcRequest(t, e, fixtureMode)
+			req.RemainingWall = 600 * time.Millisecond
+			// The explicit control is queued first; the automatic deadline would
+			// otherwise request another steer later in the same Run.
+			if mode == "wrap" || mode == "wrap_handled" {
+				req.WrapUpBefore = 300 * time.Millisecond
+			}
+			a := &fixtureControlAuthority{path: e.args + ".authority", failFinish: mode == "persist_failure"}
+			req.Env = append(req.Env, "CONTROL_BEFORE_SEND="+a.path)
+			messages := make(chan RunControl, 1)
+			messages <- RunControl{ID: "fixture-control", Kind: "wrap_up"}
+			req.Controls = &ControlBinding{Messages: messages, Authority: a}
+			p := NewPi()
+			p.Grace = time.Second
+			r, err := p.Execute(context.Background(), req, nil, nil)
+			commands, _ := os.ReadFile(e.args + ".commands")
+			if strings.Count(string(commands), "steer\n") != 1 || err == nil || r.Outcome == model.RunSucceeded || len(a.states) == 0 || a.states[0] != model.ControlSending {
+				t.Fatal("send order, replay or false delivery", a.states, r, err, string(commands))
+			}
+			switch mode {
+			case "wrap", "wrap_handled":
+				if len(a.states) != 2 || a.states[1] != model.ControlAcknowledged || !r.Session.Confirmed || a.reason != "" {
+					t.Fatal(a, r)
+				}
+				want := "queued"
+				if mode == "wrap_handled" {
+					want = "handled"
+				}
+				if a.disposition != want {
+					t.Fatal(a)
+				}
+			case "wrap_rejected":
+				if len(a.states) != 2 || a.states[1] != model.ControlRejected || a.reason != "executor_refused" || !r.Session.Confirmed {
+					t.Fatal(a, r)
+				}
+			case "wrap_lost_reply":
+				if len(a.states) != 2 || a.states[1] != model.ControlUnknown || r.Session.Confirmed {
+					t.Fatal(a, r)
+				}
+			case "persist_failure":
+				if len(a.states) != 1 || r.Session.Confirmed {
+					t.Fatal(a, r)
+				}
+			}
+		})
+	}
 }
 
 func TestPiRPCWrapUpAcceptedIsNotDeliveryAndNeverExtendsDeadline(t *testing.T) {

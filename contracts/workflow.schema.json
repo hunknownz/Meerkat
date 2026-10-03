@@ -28,6 +28,94 @@
     }
   },
   "definitions": {
+    "ControlReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "taskId",
+        "runId",
+        "createdAt",
+        "updatedAt",
+        "runState",
+        "sessionId",
+        "kind",
+        "state",
+        "disposition",
+        "reason",
+        "outcome"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "runState": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "wrap_up",
+            "stop"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "sending",
+            "acknowledged",
+            "rejected",
+            "unknown",
+            "processed"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            null,
+            "queued",
+            "handled"
+          ]
+        },
+        "reason": {
+          "enum": [
+            null,
+            "run_ended_before_send",
+            "run_interrupted",
+            "contract_changed",
+            "executor_refused",
+            "wrap_up_already_requested",
+            "protocol_reply_unknown",
+            "controller_interrupted",
+            "unsupported_control"
+          ]
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "Id": {
       "type": "string",
       "minLength": 1,
@@ -386,6 +474,7 @@
         },
         "budget": { "$ref": "#/definitions/Budget" },
         "budgetAuthorization": { "$ref": "#/definitions/BudgetAuthorization" },
+        "controlReceipts": { "type": "array", "maxItems": 50, "items": { "$ref": "#/definitions/ControlReceipt" } },
         "recoveryEvidence": { "type": "array", "items": { "$ref": "#/definitions/RecoverySummary" } },
         "budgetEvidence": { "$ref": "#/definitions/BudgetEvidence" },
         "sessions": { "type": "array", "items": { "$ref": "#/definitions/SessionSummary" } },

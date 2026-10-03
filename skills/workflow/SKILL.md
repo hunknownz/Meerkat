@@ -22,7 +22,9 @@ The coordinator owns requirements, key decisions, task boundaries and linked wor
 
 ## Stop and recover
 
-`meerkat stop --run <run-id> --request-id <uuid>` records acceptance. Check the subsequent run state to verify actual stopping.
+`meerkat stop --run <run-id> --request-id <uuid>` records acceptance. Query `control receipt --request-id <uuid>` (MCP `get_control_receipt`) without resending, then inspect the Run to verify its actual outcome. Unknown does not prove process exit.
+
+For an explicitly user-authorized bounded wrap-up, inspect the exact active Run/Session and use `control wrap-up --run <run-id> --session <session-id> --request-id <uuid> --authorization <actual-reference> --apply` (MCP `request_wrap_up`). See [Run controls](../../docs/run-controls.md). The fixed instruction preserves scope and budget; the reference records authorization and cannot authenticate it. Saved, sending and protocol queued/handled receipts are distinct from delivery. Query the same request UUID after a lost reply before another write; never retry automatically. A second explicit wrap-up per Run is refused. Interrupted accepted/sending controls remain unknown across restart and block completed-step recovery. Arbitrary messages and new requirements need a new frozen task.
 
 For a paused task with a saved checkpoint, use `execute --task <id> --resume` (or `dispatch_tasks` with `resume: true` and a new request UUID). See [checkpoint recovery](../../docs/checkpoints.md) when continuing incomplete work. Go and Pi verify the exact dirty worktree, frozen contract, history and effective remaining allowance before continuing. Preserve the staged/unstaged files; do not clean or reset them to force a match.
 

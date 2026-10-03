@@ -705,6 +705,12 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	lctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	l := &lane{cancel: cancel}
+	if ss != nil {
+		if x, ok := c.reg[execName(prof)].(executor.StatefulExecutor); ok && x.Capabilities().GracefulWrapUp {
+			l.controls = make(chan executor.RunControl, 1)
+			l.controlSession = ss.ID
+		}
+	}
 	c.mu.Lock()
 	c.lanes[runID] = l
 	if c.lost {
@@ -766,7 +772,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	}
 	var wrapRequested atomic.Bool
 	onEvent := func(e model.RunEvent) {
-		if e.Type == "budget" && e.Summary == "wrap_up_requested" {
+		if (e.Type == "budget" || e.Type == "control") && e.Summary == "wrap_up_requested" {
 			wrapRequested.Store(true)
 		}
 		guard(func(r *model.Run) { pushEvent(r, e.Type, e.Summary) })
@@ -790,6 +796,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if ss != nil {
 		binding := c.sessionBinding(*ss, t.Worktree)
 		req.Session = &binding
+	}
+	if l.controls != nil {
+		req.Controls = &executor.ControlBinding{Messages: l.controls, Authority: &controlAuthority{c: c, runID: runID}}
 	}
 	if resumeCP != nil {
 		req.Checkpoint = &checkpoint.Binding{Digest: resumeCP.FileDigest, Scope: slices.Clone(t.Scope)}
@@ -820,6 +829,13 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		xr.Session = &executor.SessionOutcome{ID: ss.ID, ProviderID: ss.ProviderID, Digest: ss.FileDigest, Confirmed: true}
 	}
 	wall := time.Since(started).Seconds()
+	if err := c.closeControls(runID, l); err != nil {
+		// Receipt persistence is required before claiming a verified completion.
+		xr.Category = executor.CatSessionUnknown
+		if xr.Session != nil {
+			xr.Session.Confirmed = false
+		}
+	}
 	cause := context.Cause(lctx)
 	if lctx.Err() == nil {
 		cause = nil

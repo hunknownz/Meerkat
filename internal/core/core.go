@@ -40,8 +40,12 @@ type Options struct {
 }
 
 type lane struct {
-	cancel context.CancelCauseFunc
-	stops  []string
+	cancel         context.CancelCauseFunc
+	stops          []string
+	controls       chan executor.RunControl
+	controlID      string
+	controlSession string
+	controlClosed  bool
 }
 
 // Core owns the controller lease for one store.
@@ -98,6 +102,10 @@ func New(st *store.Store, reg Registry, opts ...Options) (*Core, error) {
 		return nil, err
 	}
 	if err := st.ReconcileRequestBudgetsOwned(l.Token); err != nil {
+		_ = st.ReleaseLease(l.Token)
+		return nil, err
+	}
+	if err := st.ReconcileControlsOwned(l.Token); err != nil {
 		_ = st.ReleaseLease(l.Token)
 		return nil, err
 	}
@@ -187,8 +195,10 @@ func (c *Core) loop() {
 			}
 		case <-poll.C:
 			c.processStops()
+			c.processControls()
 		case <-c.kick:
 			c.processStops()
+			c.processControls()
 		}
 	}
 }
@@ -399,6 +409,7 @@ type PublicTask struct {
 	Checkpoints         []model.CheckpointSummary  `json:"checkpoints,omitempty"`
 	BudgetAuthorization *model.BudgetAuthorization `json:"budgetAuthorization,omitempty"`
 	RecoveryEvidence    []model.RecoverySummary    `json:"recoveryEvidence,omitempty"`
+	ControlReceipts     []model.ControlReceipt     `json:"controlReceipts,omitempty"`
 }
 
 // Counts are snapshot counters.
@@ -516,6 +527,18 @@ func (c *Core) Snapshot() (Snapshot, error) {
 			return Snapshot{}, e
 		}
 		pt.RecoveryEvidence = recovery
+		pt.ControlReceipts, e = c.st.ControlSummaries(t.ID, st)
+		if e != nil {
+			return Snapshot{}, e
+		}
+		if !live {
+			for i := range pt.ControlReceipts {
+				v := &pt.ControlReceipts[i]
+				if model.IsActiveRunState(v.RunState) {
+					v.RunState = model.RunUnknown
+				}
+			}
+		}
 		for i := range pt.Sessions {
 			pt.Sessions[i].Role = safeName(pt.Sessions[i].Role)
 			pt.Sessions[i].Executor = safeName(pt.Sessions[i].Executor)

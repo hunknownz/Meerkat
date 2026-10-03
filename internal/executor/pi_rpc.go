@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -186,6 +187,11 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 		rc, e := client.Prompt(rctx, pp.prompt)
 		if e == nil && rc.Disposition == "started" {
 			wrapUp := req.WrapUp
+			wrapSent := false
+			var controls <-chan RunControl
+			if req.Controls != nil && req.Controls.Authority != nil {
+				controls = req.Controls.Messages
+			}
 			var wrapTimer *time.Timer
 			var wrapTime <-chan time.Time
 			if req.WrapUpBefore > 0 {
@@ -197,7 +203,26 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 		waiting:
 			for {
 				select {
+				case control, open := <-controls:
+					if !open {
+						controls = nil
+						continue
+					}
+					sent, unknown := sendRunControl(rctx, client, req.Controls.Authority, control, wrapSent)
+					if unknown {
+						uncertain, o.protocolErr = true, true
+						break waiting
+					}
+					if sent {
+						wrapSent, wrapUp, wrapTime = true, nil, nil
+						if wrapTimer != nil {
+							wrapTimer.Stop()
+						}
+						safeEvent(onEvent, "control", "wrap_up_requested")
+						safeEvent(onEvent, "control", "wrap_up_acknowledged")
+					}
 				case <-wrapUp:
+					wrapSent = true
 					wrapUp, wrapTime = nil, nil
 					if wrapTimer != nil {
 						wrapTimer.Stop()
@@ -213,6 +238,7 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 					}
 					safeEvent(onEvent, "budget", "wrap_up_accepted")
 				case <-wrapTime:
+					wrapSent = true
 					wrapUp, wrapTime = nil, nil
 					safeEvent(onEvent, "budget", "wrap_up_requested")
 					steerCtx, steerCancel := context.WithTimeout(rctx, 3*time.Second)
@@ -324,6 +350,39 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 		o.checkpointSafe = len(activeTools) == 0 && !uncertainTools && groupGone(pid)
 	}
 	return o
+}
+
+// sendRunControl persists sending before a protocol effect. Definite refusal is
+// different from a lost reply. No branch retries a control or changes its text.
+func sendRunControl(ctx context.Context, client *pirpc.Client, authority ControlAuthority, v RunControl, alreadySent bool) (sent, unknown bool) {
+	reject := func(reason string) (bool, bool) {
+		return false, authority.Finish(v.ID, model.ControlRejected, "", reason) != nil
+	}
+	if v.Kind != "wrap_up" {
+		return reject("unsupported_control")
+	}
+	if alreadySent {
+		return reject("wrap_up_already_requested")
+	}
+	if authority.Begin(v.ID) != nil {
+		return false, true
+	}
+	sctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	rc, err := client.Steer(sctx, budgetWrapUpMessage)
+	cancel()
+	if err != nil {
+		var rpcErr *pirpc.Error
+		if errors.As(err, &rpcErr) && (rpcErr.Kind == pirpc.Rejected || rpcErr.Kind == pirpc.NotSent) {
+			return reject("executor_refused")
+		}
+		_ = authority.Finish(v.ID, model.ControlUnknown, "", "protocol_reply_unknown")
+		return false, true
+	}
+	if rc.Disposition != "queued" && rc.Disposition != "handled" {
+		_ = authority.Finish(v.ID, model.ControlUnknown, "", "protocol_reply_unknown")
+		return false, true
+	}
+	return true, authority.Finish(v.ID, model.ControlAcknowledged, rc.Disposition, "") != nil
 }
 
 const budgetWrapUpMessage = "Meerkat budget wrap-up: stop expanding scope. Finish only the current safe operation, preserve work and report the remaining steps and known gaps. If the role contract is already satisfied, write the required report and finish. Do not claim delivery or manufacture a commit when the work is incomplete. No further scope expansion or remote actions. All requests remain within the existing allowance."

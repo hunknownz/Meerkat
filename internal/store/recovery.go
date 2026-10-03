@@ -92,6 +92,15 @@ func (s *Store) Completion(runID string) (model.CompletionRecord, error) {
 	return loadCompletion(s.rdb, runID)
 }
 func recoveryBudget(q querier, tid string) error {
+	cs, e := controls(q, tid)
+	if e != nil {
+		return e
+	}
+	for _, v := range cs {
+		if v.State == model.ControlAccepted || v.State == model.ControlSending || v.State == model.ControlUnknown {
+			return budget.ErrUnknown
+		}
+	}
 	ps, rs, e := budgetRows(q, tid)
 	if e != nil {
 		return e
@@ -305,7 +314,11 @@ func recoveryProposal(q querier, taskID, runID string) (model.RecoveryProposal, 
 			reviews = append(reviews, r)
 		}
 	}
-	return model.RecoveryProposal{SchemaVersion: 1, TaskID: taskID, RunID: runID, CompletionDigest: v.Digest, EvidenceDigest: model.RecoveryDigest([]any{taskByID(st, taskID), runs, ss, ps, rs, cps, ds, reviews})}, nil
+	cs, err := controls(q, taskID)
+	if err != nil {
+		return model.RecoveryProposal{}, err
+	}
+	return model.RecoveryProposal{SchemaVersion: 1, TaskID: taskID, RunID: runID, CompletionDigest: v.Digest, EvidenceDigest: model.RecoveryDigest([]any{taskByID(st, taskID), runs, ss, ps, rs, cps, ds, reviews, cs})}, nil
 }
 func (s *Store) ProposeRecovery(taskID, runID string) (model.RecoveryProposal, error) {
 	tx, err := s.rdb.Begin()

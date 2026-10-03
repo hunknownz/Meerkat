@@ -366,7 +366,7 @@ func controlFailure(err error, runID, requestID string) map[string]any {
 		status, text, accepted = "not_sent", unavailable, false
 	}
 	if status == "unknown" && requestID != "" {
-		text = "Stop request outcome is unknown. Query get_run or explicitly repeat stop_run with the same runId and requestId to recover the receipt. Do not automatically retry."
+		text = "Stop request outcome is unknown. Query get_control_receipt with the same requestId, then get_run for current state. Do not automatically retry."
 	}
 	r := structured(text, map[string]any{"schemaVersion": 1, "status": status, "accepted": accepted, "runId": runID, "requestId": requestID})
 	r["isError"] = true

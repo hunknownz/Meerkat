@@ -90,7 +90,8 @@ const (
 	schemaV6      = 6
 	schemaV7      = 7
 	schemaV8      = 8
-	schemaVersion = schemaV8
+	schemaV9      = 9
+	schemaVersion = schemaV9
 )
 
 // Settled delegate candidates (core.OriginDelegate / core.DelegateCandidate). They stay in first_delivery for
@@ -293,6 +294,11 @@ func (s *Store) migrate() error {
 	if v < schemaV8 {
 		if _, err := tx.Exec(migrationV8); err != nil {
 			return fmt.Errorf("store: migration v8 failed")
+		}
+	}
+	if v < schemaV9 {
+		if _, err := tx.Exec(migrationV9); err != nil {
+			return fmt.Errorf("store: migration v9 failed")
 		}
 	}
 	return tx.Commit()
@@ -716,6 +722,9 @@ func (s *Store) RequestStop(runID, requestID string) (model.StopReceipt, error) 
 			return fmt.Errorf("store: read stop failed")
 		}
 		var n int
+		if err := tx.QueryRow("SELECT count(*) FROM run_controls WHERE request_id=?", requestID).Scan(&n); err != nil || n != 0 {
+			return ErrConflict
+		}
 		if err := tx.QueryRow("SELECT count(*) FROM runs WHERE id = ?", runID).Scan(&n); err != nil {
 			return fmt.Errorf("store: read run failed")
 		}

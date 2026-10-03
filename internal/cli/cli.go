@@ -44,6 +44,9 @@ Via daemon:
                                              --dry-run validates only, records nothing
   snapshot                                   public snapshot (+ local history summary)
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
+  control wrap-up --run ID --session ID --request-id UUID --authorization REF --apply
+                                             bounded instruction; accepted != acknowledged != delivered
+  control receipt --request-id UUID         read a wrap-up or stop receipt without resending
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
   budget propose --task ID --add-tokens N --add-wall-seconds N --reason TEXT [--output FILE]
   budget apply --input PROPOSAL.json --request-id UUID --authorization REF --apply
@@ -93,7 +96,7 @@ func Run(env Env, args []string) int {
 		return ExitOK
 	}
 	run, found := commands[cmd]
-	if cmd == "issue" || cmd == "budget" || cmd == "recovery" {
+	if cmd == "issue" || cmd == "budget" || cmd == "recovery" || cmd == "control" {
 		if len(rest) == 0 {
 			return usageFail(env, cmd+" requires a subcommand")
 		}
@@ -141,6 +144,8 @@ func init() {
 		"recovery inspect": cmdRecoveryInspect,
 		"recovery apply":   cmdRecoveryApply,
 		"recovery receipt": cmdRecoveryReceipt,
+		"control wrap-up":  cmdControlWrapUp,
+		"control receipt":  cmdControlReceipt,
 	}
 }
 

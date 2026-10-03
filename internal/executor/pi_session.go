@@ -16,7 +16,7 @@ import (
 const MaxSessionBytes = 64 << 20
 
 func (*Pi) Capabilities() Capabilities {
-	return Capabilities{Protocol: "pi-rpc-v0.99.1", PersistentSessions: true, BidirectionalControl: true, UsageEvents: true, RequestBudgetGate: true}
+	return Capabilities{Protocol: "pi-rpc-v0.99.1", PersistentSessions: true, BidirectionalControl: true, GracefulWrapUp: true, UsageEvents: true, RequestBudgetGate: true}
 }
 
 func sessionParent(b SessionBinding) error {

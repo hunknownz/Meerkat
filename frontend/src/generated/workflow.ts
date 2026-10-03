@@ -106,6 +106,10 @@ export interface Task {
   };
   budget?: Budget;
   budgetAuthorization?: BudgetAuthorization;
+  /**
+   * @maxItems 50
+   */
+  controlReceipts?: ControlReceipt[];
   recoveryEvidence?: RecoverySummary[];
   budgetEvidence?: BudgetEvidence;
   sessions?: SessionSummary[];
@@ -172,6 +176,33 @@ export interface BudgetDecisionSummary {
   addWallSeconds: number;
   reason: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "ControlReceipt".
+ */
+export interface ControlReceipt {
+  requestId: string;
+  taskId: string;
+  runId: string;
+  createdAt: string;
+  updatedAt: string;
+  runState: string;
+  sessionId: string | null;
+  kind: 'wrap_up' | 'stop';
+  state: 'accepted' | 'sending' | 'acknowledged' | 'rejected' | 'unknown' | 'processed';
+  disposition: null | 'queued' | 'handled';
+  reason:
+    | null
+    | 'run_ended_before_send'
+    | 'run_interrupted'
+    | 'contract_changed'
+    | 'executor_refused'
+    | 'wrap_up_already_requested'
+    | 'protocol_reply_unknown'
+    | 'controller_interrupted'
+    | 'unsupported_control';
+  outcome: string | null;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema

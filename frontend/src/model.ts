@@ -55,11 +55,13 @@ export function eventLabel(e: { type: string; summary?: string }): string {
 	if(e.type==='checkpoint'&&e.summary==='saved') return '检查点已保存，等待显式恢复';
   if (e.type === 'budget' && e.summary === 'wrap_up_requested') return '预算临界，已请求收尾';
   if (e.type === 'budget' && e.summary === 'wrap_up_accepted') return '收尾请求已接受，等待执行结束';
+  if (e.type === 'control' && e.summary === 'wrap_up_requested') return '已请求收尾，原范围和预算不变';
+  if (e.type === 'control' && e.summary === 'wrap_up_acknowledged') return '执行器已接收收尾指令，等待运行结果';
   return e.summary || e.type;
 }
 
 export function isWrappingUp(r: Run): boolean {
-  return r.state === 'running' && !!r.events?.some((e) => e.type === 'budget' && /^wrap_up_(requested|accepted)$/.test(e.summary ?? ''));
+  return r.state === 'running' && !!r.events?.some((e) => (e.type === 'budget' || e.type === 'control') && /^wrap_up_(requested|accepted|acknowledged)$/.test(e.summary ?? ''));
 }
 
 export const COUNTERS = ['input', 'output', 'cacheRead', 'cacheWrite', 'total'] as const;

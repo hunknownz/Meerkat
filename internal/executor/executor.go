@@ -87,6 +87,7 @@ type Request struct {
 	WrapUpBefore    time.Duration
 	WrapUp          <-chan struct{}     // authority notification; adapter converts it to its protocol
 	Checkpoint      *checkpoint.Binding // private authority for an exact dirty start
+	Controls        *ControlBinding     // private, durable Run controls owned by the scheduler
 }
 
 // Capabilities describe implemented operations, not planned adapters or policy.
@@ -96,6 +97,7 @@ type Capabilities struct {
 	BidirectionalControl bool
 	UsageEvents          bool
 	RequestBudgetGate    bool
+	GracefulWrapUp       bool
 }
 
 // SessionBinding is an opaque, private executor history binding. The scheduler

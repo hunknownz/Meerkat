@@ -73,10 +73,10 @@ func noCommand(context.Context, server.Request) (server.Response, error) {
 func TestControlToolsMetadata(t *testing.T) {
 	s := controlled(snapshotWith(), noCommand)
 	tools := s.toolList()
-	if len(tools) != 16 {
+	if len(tools) != 18 {
 		t.Fatalf("tools: %v", tools)
 	}
-	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false, ToolDispatchTasks: false, ToolGetOperation: true, ToolWaitOperation: true, ToolProposeBudget: true, ToolApplyBudget: false, ToolGetBudgetDecision: true, ToolInspectRecovery: true, ToolApplyRecovery: false, ToolGetRecovery: true}
+	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false, ToolDispatchTasks: false, ToolGetOperation: true, ToolWaitOperation: true, ToolProposeBudget: true, ToolApplyBudget: false, ToolGetBudgetDecision: true, ToolInspectRecovery: true, ToolApplyRecovery: false, ToolGetRecovery: true, ToolRequestWrapUp: false, ToolGetControlReceipt: true}
 	for _, raw := range tools[2:] {
 		tool := raw.(map[string]any)
 		name := tool["name"].(string)
@@ -86,7 +86,7 @@ func TestControlToolsMetadata(t *testing.T) {
 		}
 		delete(want, name)
 		ann := tool["annotations"].(map[string]any)
-		if ann["readOnlyHint"] != readonly || ann["openWorldHint"] != false || ann["destructiveHint"] != (name == ToolStopRun || name == ToolApplyBudget || name == ToolApplyRecovery) || ann["idempotentHint"] != (name != ToolUpdateSettings) {
+		if ann["readOnlyHint"] != readonly || ann["openWorldHint"] != false || ann["destructiveHint"] != (name == ToolStopRun || name == ToolApplyBudget || name == ToolApplyRecovery || name == ToolRequestWrapUp) || ann["idempotentHint"] != (name != ToolUpdateSettings) {
 			t.Fatalf("annotations %s: %v", name, ann)
 		}
 		if tool["execution"].(map[string]any)["taskSupport"] != "forbidden" {

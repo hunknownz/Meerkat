@@ -231,6 +231,11 @@ type recoveryController interface {
 	RecoveryDecision(string) (model.RecoveryReceipt, error)
 }
 
+type runController interface {
+	RequestWrapUp(model.WrapUpInput) (model.ControlReceipt, error)
+	ControlReceipt(string) (model.ControlReceipt, error)
+}
+
 // Do executes one command under the service-owned context.
 func (s *Service) Do(req Request) Response {
 	select {
@@ -239,6 +244,27 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "request-wrap-up", "control-receipt":
+		cc, can := s.core.(runController)
+		if !can {
+			return bad("unknown op")
+		}
+		if req.Op == "control-receipt" {
+			v, e := cc.ControlReceipt(req.RequestID)
+			if e != nil {
+				return fail(e)
+			}
+			return ok(v)
+		}
+		var in model.WrapUpInput
+		if decodeBudgetInput(req.Input, &in) != nil {
+			return bad("invalid wrap-up input")
+		}
+		v, e := cc.RequestWrapUp(in)
+		if e != nil {
+			return fail(e)
+		}
+		return ok(v)
 	case "inspect-recovery", "apply-recovery", "recovery-decision":
 		rc, can := s.core.(recoveryController)
 		if !can {

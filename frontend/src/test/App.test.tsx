@@ -9,6 +9,21 @@ const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: fal
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('separates a durable control acknowledgement from Run completion and keeps authority private', () => {
+    const s = snapshot();
+    s.tasks[0]!.controlReceipts = [{requestId:RUN_A,taskId:'t1',runId:RUN_A,sessionId:RUN_A,kind:'wrap_up',state:'acknowledged',disposition:'queued',reason:null,createdAt:'2025-01-01T00:00:00Z',updatedAt:'2025-01-01T00:01:00Z',runState:'running',outcome:null},
+      {requestId:'unknown-control',taskId:'t1',runId:RUN_A,sessionId:RUN_A,kind:'wrap_up',state:'unknown',disposition:null,reason:'controller_interrupted',createdAt:'2025-01-01T00:00:00Z',updatedAt:'2025-01-01T00:02:00Z',runState:'unknown',outcome:'unknown'}];
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(true);
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({readonly:true})} />);
+    view('Tasks');fireEvent.click(screen.getByText('Fix parser'));
+    const dialog = screen.getByRole('dialog');const text = dialog.textContent!;
+    expect(text).toContain('收尾 · 执行器已接收');expect(text).toContain('协议回执：已入队');
+    expect(text).toContain('实际运行：运行中');expect(text).toContain('结束结果尚未确认');
+    expect(text).toContain('服务中断，保留未知且不重发');
+    expect([...dialog.querySelectorAll('button')].some(b => /收尾|重发/.test(b.textContent ?? ''))).toBe(false);
+    s.tasks[0]!.controlReceipts[0]={...s.tasks[0]!.controlReceipts[0]!,...{authorizationRef:'private'}};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(false);
+  });
   it('shows original and added allowances separately, without a grant button or private references', () => {
     const s=snapshot();s.tasks[0]!.budget={maxTokens:100,maxWallSeconds:600,maxFixRounds:1};
     s.tasks[0]!.budgetAuthorization={taskId:s.tasks[0]!.id,originalTokens:100,originalWallSeconds:600,addedTokens:950,addedWallSeconds:100,authorizedTokens:1050,authorizedWallSeconds:700,revision:1,decisions:[{requestId:'decision-1',revision:1,addTokens:950,addWallSeconds:100,reason:'Finish original scope',createdAt:'2025-01-01T00:10:00Z'}]};
