@@ -67,3 +67,18 @@ allowance remains authoritative; adding budget is a separate planned step.
 Existing native Codex monitor acceptance is recorded in
 `docs/codex-ui-acceptance.md`. The added checkpoint detail still needs a refreshed
 native host view; frontend/resource checks do not replace that evidence.
+
+## Installation and cutover
+
+Implementation commit: `ab2f9df2680870cbd9197a3a3eedcfb53ac825eb`, integrated into
+`main` and pushed to GitHub. All four supported release binaries were built from
+that clean committed tree. The local marketplace and runtime are installed as
+`0.4.0-beta.3`; the stdio server and exact embedded resource were verified.
+
+The idle beta.2 service was stopped before backup and cutover. Its consistent
+schema V5 backup was restored into an isolated schema V6 directory. Both restored
+and live databases passed integrity/foreign-key checks. Public history matched
+exactly across cutover: 14 tasks, 21 runs, 11 deliveries, 6 reviews, profiles,
+contexts, settings and cumulative usage. Private backup and reconciliation files
+remain outside Git. Installed transport evidence and the remaining new-detail
+host check are recorded in `docs/codex-ui-acceptance.md`.

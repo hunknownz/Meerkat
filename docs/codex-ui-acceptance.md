@@ -59,3 +59,28 @@ No paid model request was made during this verification.
 These installed-transport checks supplement the host evidence above. They do not
 claim that an already open Codex panel reloaded beta.2; that requires reopening
 the panel in a fresh chat or restarting the host.
+
+## Installed beta.3 verification
+
+The GitHub marketplace is pinned to implementation commit
+`ab2f9df2680870cbd9197a3a3eedcfb53ac825eb`, installed as `0.4.0-beta.3`.
+The installed stdio server reports that version; initialization, tool discovery,
+resource loading and `open_monitor` succeeded against the real local service.
+Its MCP App HTML matches the committed asset, includes the checkpoint detail
+code and has SHA-256
+`38e829dbbab744f75dd144383ebe736c3123edca828c517f706b831e9eb7997d`.
+Private credential and authority fields were absent from the monitor response.
+
+The runtime's binary SHA-256 is
+`e19da210348375297a508d062918956dfa22a3dcfb1fea26a3640a34ebb834c4`.
+The stopped beta.2 runtime made a consistent schema V5 backup. The beta.3 runtime
+restored it into a fresh isolated directory; restored and live schema V6 databases
+passed integrity and foreign-key checks. The 14 tasks, 21 runs, 11 deliveries,
+6 reviews, profiles, contexts, settings and cumulative usage matched exactly
+before and after cutover. No paid provider request was sent.
+
+The expanded native monitor was reachable and showed its three views and the
+updated live heartbeat after cutover. Its cached UI version was not established;
+the new checkpoint detail has no native display acceptance yet. Installed resource
+checks and frontend tests do not replace that remaining check. Reopen the plugin
+in a new chat or restart Codex to load the newly installed stdio server and UI.
