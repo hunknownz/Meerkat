@@ -62,7 +62,7 @@ the panel in a fresh chat or restarting the host.
 
 ## Installed beta.3 verification
 
-The GitHub marketplace is pinned to implementation commit
+The GitHub marketplace was pinned to implementation commit
 `ab2f9df2680870cbd9197a3a3eedcfb53ac825eb`, installed as `0.4.0-beta.3`.
 The installed stdio server reports that version; initialization, tool discovery,
 resource loading and `open_monitor` succeeded against the real local service.
@@ -84,3 +84,26 @@ updated live heartbeat after cutover. Its cached UI version was not established;
 the new checkpoint detail has no native display acceptance yet. Installed resource
 checks and frontend tests do not replace that remaining check. Reopen the plugin
 in a new chat or restart Codex to load the newly installed stdio server and UI.
+
+## Installed beta.4 verification
+
+The marketplace is now pinned to implementation commit
+`583a109cde4d24e09a60f0241bb1535ebb8b50be`; the installed plugin, stdio server
+and running service report `0.4.0-beta.4`. Installed initialization, all 13 tools,
+resource loading and `open_monitor` passed. The new budget tools are model-only;
+the monitor has no budget-application controls or private authorization fields.
+The exact committed MCP App HTML has SHA-256
+`caf3b389d6534656575042408ce12e68bf833ab9aa360e59a3640d2d145fc332`.
+The runtime binary has SHA-256
+`a15588ee0776a9f870e2bc3215ca08d420dc61429fd039db13343441561fb02f`.
+
+The idle beta.3 service made a schema V6 backup before cutover. Isolated restore
+and the live schema V7 store passed integrity/foreign-key checks; the original
+14 tasks, 21 runs, 11 deliveries, 6 reviews, profiles, contexts, settings and
+usage matched exactly. No live task received additional budget. No paid model
+request was made. Details are in [the delivery record](../design/budget-decisions-20261003.md).
+
+This verifies the installed transport and resource. It does not establish that
+an already open Codex panel reloaded the new budget/checkpoint detail. Reopen in a
+fresh chat to load the new stdio tools and UI; native detail acceptance remains
+separate from the already accepted base monitor.

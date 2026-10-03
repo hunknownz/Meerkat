@@ -77,3 +77,28 @@ These are isolated/local implementation checks. No existing live task received
 additional allowance and no paid provider request was sent. Native Codex's base
 monitor has acceptance; the new budget/checkpoint detail still needs a refreshed
 native view. The complete 20-work-package plan remains partially implemented.
+
+## Installation and cutover
+
+Implementation commit: `583a109cde4d24e09a60f0241bb1535ebb8b50be`, integrated into
+`main` and pushed to GitHub. All four supported binaries were built from that
+clean tree. The local marketplace is pinned to that commit; plugin, runtime and
+running service report `0.4.0-beta.4`.
+
+The idle beta.3 service was stopped before a consistent schema V6 backup. Beta.4
+restored it into a fresh isolated schema V7 directory, then upgraded the existing
+live store. Both passed integrity and foreign-key checks. Backup, restored and
+live core records matched exactly: 14 tasks, 21 runs, 11 deliveries, 6 reviews,
+profiles, contexts, settings and cumulative usage. The live decision table has
+zero entries: no existing task was granted additional allowance.
+
+Installed stdio initialization, discovery of all 13 tools, model-only visibility
+of the three budget tools, exact MCP App resource and read-only `open_monitor`
+passed. The binary SHA-256 is
+`a15588ee0776a9f870e2bc3215ca08d420dc61429fd039db13343441561fb02f`;
+the embedded UI SHA-256 is
+`caf3b389d6534656575042408ce12e68bf833ab9aa360e59a3640d2d145fc332`.
+Private authorization/credential fields were absent. Backups and raw private
+reconciliation evidence remain outside Git. New native detail acceptance and
+paid provider execution remain outstanding; installed transport checks do not
+claim those results.
