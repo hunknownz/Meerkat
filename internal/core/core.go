@@ -398,6 +398,7 @@ type PublicTask struct {
 	BudgetEvidence      *model.BudgetEvidence      `json:"budgetEvidence,omitempty"`
 	Checkpoints         []model.CheckpointSummary  `json:"checkpoints,omitempty"`
 	BudgetAuthorization *model.BudgetAuthorization `json:"budgetAuthorization,omitempty"`
+	RecoveryEvidence    []model.RecoverySummary    `json:"recoveryEvidence,omitempty"`
 }
 
 // Counts are snapshot counters.
@@ -510,6 +511,11 @@ func (c *Core) Snapshot() (Snapshot, error) {
 		if bv.Revision > 0 {
 			pt.BudgetAuthorization = &bv
 		}
+		recovery, e := c.st.RecoverySummaries(t.ID)
+		if e != nil {
+			return Snapshot{}, e
+		}
+		pt.RecoveryEvidence = recovery
 		for i := range pt.Sessions {
 			pt.Sessions[i].Role = safeName(pt.Sessions[i].Role)
 			pt.Sessions[i].Executor = safeName(pt.Sessions[i].Executor)

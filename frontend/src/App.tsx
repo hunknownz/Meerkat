@@ -308,6 +308,14 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               <span className="rt">修订 {d.revision} · +{num(d.addTokens)} token · +{formatDuration(d.addWallSeconds)}</span>
               <span className="rm">{d.reason} · {formatTime(d.createdAt)} · <code>{short(d.requestId)}</code></span>
             </div>)}{task.budgetAuthorization ? <p className="k small">追加额度保留已用 token 和耗时；任务仍需显式续跑。此面板仅展示预算决策。</p> : null}</div> : null}
+            {task.state === 'unknown' || task.recoveryEvidence?.some(r => r.state !== 'settled') ? <div className="card"><h3>中断恢复</h3>
+              {task.recoveryEvidence?.filter(r => r.state !== 'settled').map(r => <div className="run" key={r.runId}>
+                <span className="rt">{roleLabel(r.role)} · {r.state === 'pending' ? '完成证据已保存，待核对' : '已恢复已完成步骤'}</span>
+                <span className="rm">Run <code>{short(r.runId)}</code> · SHA <code>{short(r.candidateSha)}</code> · {formatTime(r.recoveredAt ?? r.recordedAt)}</span>
+              </div>)}
+              <p className="k small">{task.recoveryEvidence?.some(r => r.state === 'pending') ? '需核对进程、会话、代码和用量后显式恢复；保存证据不会自动续跑。' : task.state === 'unknown' ? '缺少可恢复的完成证据。保留未知状态和已有修改，由协调者继续核对。' : '恢复保留原来的用量和交付版本；后续工作单独续跑。'}</p>
+              <p className="k small">此面板只显示恢复记录。</p>
+            </div> : null}
             {task.sessions?.length ? <div className="card"><h3>执行会话</h3><div className="run-table">{task.sessions.map((s) => (
               <div className="run" key={s.id}><span className="rt">{roleLabel(s.role)} · {s.executor}</span><span className="rr">{s.state === 'idle' ? '已核实空闲' : s.state === 'running' ? '执行中' : '身份未知'}</span>
                 <span className="rm"><code>{short(s.id)}</code> · HEAD <code>{short(s.lastSha)}</code>{s.activeRunId ? <> · Run <code>{short(s.activeRunId)}</code></> : null}</span></div>

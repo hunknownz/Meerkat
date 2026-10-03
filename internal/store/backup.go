@@ -216,6 +216,9 @@ func ValidateBackup(path string) error {
 		return ErrBadBackup
 	}
 	tables := append([]string{}, schemaTables...)
+	if v >= schemaV8 {
+		tables = append(tables, recoveryTables...)
+	}
 	if v >= schemaV7 {
 		tables = append(tables, decisionTable)
 	}
@@ -259,6 +262,11 @@ func ValidateBackup(path string) error {
 	}
 	if v >= schemaV6 {
 		if err := verifyCheckpointBundle(db, nil); err != nil {
+			return err
+		}
+	}
+	if v >= schemaV8 {
+		if err := validateRecoveryBackup(db); err != nil {
 			return err
 		}
 	}

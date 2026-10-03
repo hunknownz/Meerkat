@@ -48,6 +48,9 @@ Via daemon:
   budget propose --task ID --add-tokens N --add-wall-seconds N --reason TEXT [--output FILE]
   budget apply --input PROPOSAL.json --request-id UUID --authorization REF --apply
   budget receipt --request-id UUID          recover an explicitly applied decision; never resumes
+  recovery inspect --task ID [--output FILE] verify an interrupted step without executing
+  recovery apply --input PROPOSAL.json --request-id UUID --authorization REF --apply
+  recovery receipt --request-id UUID        recover a decision receipt; never executes
   issue update --task ID [--apply]           prepare update; post only with --apply
   mcp                                        MCP stdio: read-only monitor plus model control tools
 Offline:
@@ -90,7 +93,7 @@ func Run(env Env, args []string) int {
 		return ExitOK
 	}
 	run, found := commands[cmd]
-	if cmd == "issue" || cmd == "budget" {
+	if cmd == "issue" || cmd == "budget" || cmd == "recovery" {
 		if len(rest) == 0 {
 			return usageFail(env, cmd+" requires a subcommand")
 		}
@@ -115,26 +118,29 @@ var commands map[string]func(Env, []string) (int, error)
 
 func init() {
 	commands = map[string]func(Env, []string) (int, error){
-		"serve":          cmdServe,
-		"prepare":        cmdPrepare,
-		"dispatch":       cmdDispatch,
-		"operation":      cmdOperation,
-		"execute":        cmdExecute,
-		"run":            cmdRun,
-		"snapshot":       cmdSnapshot,
-		"stop":           cmdStop,
-		"settings":       cmdSettings,
-		"issue update":   cmdIssueUpdate,
-		"issue read":     cmdIssueRead,
-		"migrate":        cmdMigrate,
-		"backup":         cmdBackup,
-		"restore":        cmdRestore,
-		"export":         cmdExport,
-		"doctor":         cmdDoctor,
-		"mcp":            cmdMCP,
-		"budget propose": cmdBudgetPropose,
-		"budget apply":   cmdBudgetApply,
-		"budget receipt": cmdBudgetReceipt,
+		"serve":            cmdServe,
+		"prepare":          cmdPrepare,
+		"dispatch":         cmdDispatch,
+		"operation":        cmdOperation,
+		"execute":          cmdExecute,
+		"run":              cmdRun,
+		"snapshot":         cmdSnapshot,
+		"stop":             cmdStop,
+		"settings":         cmdSettings,
+		"issue update":     cmdIssueUpdate,
+		"issue read":       cmdIssueRead,
+		"migrate":          cmdMigrate,
+		"backup":           cmdBackup,
+		"restore":          cmdRestore,
+		"export":           cmdExport,
+		"doctor":           cmdDoctor,
+		"mcp":              cmdMCP,
+		"budget propose":   cmdBudgetPropose,
+		"budget apply":     cmdBudgetApply,
+		"budget receipt":   cmdBudgetReceipt,
+		"recovery inspect": cmdRecoveryInspect,
+		"recovery apply":   cmdRecoveryApply,
+		"recovery receipt": cmdRecoveryReceipt,
 	}
 }
 

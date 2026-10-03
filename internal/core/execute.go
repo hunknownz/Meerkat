@@ -918,7 +918,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	c.mu.Unlock()
 	ok := cat == ""
 	var finalState string
-	err = c.finishRoleRecord(ss, runID, func(st *model.State) error {
+	settle := func(st *model.State) error {
 		r, tt := findRun(st, runID), findTask(st, t.ID)
 		if r == nil || tt == nil {
 			return invalid("run vanished")
@@ -1001,7 +1001,12 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		}
 		tt.UpdatedAt = t2
 		return nil
-	}, saved...)
+	}
+	if ss != nil && ok && sessionKnown && budgetKnown && !budgetOverrun && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil {
+		err = c.stageAndFinishCompletion(runID, *ss, xr.Process, settle)
+	} else {
+		err = c.finishRoleRecord(ss, runID, settle, saved...)
+	}
 	if err != nil {
 		if !c.isLost() {
 			c.failTask(t.ID, model.TaskFailed, "persistence_failed", s.role)

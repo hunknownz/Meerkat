@@ -50,7 +50,8 @@ continuation in the original worktree, not automatic reconstruction in a new one
 ## History, backup and display
 
 Checkpoints were introduced in SQLite V6; V7 adds independent budget decisions
-and preserves existing V1–V6 records. Saved and consumed checkpoint archives
+and V8 adds [verified completed-step recovery](session-recovery.md), preserving
+existing history. Saved and consumed checkpoint archives
 are bundled into consistent backups and materialized only into a new private data
 directory on restore. A missing/corrupt archive rejects backup or restore. A
 resumed Run that is interrupted after its one-time claim remains unknown after a

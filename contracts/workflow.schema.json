@@ -386,6 +386,7 @@
         },
         "budget": { "$ref": "#/definitions/Budget" },
         "budgetAuthorization": { "$ref": "#/definitions/BudgetAuthorization" },
+        "recoveryEvidence": { "type": "array", "items": { "$ref": "#/definitions/RecoverySummary" } },
         "budgetEvidence": { "$ref": "#/definitions/BudgetEvidence" },
         "sessions": { "type": "array", "items": { "$ref": "#/definitions/SessionSummary" } },
         "checkpoints": { "type": "array", "items": { "$ref": "#/definitions/CheckpointSummary" } },
@@ -1000,6 +1001,48 @@
         "revision",
         "decisions"
       ]
+    },
+    "RecoverySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "role",
+        "state",
+        "candidateSha",
+        "recordedAt",
+        "requestId",
+        "recoveredAt"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/Id"
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "settled",
+            "recovered"
+          ]
+        },
+        "candidateSha": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "recordedAt": {
+          "type": "string"
+        },
+        "requestId": {
+          "$ref": "#/definitions/NullableString"
+        },
+        "recoveredAt": {
+          "$ref": "#/definitions/NullableString"
+        }
+      }
     }
   }
 }

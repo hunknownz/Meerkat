@@ -105,6 +105,8 @@ export interface Task {
     [k: string]: string;
   };
   budget?: Budget;
+  budgetAuthorization?: BudgetAuthorization;
+  recoveryEvidence?: RecoverySummary[];
   budgetEvidence?: BudgetEvidence;
   sessions?: SessionSummary[];
   checkpoints?: CheckpointSummary[];
@@ -115,7 +117,6 @@ export interface Task {
   issueRef?: IssueRef;
   createdAt?: string;
   updatedAt?: string;
-  budgetAuthorization?: BudgetAuthorization;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
@@ -141,6 +142,49 @@ export interface Budget {
     wrapUpTokens: number;
     wrapUpSeconds: number;
   };
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "BudgetAuthorization".
+ */
+export interface BudgetAuthorization {
+  taskId: Id;
+  originalTokens: number;
+  originalWallSeconds: number;
+  addedTokens: number;
+  addedWallSeconds: number;
+  authorizedTokens: number;
+  authorizedWallSeconds: number;
+  revision: number;
+  /**
+   * @maxItems 512
+   */
+  decisions: BudgetDecisionSummary[];
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "BudgetDecisionSummary".
+ */
+export interface BudgetDecisionSummary {
+  requestId: Id;
+  revision: number;
+  addTokens: number;
+  addWallSeconds: number;
+  reason: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "RecoverySummary".
+ */
+export interface RecoverySummary {
+  runId: Id;
+  role: string;
+  state: 'pending' | 'settled' | 'recovered';
+  candidateSha: string;
+  recordedAt: string;
+  requestId: NullableString;
+  recoveredAt: NullableString;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
@@ -192,36 +236,6 @@ export interface IssueRef {
   title?: string;
   updatedAt?: string;
   bodyHash?: string;
-}
-/**
- * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
- * via the `definition` "BudgetAuthorization".
- */
-export interface BudgetAuthorization {
-  taskId: Id;
-  originalTokens: number;
-  originalWallSeconds: number;
-  addedTokens: number;
-  addedWallSeconds: number;
-  authorizedTokens: number;
-  authorizedWallSeconds: number;
-  revision: number;
-  /**
-   * @maxItems 512
-   */
-  decisions: BudgetDecisionSummary[];
-}
-/**
- * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
- * via the `definition` "BudgetDecisionSummary".
- */
-export interface BudgetDecisionSummary {
-  requestId: Id;
-  revision: number;
-  addTokens: number;
-  addWallSeconds: number;
-  reason: string;
-  createdAt: string;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema

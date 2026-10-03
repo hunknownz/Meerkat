@@ -16,7 +16,7 @@ The adapter checks Pi's selected provider/model, session identity, file and idle
 
 The adapter clears queued messages, aborts, checks for idle, closes stdin and waits for exit. Its fallback signals only the child process group owned by that Run. A missing prompt receipt is never retried blindly.
 
-Unconfirmed session outcomes and session claims left running after a service restart become `unknown`. They cannot be reused merely by adding `--acknowledge-interruption`. The history and ownership evidence remain available for investigation. No automatic reconciliation or replay of unknown sessions is implemented yet.
+Unconfirmed session outcomes and session claims left running after a service restart become `unknown`. They cannot be reused merely by adding `--acknowledge-interruption`. The history and ownership evidence remain available for investigation. [Verified completion recovery](session-recovery.md) can restore an already completed step whose result Go saved before final settlement was interrupted. It requires current evidence and explicit authorization, then separate continuation; no automatic reconciliation or replay occurs. Unknown runs without completion evidence remain blocked.
 
 New tasks require a clean worktree. An explicit continuation may retain uncommitted work only through a verified [checkpoint](checkpoints.md). Token/time limits can stop a Run; [request reservations and settlement](request-budgets.md) and [early wrap-up](stage-budgets.md) apply to the supported Pi HTTP bridge. Unknown history is not automatically repaired or replayed.
 
@@ -26,7 +26,7 @@ SQLite V4 records Session identity, frozen contract, file reference/digest, veri
 
 Public snapshots, MCP results and default metric exports exclude raw history and private session paths. Ledger-backed Run usage comes from raw request settlement; other executor runs retain current event accounting. Pi's historical session total is not added again. Missing token fields and prices remain unknown. Pi-reported cost is an estimate, not a confirmed bill.
 
-Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V6 stores and backups migrate to V7, retaining session, request-budget and checkpoint history; V7 also preserves [explicit budget decisions](budget-decisions.md).
+Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V7 stores and backups migrate to V8, retaining session, request-budget, checkpoint and [explicit budget decision](budget-decisions.md) history. V8 adds immutable completed-step evidence and recovery receipts.
 
 ## Verification scope
 

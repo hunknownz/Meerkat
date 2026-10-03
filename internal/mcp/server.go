@@ -406,6 +406,7 @@ func (s *Server) toolList() []any {
 		tools = append(tools, controlTools()...)
 		tools = append(tools, dispatchTools()...)
 		tools = append(tools, budgetTools()...)
+		tools = append(tools, recoveryTools()...)
 	}
 	return tools
 }
@@ -476,6 +477,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		}
 		if p.Name == ToolProposeBudget || p.Name == ToolApplyBudget || p.Name == ToolGetBudgetDecision {
 			return s.budgetTool(ctx, p.Name, p.Arguments)
+		}
+		if p.Name == ToolInspectRecovery || p.Name == ToolApplyRecovery || p.Name == ToolGetRecovery {
+			return s.recoveryTool(ctx, p.Name, p.Arguments)
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
 	}

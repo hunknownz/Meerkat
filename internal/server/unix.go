@@ -42,6 +42,7 @@ type Request struct {
 	Resume      bool            `json:"resume,omitempty"`
 	Acknowledge bool            `json:"acknowledge,omitempty"`
 	RunID       string          `json:"runId,omitempty"`
+	TaskID      string          `json:"taskId,omitempty"`
 	RequestID   string          `json:"requestId,omitempty"`
 	OperationID string          `json:"operationId,omitempty"`
 	WaitMillis  int             `json:"waitMillis,omitempty"`
@@ -224,6 +225,12 @@ type budgetController interface {
 	BudgetDecision(string) (model.BudgetDecisionSummary, error)
 }
 
+type recoveryController interface {
+	InspectRecovery(string) (model.RecoveryInspection, error)
+	ApplyRecovery(model.RecoveryInput) (model.RecoveryReceipt, error)
+	RecoveryDecision(string) (model.RecoveryReceipt, error)
+}
+
 // Do executes one command under the service-owned context.
 func (s *Service) Do(req Request) Response {
 	select {
@@ -232,6 +239,34 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "inspect-recovery", "apply-recovery", "recovery-decision":
+		rc, can := s.core.(recoveryController)
+		if !can {
+			return bad("unknown op")
+		}
+		if req.Op == "inspect-recovery" {
+			v, e := rc.InspectRecovery(req.TaskID)
+			if e != nil {
+				return fail(e)
+			}
+			return ok(v)
+		}
+		if req.Op == "recovery-decision" {
+			v, e := rc.RecoveryDecision(req.RequestID)
+			if e != nil {
+				return fail(e)
+			}
+			return ok(v)
+		}
+		var in model.RecoveryInput
+		if e := decodeBudgetInput(req.Input, &in); e != nil {
+			return bad("invalid recovery input")
+		}
+		v, e := rc.ApplyRecovery(in)
+		if e != nil {
+			return fail(e)
+		}
+		return ok(v)
 	case "propose-budget", "apply-budget-decision", "budget-decision":
 		bc, can := s.core.(budgetController)
 		if !can {

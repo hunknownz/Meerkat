@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.4` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.5` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.4
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.5
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.4` / `--branch v0.4.0-beta.4`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.5` / `--branch v0.4.0-beta.5`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 

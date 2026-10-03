@@ -142,4 +142,16 @@ describe('App', () => {
     render(<App snapshot={null} legacyActive={[]} connected={false} stale="HTTP 500" actions={actions()} />);
     expect(screen.getByText('无法读取工作流状态。')).toBeTruthy();
   });
+
+  it('shows interrupted completion evidence without granting recovery controls', () => {
+    const s = snapshot();
+    s.tasks[0]!.state = 'unknown';
+    s.tasks[0]!.recoveryEvidence = [{ runId: RUN_A, role: 'developer', state: 'pending', candidateSha: 'b'.repeat(40), recordedAt: '2026-10-03T00:00:00Z', requestId: null, recoveredAt: null }];
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({ readonly: true })} />);
+    view('Tasks'); fireEvent.click(screen.getByText('Fix parser'));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('完成证据已保存，待核对');
+    expect(dialog.textContent).toContain('保存证据不会自动续跑');
+    expect([...dialog.querySelectorAll('button')].some(b => /恢复|续跑/.test(b.textContent ?? ''))).toBe(false);
+  });
 });
