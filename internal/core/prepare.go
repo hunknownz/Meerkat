@@ -163,9 +163,10 @@ type issueInput struct {
 }
 
 type budgetInput struct {
-	MaxTokens      *int64 `json:"maxTokens"`
-	MaxWallSeconds *int64 `json:"maxWallSeconds"`
-	MaxFixRounds   *int   `json:"maxFixRounds"`
+	MaxTokens      *int64               `json:"maxTokens"`
+	MaxWallSeconds *int64               `json:"maxWallSeconds"`
+	MaxFixRounds   *int                 `json:"maxFixRounds"`
+	StageReserves  *model.StageReserves `json:"stageReserves"`
 }
 
 // decodeStrict decodes exactly one JSON value into v, refusing unknown keys and trailing data.
@@ -284,6 +285,19 @@ func normBudget(in *budgetInput) (*model.Budget, error) {
 			return nil, invalid("budget.maxFixRounds must be an integer 0..2")
 		}
 		b.MaxFixRounds = *in.MaxFixRounds
+	}
+	if in.StageReserves != nil {
+		r := *in.StageReserves
+		for _, n := range []int64{r.ReviewTokens, r.FixTokens, r.PolishTokens, r.WrapUpTokens} {
+			if n < 0 || n > b.MaxTokens {
+				return nil, invalid("stage reserve tokens must be within task authorization")
+			}
+		}
+		if r.WrapUpSeconds < 0 || r.WrapUpSeconds >= b.MaxWallSeconds ||
+			int64(2+b.MaxFixRounds)*r.ReviewTokens+int64(b.MaxFixRounds)*r.FixTokens+r.PolishTokens+r.WrapUpTokens >= b.MaxTokens {
+			return nil, invalid("stage reserves leave no development allowance")
+		}
+		b.StageReserves = &r
 	}
 	return &b, nil
 }

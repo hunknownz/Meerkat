@@ -1,6 +1,6 @@
 # Asynchronous dispatch
 
-Status: implemented on the development branch. These commands require a binary built from this branch; the installed release has not been replaced.
+Implemented in the Go service. Install the matching runtime before using these commands.
 
 Prepare a frozen task with its goal, paths, acceptance, Context, profiles, baseline, dependencies and budget. The coordinator prepares the linked worktree. Then submit:
 

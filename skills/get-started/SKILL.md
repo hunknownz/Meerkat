@@ -39,4 +39,4 @@ Use the `delegate` skill for one reviewed-by-you run, or `workflow` for full del
 ## Rules
 
 - Store no credentials in files, arguments, chat or reports; profiles hold the variable name only.
-- Do not push, publish or deploy. Native Codex panel acceptance is still pending; do not claim it works.
+- Remote integration, publishing and deployment require the user's actual authorization. The standard MCP Apps panel was verified in Codex on 2026-10-03; verify the user's current installation rather than assuming every host renders it.

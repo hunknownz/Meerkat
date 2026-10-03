@@ -32,6 +32,7 @@ type Policy struct {
 	RunID, TaskID, SessionID, ProfileID, ProfileDigest, ContractDigest string
 	Provider, Model, Version, Deadline                                 string
 	TaskTokens, RunTokens, TaskRequests                                int64
+	WrapUpTokens                                                       int64
 	State                                                              string
 }
 

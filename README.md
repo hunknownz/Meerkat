@@ -48,13 +48,15 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.1` is a release candidate. The tag-based commands below become available after publication. macOS/Linux on arm64/amd64; Windows is unsupported. Needs Node 22+, Git, Codex and Pi 0.99.1; no Go or frontend build.
+Version `0.4.0-beta.2` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
 
 ```sh
-codex plugin marketplace add hunknownz/Meerkat --ref v0.4.0-beta.1
+codex plugin marketplace add hunknownz/Meerkat --ref main
 codex plugin add meerkat@meerkat
-git clone --branch v0.4.0-beta.1 https://github.com/hunknownz/Meerkat.git && cd Meerkat
-node scripts/setup.mjs
+git clone https://github.com/hunknownz/Meerkat.git
+cd Meerkat
+node scripts/build-release.mjs
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.2
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
 export MY_PROVIDER_KEY=...        # in your own shell only
 node scripts/launch.mjs serve --port 47826
@@ -78,7 +80,7 @@ See [task input](skills/workflow/references/task-input.md). The monitor displays
 
 The development branch also supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits. The installed release has not been replaced by this development work.
 
-The development branch binds scheduler-driven Pi runs to [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. [Request budget authorization](docs/request-budgets.md) reserves allowance before supported Pi HTTP requests and settles raw usage. Automatic wrap-up and recovery of uncommitted changes remain pending.
+Scheduler-driven Pi runs use [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. [Request budget authorization](docs/request-budgets.md) reserves allowance before supported Pi HTTP requests and settles raw usage. [Stage reserves and early wrap-up](docs/stage-budgets.md) retain later-role allowance and request bounded completion. Recovery of uncommitted changes remains pending. The current bridge supports Pi 0.99.1 text HTTP SSE with `openai-completions` only.
 
 Single delegation runs only the developer and records a first local candidate, unreviewed:
 
@@ -124,7 +126,7 @@ Metrics include Project, Task, Run, Role, Executor, Model and available change I
 
 ## Codex plugin
 
-The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens a read-only monitor (global or per-thread entrypoint). Acceptance inside the native Codex app is still pending; no sidebar success is claimed. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
+The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens a read-only monitor (global or per-thread entrypoint). The real Codex MCP Apps panel was [verified on 2026-10-03](docs/codex-ui-acceptance.md), including Agents / Tasks / Usage and disabled writes. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
 
 ## Development and evidence
 

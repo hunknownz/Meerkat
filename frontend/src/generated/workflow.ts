@@ -11,17 +11,17 @@ export type Id = string;
  */
 export type NullableString = string | null;
 /**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "NullableCount".
+ */
+export type NullableCount = number | null;
+/**
  * developer | reviewer | polisher; unknown roles are shown verbatim.
  *
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
  * via the `definition` "Role".
  */
 export type Role = string;
-/**
- * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
- * via the `definition` "NullableCount".
- */
-export type NullableCount = number | null;
 
 /**
  * Public snapshot envelope returned by GET /api/workflow (contract version 1). Secrets, context text and profile commands are never part of this contract.
@@ -104,6 +104,9 @@ export interface Task {
   profileIds?: {
     [k: string]: string;
   };
+  budget?: Budget;
+  budgetEvidence?: BudgetEvidence;
+  sessions?: SessionSummary[];
   stateReason?: NullableString;
   resumeRole?: NullableString;
   candidateSha?: NullableString;
@@ -120,6 +123,49 @@ export interface ContextRef {
   id: string;
   version: number;
   digest: string;
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "Budget".
+ */
+export interface Budget {
+  maxTokens: number;
+  maxWallSeconds: number;
+  maxFixRounds: number;
+  stageReserves?: {
+    reviewTokens: number;
+    fixTokens: number;
+    polishTokens: number;
+    wrapUpTokens: number;
+    wrapUpSeconds: number;
+  };
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "BudgetEvidence".
+ */
+export interface BudgetEvidence {
+  authorizedTokens: number;
+  availableTokens: NullableCount;
+  confirmedTokens: number;
+  reservedTokens: number;
+  requests: number;
+  pendingRequests: number;
+  unknownRequests: number;
+  overrun: boolean;
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "SessionSummary".
+ */
+export interface SessionSummary {
+  id: Id;
+  role: string;
+  executor: string;
+  state: 'idle' | 'running' | 'unknown';
+  activeRunId: NullableString;
+  lastSha: string;
+  updatedAt: string;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema

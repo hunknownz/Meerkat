@@ -200,9 +200,20 @@ type IssueRef struct {
 
 // Budget bounds one task.
 type Budget struct {
-	MaxTokens      int64 `json:"maxTokens"`
-	MaxWallSeconds int64 `json:"maxWallSeconds"`
-	MaxFixRounds   int   `json:"maxFixRounds"`
+	MaxTokens      int64          `json:"maxTokens"`
+	MaxWallSeconds int64          `json:"maxWallSeconds"`
+	MaxFixRounds   int            `json:"maxFixRounds"`
+	StageReserves  *StageReserves `json:"stageReserves,omitempty"`
+}
+
+// StageReserves is explicit frozen configuration, not a prediction of model use.
+// Wrap-up is part of the current role's allowance, never extra authorization.
+type StageReserves struct {
+	ReviewTokens  int64 `json:"reviewTokens"`
+	FixTokens     int64 `json:"fixTokens"`
+	PolishTokens  int64 `json:"polishTokens"`
+	WrapUpTokens  int64 `json:"wrapUpTokens"`
+	WrapUpSeconds int64 `json:"wrapUpSeconds"`
 }
 
 // DefaultBudget mirrors workflow/core.mjs DEFAULT_BUDGET.
@@ -424,8 +435,8 @@ type LeaseFacts struct {
 
 // WorktreeClaim records which task occupies a worktree and under which lease token it was claimed.
 type WorktreeClaim struct {
-	Worktree    string `json:"worktree"`
-	TaskID      string `json:"taskId"`
-	ClaimedAt   string `json:"claimedAt"`
-	CurrentLease bool  `json:"currentLease"`
+	Worktree     string `json:"worktree"`
+	TaskID       string `json:"taskId"`
+	ClaimedAt    string `json:"claimedAt"`
+	CurrentLease bool   `json:"currentLease"`
 }

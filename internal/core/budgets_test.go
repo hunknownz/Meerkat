@@ -26,8 +26,18 @@ func (f *budgetFake) Execute(ctx context.Context, req executor.Request, event fu
 		return f.statefulFake.Execute(ctx, req, event, start)
 	}
 	r := budget.Request{ID: newUUID(), Digest: strings.Repeat("a", 64), API: "openai-completions", Provider: req.Profile.Provider, Model: req.Profile.Model, InputEstimate: 10, MaxOutput: 50}
+	if f.mode == "wrap" {
+		r.MaxOutput = req.RemainingTokens
+	}
 	if _, err := req.Budget.Reserve(ctx, r); err != nil {
 		return executor.Result{}, err
+	}
+	if f.mode == "wrap" {
+		select {
+		case <-req.WrapUp:
+		default:
+			return executor.Result{}, invalid("reservation did not trigger wrap-up")
+		}
 	}
 	if err := req.Budget.Begin(ctx, budget.Begin{ID: r.ID, Digest: strings.Repeat("b", 64)}); err != nil {
 		return executor.Result{}, err
@@ -46,6 +56,22 @@ func (f *budgetFake) Execute(ctx context.Context, req executor.Request, event fu
 		}
 	}
 	return f.statefulFake.Execute(ctx, req, event, start)
+}
+
+func TestBudgetWrapUpUsesReservationsAndKeepsConfirmedSettlement(t *testing.T) {
+	e := setup(t)
+	useBudgetFixture(t, e, "wrap")
+	task := e.prepare(e.worktree("budget-wrap"), func(m map[string]any) {
+		m["budget"] = map[string]any{"maxTokens": 1000, "stageReserves": map[string]any{"wrapUpTokens": 20}}
+	})
+	if r := e.exec(task.ID); r.Tasks[0].State != model.TaskDelivered {
+		t.Fatal(r)
+	}
+	for _, r := range e.state().Runs {
+		if r.Usage == nil || r.Usage.Tokens.Total == nil || *r.Usage.Tokens.Total != 15 {
+			t.Fatal("wrap-up changed settlement", r)
+		}
+	}
 }
 
 func useBudgetFixture(t *testing.T, e *env, mode string) {

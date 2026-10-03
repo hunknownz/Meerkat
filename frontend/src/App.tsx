@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { LegacyActive, Run, SettingsInput, Snapshot, Task } from './generated/workflow';
 import {
   DELIVERY_LABEL, ROLES, ROLE_LABEL, agentLabel, checkView, type CheckEntry, dedupLegacy, formatDuration, formatTime, isActiveRun, lastEvent,
-  modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory, taskLabel,
+  eventLabel, isWrappingUp, modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory, taskLabel,
 } from './model';
 import { newRequestId } from './transport';
 
@@ -142,13 +142,13 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             <span className="line1"><span className="role">{a.label || '—'} · {roleLabel(r.role)}</span><span className="task">{t?.title || '未知任务'}</span></span>
             <span className="sub">
               {r.executor || '执行器未记录'}{r.stage ? ` · 阶段 ${r.stage}` : ''}
-              {ev ? <> · <span className="act">{ev.summary || ev.type}</span> · {formatTime(ev.observedAt)}</> : ' · 尚无事件'}
+              {ev ? <> · <span className="act">{eventLabel(ev)}</span> · {formatTime(ev.observedAt)}</> : ' · 尚无事件'}
               {stale ? ' · 快照' : ''}
             </span>
           </span>
           <span className="fields">
             <span className="field"><span className="v">{modelLabel(r)}</span></span>
-            <span className="field"><span className="v">{runLabel(r.state)}</span></span>
+            <span className="field"><span className="v">{isWrappingUp(r) ? '收尾中' : runLabel(r.state)}</span></span>
             <span className="field"><span className="k">开始</span><span className="v">{formatTime(r.startedAt)}</span></span>
           </span>
         </button>
@@ -156,7 +156,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
           <div>
             <h4>最近事件{stale ? '（快照）' : ''}</h4>
             {r.events?.length ? (
-              <ul className="events">{r.events.slice(-5).reverse().map((e, i) => <li key={i}><time>{formatTime(e.observedAt).split(' ')[1] ?? '—'}</time><span className="ek">{e.type}</span><span>{e.summary ?? ''}</span></li>)}</ul>
+              <ul className="events">{r.events.slice(-5).reverse().map((e, i) => <li key={i}><time>{formatTime(e.observedAt).split(' ')[1] ?? '—'}</time><span className="ek">{e.type}</span><span>{eventLabel(e)}</span></li>)}</ul>
             ) : <p className="k small">尚无事件。</p>}
             {r.state === 'unknown' ? <p className="local-note mt">状态未知：调度器心跳过期或重启后未能核实，不会自动重放。</p> : null}
           </div>
@@ -288,6 +288,23 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
                 return <li key={role} className={last ? (isActiveRun(last) ? 'cur' : 'done') : ''}>{ROLE_LABEL[role]}<br />{last ? runLabel(last.state) : '未开始'}</li>;
               })}
             </ol></div>
+            {task.budget ? <div className="card"><h3>任务预算</h3><dl className="concl">
+              <dt>已授权</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复</dd>
+              {task.budgetEvidence ? <>
+                <dt>请求账本</dt><dd>{num(task.budgetEvidence.confirmedTokens)} 已结算 · {num(task.budgetEvidence.reservedTokens)} 预留占用</dd>
+                <dt>可申请额度</dt><dd>{task.budgetEvidence.availableTokens == null ? '未知' : num(task.budgetEvidence.availableTokens)}（预留口径）</dd>
+                <dt>请求状态</dt><dd>{task.budgetEvidence.requests} 次 · 在途 {task.budgetEvidence.pendingRequests} · 结果未知 {task.budgetEvidence.unknownRequests}{task.budgetEvidence.overrun ? ' · 已确认超额' : ''}</dd>
+              </> : <><dt>请求账本</dt><dd>此任务尚无逐次请求记录</dd></>}
+              {task.budget.stageReserves ? <><dt>阶段预留</dt><dd>每次审查 {num(task.budget.stageReserves.reviewTokens)} · 每轮修复 {num(task.budget.stageReserves.fixTokens)} · 精修 {num(task.budget.stageReserves.polishTokens)}</dd>
+                <dt>提前收尾</dt><dd>{[
+                  task.budget.stageReserves.wrapUpTokens > 0 ? `剩余 ${num(task.budget.stageReserves.wrapUpTokens)} token` : '',
+                  task.budget.stageReserves.wrapUpSeconds > 0 ? `剩余 ${formatDuration(task.budget.stageReserves.wrapUpSeconds)}` : '',
+                ].filter(Boolean).join(' 或 ') || '未启用'}；原截止时间不变</dd></> : null}
+            </dl></div> : null}
+            {task.sessions?.length ? <div className="card"><h3>执行会话</h3><div className="run-table">{task.sessions.map((s) => (
+              <div className="run" key={s.id}><span className="rt">{roleLabel(s.role)} · {s.executor}</span><span className="rr">{s.state === 'idle' ? '已核实空闲' : s.state === 'running' ? '执行中' : '身份未知'}</span>
+                <span className="rm"><code>{short(s.id)}</code> · HEAD <code>{short(s.lastSha)}</code>{s.activeRunId ? <> · Run <code>{short(s.activeRunId)}</code></> : null}</span></div>
+            ))}</div><p className="k small">会话空闲不代表任务已完成。</p></div> : null}
             {deliveries.map((d) => (
               <div className="card" key={d.id}><h3>{DELIVERY_LABEL[d.state] ?? d.state}</h3><dl className="concl">
                 <dt>候选 SHA</dt><dd><code>{d.candidateSha}</code></dd>

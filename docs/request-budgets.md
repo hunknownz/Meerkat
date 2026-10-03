@@ -1,6 +1,6 @@
 # Request budget authorization
 
-Status: implemented on the development branch. It has not been installed into the running user service.
+Implemented in the Go service; install the matching runtime before using these capabilities.
 
 For scheduler-driven Pi runs, Go opens a private request authority bound to the frozen task, profile, model, run and session. A bundled Pi extension wraps provider HTTP requests. The task prompt is submitted only after the extension confirms that the supported bridge is installed.
 
@@ -27,7 +27,9 @@ The current bridge is verified with Pi **0.99.1**, text requests using **`openai
 
 Input reservation uses request UTF-8 byte length plus 1024 and the controlled maximum output. This is an explicit estimate, not a validated tokenizer or monetary ceiling. Request count and deadline are checked before sending. The bridge controls Pi provider requests; it does not sandbox shell commands or arbitrary network activity.
 
-This item does not implement stage reserves, automatic wrap-up, checkpoints, extra-budget decisions or continuation of uncommitted work. Those remain in the [complete design](../design/session-budget-coordination-20261003.md).
+[Stage reserves and early wrap-up](stage-budgets.md) are implemented. Checkpoints,
+extra-budget decisions and continuation of uncommitted work remain in the
+[complete design](../design/session-budget-coordination-20261003.md).
 
 ## Storage and verification
 

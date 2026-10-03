@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
@@ -11,8 +12,21 @@ import (
 )
 
 type requestAuthority struct {
-	c     *Core
-	runID string
+	c      *Core
+	runID  string
+	wrapUp chan struct{}
+	once   sync.Once
+}
+
+func (a *requestAuthority) checkWrapUp() error {
+	remaining, threshold, err := a.c.st.RequestHeadroomOwned(a.c.token, a.runID)
+	if err != nil {
+		return err
+	}
+	if threshold > 0 && remaining <= threshold {
+		a.once.Do(func() { close(a.wrapUp) })
+	}
+	return nil
 }
 
 func (a *requestAuthority) call(ctx context.Context, fn func() error) error {
@@ -32,14 +46,27 @@ func (a *requestAuthority) call(ctx context.Context, fn func() error) error {
 }
 func (a *requestAuthority) Reserve(ctx context.Context, r budget.Request) (budget.Grant, error) {
 	var g budget.Grant
-	err := a.call(ctx, func() error { var e error; g, e = a.c.st.ReserveRequestOwned(a.c.token, a.runID, r); return e })
+	err := a.call(ctx, func() error {
+		var e error
+		g, e = a.c.st.ReserveRequestOwned(a.c.token, a.runID, r)
+		if e == nil {
+			e = a.checkWrapUp()
+		}
+		return e
+	})
 	return g, err
 }
 func (a *requestAuthority) Begin(ctx context.Context, b budget.Begin) error {
 	return a.call(ctx, func() error { return a.c.st.BeginRequestOwned(a.c.token, a.runID, b) })
 }
 func (a *requestAuthority) Settle(ctx context.Context, v budget.Settlement) error {
-	return a.call(ctx, func() error { return a.c.st.SettleRequestOwned(a.c.token, a.runID, v) })
+	return a.call(ctx, func() error {
+		err := a.c.st.SettleRequestOwned(a.c.token, a.runID, v)
+		if err == nil {
+			err = a.checkWrapUp()
+		}
+		return err
+	})
 }
 
 func (c *Core) openRequestBudget(t model.Task, p model.Profile, ss *model.Session, runID string, tokens, seconds int64) (*requestAuthority, error) {
@@ -50,6 +77,9 @@ func (c *Core) openRequestBudget(t model.Task, p model.Profile, ss *model.Sessio
 	policy := budget.Policy{RunID: runID, TaskID: t.ID, SessionID: ss.ID, ProfileID: p.ID, ProfileDigest: ss.ProfileDigest, ContractDigest: ss.ContractDigest,
 		Provider: p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano),
 		TaskTokens: b.MaxTokens, RunTokens: tokens, TaskRequests: budget.MaxRequests, State: "open"}
+	if b.StageReserves != nil {
+		policy.WrapUpTokens = min(b.StageReserves.WrapUpTokens, tokens-1)
+	}
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	if c.isLost() {
@@ -62,7 +92,7 @@ func (c *Core) openRequestBudget(t model.Task, p model.Profile, ss *model.Sessio
 	if err != nil {
 		return nil, err
 	}
-	return &requestAuthority{c: c, runID: runID}, nil
+	return &requestAuthority{c: c, runID: runID, wrapUp: make(chan struct{})}, nil
 }
 
 func (c *Core) closeRequestBudget(runID string) (budget.Outcome, error) {

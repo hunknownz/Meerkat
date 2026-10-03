@@ -82,7 +82,7 @@ func TestPiRPCFixtureChild(t *testing.T) {
 				emit(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "usage": map[string]any{"input": 200, "output": 20, "cacheRead": 5, "cacheWrite": 1}}})
 				continue
 			}
-			if mode == "block" || mode == "end_only" {
+			if mode == "block" || mode == "end_only" || mode == "wrap" || mode == "wrap_lost_reply" {
 				if mode == "end_only" {
 					emit(map[string]any{"type": "agent_end"})
 				}
@@ -116,6 +116,11 @@ func TestPiRPCFixtureChild(t *testing.T) {
 			emit(map[string]any{"type": "agent_settled"})
 		case "clear_queue":
 			response(q.ID, q.Type, nil)
+		case "steer":
+			if mode == "wrap_lost_reply" {
+				continue
+			}
+			response(q.ID, q.Type, map[string]string{"disposition": "queued"})
 		case "abort":
 			streaming = false
 			response(q.ID, q.Type, nil)
@@ -125,6 +130,52 @@ func TestPiRPCFixtureChild(t *testing.T) {
 		}
 	}
 	os.Exit(0)
+}
+
+func TestPiRPCWrapUpAcceptedIsNotDeliveryAndNeverExtendsDeadline(t *testing.T) {
+	for _, trigger := range []string{"tokens", "time", "lost_reply"} {
+		t.Run(trigger, func(t *testing.T) {
+			e := setup(t)
+			mode := "wrap"
+			if trigger == "lost_reply" {
+				mode = "wrap_lost_reply"
+			}
+			req := rpcRequest(t, e, mode)
+			req.RemainingWall = 600 * time.Millisecond
+			if trigger == "time" {
+				req.WrapUpBefore = 400 * time.Millisecond
+			} else {
+				wrap := make(chan struct{})
+				close(wrap)
+				req.WrapUp = wrap
+			}
+			var events []model.RunEvent
+			p := NewPi()
+			p.Grace = time.Second
+			started := time.Now()
+			r, err := p.Execute(context.Background(), req, func(ev model.RunEvent) { events = append(events, ev) }, nil)
+			if err == nil || r.Outcome == model.RunSucceeded || time.Since(started) > 3*time.Second {
+				t.Fatal("acceptance became delivery or renewed deadline", r, err)
+			}
+			commands, _ := os.ReadFile(e.args + ".commands")
+			if strings.Count(string(commands), "steer\n") != 1 || strings.Count(string(commands), "prompt\n") != 1 {
+				t.Fatal("wrap-up replayed", string(commands))
+			}
+			accepted := 0
+			for _, ev := range events {
+				if ev.Summary == "wrap_up_accepted" {
+					accepted++
+				}
+			}
+			if trigger == "lost_reply" {
+				if accepted != 0 || r.Session.Confirmed {
+					t.Fatal("lost steering reply became confirmed", r)
+				}
+			} else if accepted != 1 || !r.Session.Confirmed || category(err) != CatWallTimeout {
+				t.Fatal("known hard timeout not preserved after wrap-up", r, err, events)
+			}
+		})
+	}
 }
 
 func rpcRequest(t *testing.T, e *env, mode string) Request {

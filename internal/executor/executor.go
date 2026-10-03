@@ -82,6 +82,9 @@ type Request struct {
 	Env             []string                // child environment; nil means os.Environ()
 	Session         *SessionBinding         // private, verified history for a stateful executor
 	Budget          requestbudget.Authority // private request authority, never serialized
+	WrapUpTokens    int64
+	WrapUpBefore    time.Duration
+	WrapUp          <-chan struct{} // authority notification; adapter converts it to its protocol
 }
 
 // Capabilities describe implemented operations, not planned adapters or policy.

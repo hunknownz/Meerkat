@@ -1,0 +1,37 @@
+# Codex MCP Apps acceptance
+
+Date: 2026-10-03, Asia/Shanghai.
+
+## Verified host path
+
+The installed `0.4.0-beta.1` plugin's `open_monitor` tool opened Meerkat in the
+real Codex side panel. The user supplied a screenshot showing the Codex chat and
+Meerkat tab together. The MCP Apps automation backend then found the expanded
+Meerkat app and verified its DOM directly.
+
+Observed checks:
+
+- Agents / Tasks / Usage render and switch inside the host.
+- The host obtains live snapshots through `get_monitor_snapshot`; the controller
+  heartbeat advanced during verification and the connection remained connected.
+- Task titles, candidate SHAs and delivery states load from the existing service.
+- Usage preserves missing fees as unknown and separates wall time from Agent time.
+- Settings show the read-only explanation; concurrency, fix rounds and save are disabled.
+- No CDP port, application modification or in-app browser was used for this acceptance.
+
+The service had 14 tasks, 21 historical runs and no active, queued or unknown runs.
+Raw screenshots remain in private maintainer evidence storage, outside Git. The
+user-supplied host screenshot SHA-256 is
+`554e7c65e1d1de5b3c7541cc7388ceb53d28e1169cf70213a88282c0b772402b`.
+
+## Boundaries
+
+This verifies the standard MCP Apps panel on the observed Codex installation.
+It does not establish a permanent custom sidebar item, the experimental CDP
+connector, every host version or a paid coding task. The full session/budget
+redesign remains tracked in [the complete plan](../design/session-budget-coordination-20261003.md).
+
+`0.4.0-beta.2` adds session and request-budget summaries using the same React
+monitor and MCP host transport. Its build and automated checks are recorded in
+[the delivery record](../design/stage-budget-20261003.md). A newly installed plugin
+may require a new chat or host restart to reload its cached stdio server and UI.

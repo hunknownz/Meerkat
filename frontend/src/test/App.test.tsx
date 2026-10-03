@@ -8,6 +8,25 @@ const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: fal
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('shows wrap-up without claiming completion, and unknown budget evidence stays unknown', () => {
+    const s = snapshot();
+    s.runs[0]!.events = [{ type: 'budget', summary: 'wrap_up_accepted' }];
+    s.tasks[0]!.budget = { maxTokens: 1000, maxWallSeconds: 600, maxFixRounds: 1 };
+    s.tasks[0]!.budgetEvidence = { authorizedTokens: 1000, availableTokens: null, confirmedTokens: 80,
+      reservedTokens: 600, requests: 2, pendingRequests: 0, unknownRequests: 1, overrun: false };
+    s.tasks[0]!.sessions = [{ id: 'ss1', role: 'developer', executor: 'pi', state: 'unknown', activeRunId: null,
+      lastSha: 'a'.repeat(40), updatedAt: '2025-01-01T00:10:00Z' }];
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({ readonly: true })} />);
+    expect(screen.getByText('收尾中')).toBeTruthy();
+    expect(screen.getAllByText('收尾请求已接受，等待执行结束').length).toBeGreaterThan(0);
+    view('Tasks');
+    fireEvent.click(screen.getByText('Fix parser'));
+    const text = screen.getByRole('dialog').textContent!;
+    expect(text).toContain('未知（预留口径）');
+    expect(text).toContain('结果未知 1');
+    expect(text).toContain('身份未知');
+    expect(text).not.toContain('可申请额度0');
+  });
   it('shows agent rows with Agent-NN for historical Pi-NN and custom IDs unchanged; dedups legacy runs', () => {
     render(<App snapshot={snapshot()} legacyActive={[{ runId: RUN_A.toUpperCase(), task: 'dup' }, { runId: 'x', task: 'Standalone' }]} connected stale={null} actions={actions()} />);
     const rows = screen.getAllByTestId('agent-row');

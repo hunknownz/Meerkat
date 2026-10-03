@@ -1,37 +1,43 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.1` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
-The tag-based commands below become available when the GitHub release is published.
+Meerkat `0.4.0-beta.2` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+The repository install below works from source. Tag-based binary downloads become
+available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
 
 ## Requirements
 
 - macOS or Linux on arm64 or amd64. Windows is unsupported (the service uses Unix sockets).
-- Node 22+, Git and Codex. End users do not need Go or an npm frontend build.
+- Node 22, Git and Codex. Source installation also needs Go 1.26+; a published
+  binary release removes that Go requirement. Frontend assets are already bundled.
 - Pi is currently the only executor:
   `npm install -g @earendil-works/pi-coding-agent@0.99.1`.
   The provider API key stays in your shell environment.
 
 ## 1. Install the plugin
 
-From the GitHub repository marketplace, pinned to the release tag:
+From the GitHub repository marketplace:
 
 ```sh
-codex plugin marketplace add hunknownz/Meerkat --ref v0.4.0-beta.1
+codex plugin marketplace add hunknownz/Meerkat --ref main
 codex plugin add meerkat@meerkat
 ```
 
 ## 2. Install the runtime binary
 
-Either use the installed plugin's cached copy of `scripts/setup.mjs`, or a pinned clone:
+Until binary assets are published, build the committed source and install locally:
 
 ```sh
-git clone --branch v0.4.0-beta.1 https://github.com/hunknownz/Meerkat.git
+git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
-node scripts/setup.mjs
+node scripts/build-release.mjs
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.2
 ```
 
-`setup.mjs` downloads the binary for your OS/architecture and validates it against the release's
+The builder compiles four supported targets from clean committed HEAD. After a
+release exists, pin both marketplace and clone to its tag (for example
+`--ref v0.4.0-beta.2` / `--branch v0.4.0-beta.2`) and use `node scripts/setup.mjs`
+to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
 | Item | Default |
@@ -57,12 +63,15 @@ node scripts/configure.mjs --project-id example --provider PROVIDER --model MODE
 ```
 
 - Choose the provider and model yourself. Without `--base-url`, Pi's existing provider configuration is used.
-- Optional flags: `--base-url URL` together with `--api anthropic-messages` or `--api openai-completions`,
+- Optional flags: `--base-url URL` together with `--api openai-completions`,
   `--pi-command /abs/path/to/pi`, and `--data-dir /abs/private/dir`.
 - With `--base-url`/`--api`, a custom provider is written to an isolated `pi/example/models.json`
   that references the environment variable name only, never the key.
 - The profile is written to `~/.meerkat/profiles/example.json`; existing profiles are not overwritten.
 - Set the key only in your shell (`export MY_PROVIDER_KEY=...`). Never paste it into a chat.
+- Current request-budget support is Pi 0.99.1 text HTTP SSE using `openai-completions`.
+  An existing provider must use this API too. Anthropic Messages, WebSocket and
+  media inputs are not supported by this release's budget bridge.
 
 ## 4. Start the service
 
@@ -78,7 +87,8 @@ It runs in the foreground until terminated.
 
 Start a new Codex chat (or restart Codex) after installing, then ask: `打开 Meerkat 面板`.
 This calls the MCP Apps tool `open_monitor` (global or per-thread entrypoint); the local stdio monitor
-is read-only. Acceptance in the native Codex app is **pending**: no screenshot of it has been verified.
+is read-only. The real Codex panel, its three views, live snapshots and disabled
+write controls were verified on 2026-10-03; see [host acceptance](codex-ui-acceptance.md).
 Hosts without MCP Apps support should use `node scripts/launch.mjs snapshot`; a browser page is not the
 native panel. The legacy CDP adapter is optional, see [desktop adapter](../desktop/README.md).
 

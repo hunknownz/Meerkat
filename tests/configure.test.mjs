@@ -100,6 +100,7 @@ test('rejects keys, unsafe names, partial or unsafe endpoints and shell commands
     [[...base, '--base-url', 'https://llm.example.test/?key=x', '--api', 'openai-completions'], /HTTPS/],
     [[...base, '--base-url', 'https://llm.example.test/#x', '--api', 'openai-completions'], /HTTPS/],
     [[...base, '--base-url', 'https://llm.example.test', '--api', 'other'], /--api/],
+    [[...base, '--base-url', 'https://llm.example.test', '--api', 'anthropic-messages'], /--api/],
     [[...base, '--pi-command', 'pi --yolo; rm -rf /'], /pi-command/],
     [[...base, '--pi-command', join(home, 'missing')], /pi-command/],
     [[...base, '--data-dir', 'relative'], /data-dir/],

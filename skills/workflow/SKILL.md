@@ -26,6 +26,6 @@ The coordinator owns requirements, key decisions, task boundaries and linked wor
 
 For failed or stopped tasks, inspect the cause and clean worktree at its recorded SHA before `execute --task <id> --resume`. For unknown runs, verify the old process is gone and the worktree is safe before --acknowledge-interruption. Never signal a process based only on an old PID or blindly repeat a run.
 
-Canceling a wait or closing a client does not stop execution. An unfinished started operation becomes unknown after restart; never-started queued operations may continue after contract checks. Persistent Pi sessions, budget wrap-up and dirty-worktree checkpoint recovery are pending: do not promise them from queue support.
+Canceling a wait or closing a client does not stop execution. An unfinished started operation becomes unknown after restart; never-started queued operations may continue after contract checks. Pi development/fix history persists; each review is independent. Optional stage reserves request bounded wrap-up, whose receipt is not delivery. Dirty-worktree checkpoint recovery and extra-budget decisions remain unavailable; do not replay an uncertain run or promise continuation from queue support.
 
 Changed Context, Profile, SHA or scope needs a new frozen task or investigation. Requirements changes receive a new Context version. Keep API keys out of briefs, output, state and argv. Remote Git and production actions remain separately authorized.

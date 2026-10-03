@@ -1,18 +1,20 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.1`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.2`.
 
-## GitHub public prerelease (current)
+## GitHub repository (current)
 
 - The repository <https://github.com/hunknownz/Meerkat> is its own Codex marketplace
   (`.agents/plugins/marketplace.json`). Users install with
-  `codex plugin marketplace add hunknownz/Meerkat --ref v0.4.0-beta.1` and
+  `codex plugin marketplace add hunknownz/Meerkat --ref main` and
   `codex plugin add meerkat@meerkat`. No OpenAI registration is needed for this.
 - Release assets are raw binaries plus `SHA256SUMS` and `release.json`, built by
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.1` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.2` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+  Until then, use the documented source build in [install](install.md); no
+  nonexistent release download is required for the repository installation.
 
 ## OpenAI plugin directory (not pursued yet)
 
@@ -28,5 +30,7 @@ We skip the directory beta for now. Directory review is a separate decision and 
 
 ## Status
 
-The MCP Apps `open_monitor` tool is implemented, but acceptance in the native Codex app is pending:
-no screenshot from the real app has been verified, so no sidebar success is claimed.
+The standard MCP Apps panel was verified inside the real Codex app on 2026-10-03:
+Agents / Tasks / Usage, host-mediated live snapshots and read-only controls.
+See [acceptance evidence and limits](codex-ui-acceptance.md). This verifies the
+standard side panel, not a permanent custom sidebar item or the legacy CDP adapter.

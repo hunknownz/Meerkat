@@ -256,6 +256,53 @@
         }
       }
     },
+    "Budget": {
+      "type": "object",
+      "required": ["maxTokens", "maxWallSeconds", "maxFixRounds"],
+      "properties": {
+        "maxTokens": { "type": "integer", "minimum": 1 },
+        "maxWallSeconds": { "type": "integer", "minimum": 1 },
+        "maxFixRounds": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "stageReserves": {
+          "type": "object",
+          "required": ["reviewTokens", "fixTokens", "polishTokens", "wrapUpTokens", "wrapUpSeconds"],
+          "properties": {
+            "reviewTokens": { "type": "integer", "minimum": 0 },
+            "fixTokens": { "type": "integer", "minimum": 0 },
+            "polishTokens": { "type": "integer", "minimum": 0 },
+            "wrapUpTokens": { "type": "integer", "minimum": 0 },
+            "wrapUpSeconds": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "SessionSummary": {
+      "type": "object",
+      "required": ["id", "role", "executor", "state", "activeRunId", "lastSha", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/definitions/Id" },
+        "role": { "type": "string" },
+        "executor": { "type": "string" },
+        "state": { "enum": ["idle", "running", "unknown"] },
+        "activeRunId": { "$ref": "#/definitions/NullableString" },
+        "lastSha": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "BudgetEvidence": {
+      "type": "object",
+      "required": ["authorizedTokens", "availableTokens", "confirmedTokens", "reservedTokens", "requests", "pendingRequests", "unknownRequests", "overrun"],
+      "properties": {
+        "authorizedTokens": { "type": "integer", "minimum": 1 },
+        "availableTokens": { "$ref": "#/definitions/NullableCount" },
+        "confirmedTokens": { "type": "integer", "minimum": 0 },
+        "reservedTokens": { "type": "integer", "minimum": 0 },
+        "requests": { "type": "integer", "minimum": 0 },
+        "pendingRequests": { "type": "integer", "minimum": 0 },
+        "unknownRequests": { "type": "integer", "minimum": 0 },
+        "overrun": { "type": "boolean" }
+      }
+    },
     "Task": {
       "title": "Task",
       "type": "object",
@@ -321,6 +368,9 @@
             "type": "string"
           }
         },
+        "budget": { "$ref": "#/definitions/Budget" },
+        "budgetEvidence": { "$ref": "#/definitions/BudgetEvidence" },
+        "sessions": { "type": "array", "items": { "$ref": "#/definitions/SessionSummary" } },
         "stateReason": {
           "$ref": "#/definitions/NullableString"
         },

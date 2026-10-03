@@ -2,7 +2,7 @@
 // Write a private Pi executor profile that stores only provider/model/authEnv references, never a key.
 //
 // Usage: node scripts/configure.mjs --project-id SLUG --provider ID --model ID --auth-env ENV
-//          [--data-dir DIR] [--base-url https://...] [--api anthropic-messages|openai-completions] [--pi-command ABS]
+//          [--data-dir DIR] [--base-url https://...] [--api openai-completions] [--pi-command ABS]
 // Writes <data-dir>/profiles/<slug>.json (default data dir ~/.meerkat). With --base-url/--api it also writes an
 // isolated Pi agent directory <data-dir>/pi/<slug>/models.json whose apiKey is the literal "${ENV}" reference.
 // The API key itself stays in the inherited service environment; this script never reads it.
@@ -15,7 +15,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const PROVIDER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/;
-const APIS = ['anthropic-messages', 'openai-completions'];
+const APIS = ['openai-completions'];
 const CREDENTIAL = /(sk-|ghp_|gho_|github_pat_|AKIA|xox[abprs]-|AIza|bearer)/i;
 const FLAGS = { '--project-id': 'projectId', '--provider': 'provider', '--model': 'model', '--auth-env': 'authEnv',
   '--data-dir': 'dataDir', '--base-url': 'baseUrl', '--api': 'api', '--pi-command': 'piCommand' };

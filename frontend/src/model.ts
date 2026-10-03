@@ -51,6 +51,16 @@ export function dedupLegacy(snapshot: Snapshot | null, legacy: LegacyActive[]): 
 
 export const lastEvent = (r: Run) => (r.events && r.events.length ? r.events[r.events.length - 1] : undefined);
 
+export function eventLabel(e: { type: string; summary?: string }): string {
+  if (e.type === 'budget' && e.summary === 'wrap_up_requested') return '预算临界，已请求收尾';
+  if (e.type === 'budget' && e.summary === 'wrap_up_accepted') return '收尾请求已接受，等待执行结束';
+  return e.summary || e.type;
+}
+
+export function isWrappingUp(r: Run): boolean {
+  return r.state === 'running' && !!r.events?.some((e) => e.type === 'budget' && /^wrap_up_(requested|accepted)$/.test(e.summary ?? ''));
+}
+
 export const COUNTERS = ['input', 'output', 'cacheRead', 'cacheWrite', 'total'] as const;
 export type Counter = (typeof COUNTERS)[number];
 

@@ -588,7 +588,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if t.Budget != nil {
 		budget = *t.Budget
 	}
-	remTok, remSec := budget.MaxTokens-usedTok, int64(float64(budget.MaxWallSeconds)-usedSec)
+	remTok, remSec := budget.MaxTokens-usedTok-futureStageReserve(t, p, s), int64(float64(budget.MaxWallSeconds)-usedSec)
 	if remTok < 1 || remSec < 1 {
 		reason := "budget_tokens"
 		if remTok >= 1 {
@@ -725,12 +725,19 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		binding := c.sessionBinding(*ss, t.Worktree)
 		req.Session = &binding
 	}
+	if budget.StageReserves != nil {
+		req.WrapUpTokens = min(budget.StageReserves.WrapUpTokens, capTok-1)
+		req.WrapUpBefore = time.Duration(min(budget.StageReserves.WrapUpSeconds, capSec-1)) * time.Second
+	}
 	var authority *requestAuthority
 	var budgetErr error
 	if ss != nil {
 		if x, ok := c.reg[execName(prof)].(interface{ Capabilities() executor.Capabilities }); ok && x.Capabilities().RequestBudgetGate {
 			authority, budgetErr = c.openRequestBudget(t, prof, ss, runID, capTok, capSec)
 			req.Budget = authority
+			if authority != nil {
+				req.WrapUp = authority.wrapUp
+			}
 		}
 	}
 	started := time.Now()

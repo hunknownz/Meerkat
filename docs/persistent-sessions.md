@@ -1,6 +1,6 @@
 # Persistent execution sessions
 
-Status: implemented on the development branch. Build from this branch to use it; the installed release and running user service have not been replaced.
+Implemented in the Go service. Install the matching runtime before using these capabilities.
 
 The Go scheduler automatically binds each role Run to a private Session when its executor advertises persistent sessions. Pi is the implemented adapter. There is no additional CLI flag and no perpetual idle Pi process: each Run opens a verified history through RPC, finishes or stops, then shuts down and reaps its child process.
 

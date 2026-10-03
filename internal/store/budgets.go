@@ -33,7 +33,40 @@ func validBudgetPolicy(p budget.Policy) bool {
 		digestRE.MatchString(p.ProfileDigest) && digestRE.MatchString(p.ContractDigest) && p.Provider != "" && p.Model != "" &&
 		!model.LooksLikeCredential(p.Provider) && !model.LooksLikeCredential(p.Model) && len(p.Provider) <= 128 && len(p.Model) <= 256 &&
 		p.Version == budget.PolicyVersion && p.TaskTokens > 0 && p.TaskTokens <= budget.MaxCount && p.RunTokens > 0 && p.RunTokens <= p.TaskTokens &&
-		p.TaskRequests > 0 && p.TaskRequests <= budget.MaxRequests && slices.Contains([]string{"open", "closed", "unknown"}, p.State) && e == nil
+		p.TaskRequests > 0 && p.TaskRequests <= budget.MaxRequests && p.WrapUpTokens >= 0 && p.WrapUpTokens < p.RunTokens && slices.Contains([]string{"open", "closed", "unknown"}, p.State) && e == nil
+}
+
+// RequestHeadroomOwned includes reservations and uncertain requests. It never
+// substitutes a guessed token count for unknown settlement evidence.
+func (s *Store) RequestHeadroomOwned(token, runID string) (int64, int64, error) {
+	var remaining, threshold int64
+	err := s.tx(func(tx *sql.Tx) error {
+		p, err := loadBudgetPolicy(tx, runID)
+		if err != nil {
+			return err
+		}
+		st, err := verifyBudgetOwner(tx, token, p)
+		if err != nil {
+			return err
+		}
+		ps, rs, err := budgetRows(tx, p.TaskID)
+		if err != nil {
+			return err
+		}
+		taskLeft, runLeft, _, err := budgetRemaining(st, p, ps, rs)
+		if errors.Is(err, budget.ErrDenied) {
+			// Confirmed overrun is exhausted, not uncertain. Settlement remains
+			// valid evidence and CloseRequestBudgetOwned reports the overrun.
+			remaining, threshold = 0, p.WrapUpTokens
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		remaining, threshold = min(taskLeft, runLeft), p.WrapUpTokens
+		return nil
+	})
+	return remaining, threshold, err
 }
 
 func loadBudgetPolicy(q querier, runID string) (budget.Policy, error) {

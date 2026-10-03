@@ -29,6 +29,13 @@ Optional:
 - `dependencies`: task UUIDs of the same project that must be delivered first.
 - `budget`: `{ "maxTokens": 500000, "maxWallSeconds": 1800, "maxFixRounds": 2 }` (defaults shown; fix rounds 0–2).
 
+Optional `budget.stageReserves` contains nonnegative `reviewTokens`, `fixTokens`,
+`polishTokens`, `wrapUpTokens` and `wrapUpSeconds` (omitted fields default to zero).
+Go keeps remaining role allowances and requests early wrap-up within the existing
+cap; it rejects reserves that consume the entire task authorization. See
+[stage budgets](../../../docs/stage-budgets.md) for a complete example. Zero disables
+the corresponding wrap-up trigger. Dirty-worktree checkpoint recovery is not available.
+
 Optional `changeId` links task and run metrics to one change. Profiles must be private files owned by the current user. Old configs default to executor pi; new ones should declare it explicitly.
 
 ## Private Profile example

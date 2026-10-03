@@ -44,6 +44,17 @@ func rpcIdle(s pirpc.State, b SessionBinding, req Request) bool {
 // runRPC owns one child for one Run. A durable session survives shutdown; no
 // task, budget, or queue policy is implemented by this protocol adapter.
 func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func(model.RunEvent), onStart func(Process)) procOutcome {
+	// Stream events and control receipts originate from different goroutines.
+	// Preserve the executor callback's serial delivery contract.
+	if onEvent != nil {
+		var eventMu sync.Mutex
+		callback := onEvent
+		onEvent = func(ev model.RunEvent) {
+			eventMu.Lock()
+			defer eventMu.Unlock()
+			callback(ev)
+		}
+	}
 	o := procOutcome{t: newTracker(), session: &SessionOutcome{ID: req.Session.ID, ProviderID: req.Session.ProviderID}}
 	if ctx.Err() != nil {
 		o.stop = CatCanceled
@@ -157,26 +168,70 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	if e == nil && rpcIdle(state, *req.Session, req) && bridgeReady {
 		rc, e := client.Prompt(rctx, pp.prompt)
 		if e == nil && rc.Disposition == "started" {
-			select {
-			case <-settled:
-				state, e = client.State(rctx)
-				verified = e == nil && rpcIdle(state, *req.Session, req)
-			case <-limit:
-				o.stop = CatTokenLimit
-			case <-budgetHalt:
-				denied, unknown := bridge.Outcome()
-				if unknown {
-					o.stop = CatBudgetUnknown
-				} else if denied {
+			wrapUp := req.WrapUp
+			var wrapTimer *time.Timer
+			var wrapTime <-chan time.Time
+			if req.WrapUpBefore > 0 {
+				deadline, _ := rctx.Deadline()
+				wrapTimer = time.NewTimer(max(0, time.Until(deadline)-req.WrapUpBefore))
+				defer wrapTimer.Stop()
+				wrapTime = wrapTimer.C
+			}
+		waiting:
+			for {
+				select {
+				case <-wrapUp:
+					wrapUp, wrapTime = nil, nil
+					if wrapTimer != nil {
+						wrapTimer.Stop()
+					}
+					safeEvent(onEvent, "budget", "wrap_up_requested")
+					steerCtx, steerCancel := context.WithTimeout(rctx, 3*time.Second)
+					_, err := client.Steer(steerCtx, budgetWrapUpMessage)
+					steerCancel()
+					if err != nil {
+						uncertain = true
+						o.protocolErr = true
+						break waiting
+					}
+					safeEvent(onEvent, "budget", "wrap_up_accepted")
+				case <-wrapTime:
+					wrapUp, wrapTime = nil, nil
+					safeEvent(onEvent, "budget", "wrap_up_requested")
+					steerCtx, steerCancel := context.WithTimeout(rctx, 3*time.Second)
+					_, err := client.Steer(steerCtx, budgetWrapUpMessage)
+					steerCancel()
+					if err != nil {
+						uncertain = true
+						o.protocolErr = true
+						break waiting
+					}
+					safeEvent(onEvent, "budget", "wrap_up_accepted")
+				case <-settled:
+					state, e = client.State(rctx)
+					verified = e == nil && rpcIdle(state, *req.Session, req)
+					break waiting
+				case <-limit:
 					o.stop = CatTokenLimit
+					break waiting
+				case <-budgetHalt:
+					denied, unknown := bridge.Outcome()
+					if unknown {
+						o.stop = CatBudgetUnknown
+					} else if denied {
+						o.stop = CatTokenLimit
+					}
+					break waiting
+				case <-rctx.Done():
+					o.stop = CatWallTimeout
+					if ctx.Err() != nil {
+						o.stop = CatCanceled
+					}
+					break waiting
+				case <-client.Done():
+					o.protocolErr = true
+					break waiting
 				}
-			case <-rctx.Done():
-				o.stop = CatWallTimeout
-				if ctx.Err() != nil {
-					o.stop = CatCanceled
-				}
-			case <-client.Done():
-				o.protocolErr = true
 			}
 		} else {
 			// No retry: after a missing reply the prompt may already be running.
@@ -252,3 +307,5 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	}
 	return o
 }
+
+const budgetWrapUpMessage = "Meerkat budget wrap-up: stop expanding scope. Finish only the current safe operation, preserve work and report the remaining steps and known gaps. If the role contract is already satisfied, write the required report and finish. Do not claim delivery or manufacture a commit when the work is incomplete. No further scope expansion or remote actions. All requests remain within the existing allowance."
