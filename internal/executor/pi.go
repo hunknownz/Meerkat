@@ -81,6 +81,7 @@ type prepared struct {
 	env                                []string
 	tokens                             int64
 	wall                               time.Duration
+	prompt                             string
 }
 
 func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
@@ -169,8 +170,21 @@ func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
 		tools = "read,bash"
 	}
 	prompt := buildPrompt(req, wt, out.report, instr)
-	out.argv = append(slices.Clone(cmd), "--print", "--mode", "json", "--no-session", "--no-extensions", "--no-skills",
-		"--no-prompt-templates", "--no-context-files", "--tools", tools, "--model", pr.Provider+"/"+pr.Model, "--", prompt)
+	if req.Session != nil {
+		b := *req.Session
+		if b.Worktree != wt || b.ProviderID == "" || !digestRE.MatchString(b.Digest) {
+			return nil, invalid("session binding is invalid")
+		}
+		snap, err := p.InspectSession(b)
+		if err != nil || snap.ProviderID != b.ProviderID || snap.Digest != b.Digest {
+			return nil, invalid("session snapshot changed")
+		}
+		out.prompt = prompt
+		out.argv = append(slices.Clone(cmd), "--mode", "rpc", "--session", b.File, "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--tools", tools, "--model", pr.Provider+"/"+pr.Model)
+	} else {
+		out.argv = append(slices.Clone(cmd), "--print", "--mode", "json", "--no-session", "--no-extensions", "--no-skills",
+			"--no-prompt-templates", "--no-context-files", "--tools", tools, "--model", pr.Provider+"/"+pr.Model, "--", prompt)
+	}
 	return out, nil
 }
 
@@ -260,12 +274,14 @@ func safeEvent(fn func(model.RunEvent), typ, summary string) {
 }
 
 type procOutcome struct {
-	t        *tracker
-	proc     *Process
-	exitCode *int
-	signal   string
-	stop     string // "", CatCanceled, CatWallTimeout, CatTokenLimit
-	spawnErr bool
+	t           *tracker
+	proc        *Process
+	exitCode    *int
+	signal      string
+	stop        string // "", CatCanceled, CatWallTimeout, CatTokenLimit
+	spawnErr    bool
+	session     *SessionOutcome
+	protocolErr bool
 }
 
 func (p *Pi) run(ctx context.Context, pp *prepared, onEvent func(model.RunEvent), onStart func(Process)) procOutcome {
@@ -368,9 +384,15 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	if res.RunID == "" {
 		res.RunID = newRunID()
 	}
-	o := p.run(ctx, pp, onEvent, onStart)
+	var o procOutcome
+	if req.Session != nil {
+		o = p.runRPC(ctx, pp, req, onEvent, onStart)
+	} else {
+		o = p.run(ctx, pp, onEvent, onStart)
+	}
 	res.EndedAt = time.Now().UTC()
 	res.Process, res.ExitCode, res.Signal = o.proc, o.exitCode, o.signal
+	res.Session = o.session
 	res.Usage = o.t.usage(o.stop != "" || o.spawnErr)
 
 	// Inspect Git state even when the parent context is canceled; never modify the worktree.
@@ -407,6 +429,10 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 		set(CatSpawn)
 	case o.stop != "":
 		set(o.stop)
+	case o.session != nil && !o.session.Confirmed:
+		set(CatSessionUnknown)
+	case o.protocolErr:
+		set(CatProtocol)
 	case o.t.providerError:
 		set(CatProviderError)
 	case o.exitCode == nil || *o.exitCode != 0:

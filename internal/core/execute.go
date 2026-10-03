@@ -625,6 +625,11 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		c.failTask(t.ID, model.TaskFailed, pre, s.role)
 		return false
 	}
+	ss, fresh, sessionErr := c.selectSession(st, t, prof, s.role, base)
+	if sessionErr != nil {
+		c.failTask(t.ID, model.TaskUnknown, "session_unverifiable", s.role)
+		return false
+	}
 	var findings []executor.Finding
 	if s.purpose == "fix" {
 		for _, r := range st.Reviews {
@@ -667,10 +672,13 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		State: model.RunStarting, StartedAt: ts, UpdatedAt: ts, Events: []model.RunEvent{}, Summary: mustJSON(sm), Origin: model.OriginNative,
 		Metrics: queueMetrics(qw, startT, sm.FixRound)}
 	pushEvent(&run, "state", "starting")
-	err := c.update(func(st *model.State) error {
+	err := c.startRoleRecord(ss, runID, fresh, func(st *model.State) error {
 		tt := findTask(st, t.ID)
 		if tt == nil {
 			return invalid("task vanished")
+		}
+		if ss != nil && taskContract(st, *tt) != ss.ContractDigest {
+			return invalid("task changed before session claim")
 		}
 		st.Runs = append(st.Runs, run)
 		tt.State, tt.StateReason, tt.ResumeRole, tt.UpdatedAt = s.taskState, nil, sp(s.role), ts
@@ -713,6 +721,10 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	req := executor.Request{RunID: runID, Profile: prof, Context: ctxRec, Role: s.role, Worktree: t.Worktree,
 		TaskBrief: brief(st, t, s, map[bool]string{true: base}[p.implemented], ctxRec, findings), ReportPath: filepath.Join(runDir, "report.json"),
 		ExpectedSHA: base, ContextDigest: t.ContextRef.Digest, RemainingTokens: capTok, RemainingWall: time.Duration(capSec) * time.Second, Env: c.opts.Env}
+	if ss != nil {
+		binding := c.sessionBinding(*ss, t.Worktree)
+		req.Session = &binding
+	}
 	started := time.Now()
 	xr, xerr := c.reg[execName(prof)].Execute(lctx, req, onEvent, onStart)
 	wall := time.Since(started).Seconds()
@@ -726,6 +738,15 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 
 	// Git facts before the final transaction.
 	after := inspect(t.Worktree)
+	sessionKnown := ss == nil || xr.Session != nil && xr.Session.Confirmed && xr.Session.ID == ss.ID && xr.Session.ProviderID == ss.ProviderID && sessionDigestRE.MatchString(xr.Session.Digest)
+	if ss != nil {
+		ss.State, ss.ActiveRunID, ss.UpdatedAt = model.SessionUnknown, nil, now()
+		if sessionKnown && after.Err == nil && after.Exists && after.Branch == deref(t.Branch) && shaRE.MatchString(after.Head) {
+			ss.State, ss.FileDigest, ss.LastSHA = model.SessionIdle, xr.Session.Digest, after.Head
+		} else {
+			sessionKnown = false
+		}
+	}
 	cat, reason := "", ""
 	var changed []string
 	stopped := false
@@ -761,6 +782,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		changed, cat = verifyRole(s.role, t, base, after, xr)
 		reason = cat
 	}
+	if !sessionKnown {
+		cat, reason, stopped = executor.CatSessionUnknown, "session_unverifiable", false
+	}
 	rep := xr.Report
 	if cat == "" {
 		if _, why := frozenOK(st, t); why != "" {
@@ -774,7 +798,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	c.mu.Unlock()
 	ok := cat == ""
 	var finalState string
-	err = c.update(func(st *model.State) error {
+	err = c.finishRoleRecord(ss, runID, func(st *model.State) error {
 		r, tt := findRun(st, runID), findTask(st, t.ID)
 		if r == nil || tt == nil {
 			return invalid("run vanished")
@@ -806,6 +830,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			tt.State = model.TaskFailed
 			if stopped {
 				r.State, tt.State = model.RunStopped, model.TaskStopped
+			}
+			if !sessionKnown {
+				r.State, tt.State = model.RunUnknown, model.TaskUnknown
 			}
 			sm.Outcome, sm.ErrorCategory = r.State, cat
 			tt.StateReason, tt.ResumeRole, tt.UpdatedAt = sp(reason), sp(s.role), t2

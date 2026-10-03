@@ -85,7 +85,8 @@ const (
 	schemaV1      = 1
 	schemaV2      = 2
 	schemaV3      = 3
-	schemaVersion = schemaV3
+	schemaV4      = 4
+	schemaVersion = schemaV4
 )
 
 // Settled delegate candidates (core.OriginDelegate / core.DelegateCandidate). They stay in first_delivery for
@@ -263,6 +264,11 @@ func (s *Store) migrate() error {
 	if v < schemaV3 {
 		if _, err := tx.Exec(migrationV3); err != nil {
 			return fmt.Errorf("store: migration v3 failed")
+		}
+	}
+	if v < schemaV4 {
+		if _, err := tx.Exec(migrationV4); err != nil {
+			return fmt.Errorf("store: migration v4 failed")
 		}
 	}
 	return tx.Commit()

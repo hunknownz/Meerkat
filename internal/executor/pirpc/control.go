@@ -11,11 +11,13 @@ import (
 // State is private control-plane data. SessionFile must not be published to the
 // browser or used for restore until its identity and frozen contract are checked.
 type State struct {
-	SessionID       string
-	SessionFile     string
-	Streaming       bool
-	Compacting      bool
-	PendingMessages int64
+	SessionID         string
+	SessionFile       string
+	Streaming         bool
+	Compacting        bool
+	PendingMessages   int64
+	Provider, ModelID string
+	MessageCount      *int64
 }
 
 func (c *Client) State(ctx context.Context) (State, error) {
@@ -29,6 +31,11 @@ func (c *Client) State(ctx context.Context) (State, error) {
 		Streaming       *bool  `json:"isStreaming"`
 		Compacting      *bool  `json:"isCompacting"`
 		PendingMessages *int64 `json:"pendingMessageCount"`
+		MessageCount    *int64 `json:"messageCount"`
+		Model           *struct {
+			Provider string `json:"provider"`
+			ID       string `json:"id"`
+		} `json:"model"`
 	}
 	if json.Unmarshal(data, &v) != nil || v.SessionID == "" || len(v.SessionID) > 128 ||
 		model.LooksLikeCredential(v.SessionID) || v.Streaming == nil || v.Compacting == nil ||
@@ -36,7 +43,11 @@ func (c *Client) State(ctx context.Context) (State, error) {
 		(v.SessionFile != "" && !filepath.IsAbs(v.SessionFile)) {
 		return State{}, &Error{Kind: Protocol}
 	}
-	return State{v.SessionID, v.SessionFile, *v.Streaming, *v.Compacting, *v.PendingMessages}, nil
+	s := State{SessionID: v.SessionID, SessionFile: v.SessionFile, Streaming: *v.Streaming, Compacting: *v.Compacting, PendingMessages: *v.PendingMessages, MessageCount: v.MessageCount}
+	if v.Model != nil {
+		s.Provider, s.ModelID = v.Model.Provider, v.Model.ID
+	}
+	return s, nil
 }
 
 // StopReceipt confirms Pi's session is idle, not that a task is delivered or the

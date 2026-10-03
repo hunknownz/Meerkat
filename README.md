@@ -39,7 +39,8 @@ flowchart LR
 | Role | developer, reviewer or polisher; fixes are developer runs. |
 | Profile | Executor, provider, model, credential environment-variable name and limits. |
 | Agent | A reusable local execution slot, such as Agent-01. |
-| Run | One invocation of one role with its frozen profile and actual usage. |
+| Session | Private execution history bound to a task, role and frozen profile. |
+| Run | One execution segment of a role, with its frozen profile and actual usage; persistent executors bind it to a Session. |
 | Delivery | Candidate SHA and checks after final review. |
 | Controller | Deterministic Go scheduler owning the lease and execution processes. |
 
@@ -76,6 +77,8 @@ node scripts/launch.mjs execute --task <task-id> --resume
 See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only.
 
 The development branch also supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits. The installed release has not been replaced by this development work.
+
+The development branch binds scheduler-driven Pi runs to [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. Budget wrap-up and recovery of uncommitted changes remain pending.
 
 Single delegation runs only the developer and records a first local candidate, unreviewed:
 
@@ -114,6 +117,8 @@ bin/meerkat export --format json --output /private/metrics.json
 ```
 
 Backups include prepared Issue bodies and restore their paths into the new private directory. When moving the same logical project to another repository, `migrate --project-moves /private/moves.json` accepts explicit `{projectId, fromRepositories, toRepositories}` mappings. Both source and existing destination must match. The target project stays intact; the original project and mapping remain in the private import audit. Plain migration still rejects divergent records.
+
+Development-branch backups also include idle/unknown session history files; backups with running sessions are refused. See [session storage and recovery](docs/persistent-sessions.md).
 
 Metrics include Project, Task, Run, Role, Executor, Model and available change IDs, tokens, queue time, execution time and fix rounds. Provider model time, test time and fees stay null unless measured. JSON and CSV exports contain no context, credentials or transcript.
 

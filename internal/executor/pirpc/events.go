@@ -25,6 +25,7 @@ type Event struct {
 	ObservedAt      time.Time
 	Settled         bool
 	ProviderFailure bool
+	Assistant       bool
 	Usage           *TokenSample
 }
 
@@ -62,6 +63,7 @@ func eventSummary(typ string, b []byte) (Event, bool) {
 	}
 	if (typ == "message_update" || typ == "message_end") &&
 		(v.Message == nil || v.Message.Role == "" || v.Message.Role == "assistant") {
+		ev.Assistant = v.Message != nil && v.Message.Role == "assistant"
 		raw := v.Usage
 		if v.Message != nil {
 			if len(v.Message.Usage) > 0 {

@@ -32,6 +32,7 @@ const (
 	CatDirty            = "dirty"
 	CatDecisionMismatch = "decision_mismatch"
 	CatGit              = "git_error"
+	CatSessionUnknown   = "session_unknown"
 )
 
 var catMessages = map[string]string{
@@ -43,6 +44,7 @@ var catMessages = map[string]string{
 	CatReviewerMutation: "reviewer changed branch, HEAD or working tree", CatBranchChanged: "branch changed during run",
 	CatNoCommit: "no new commit on task branch", CatDirty: "working tree left dirty",
 	CatDecisionMismatch: "report decision does not match Git state", CatGit: "git inspection failed",
+	CatSessionUnknown: "session outcome could not be verified",
 }
 
 // Error is a safe executor error. Message is fixed text or names a field, never a raw value.
@@ -72,7 +74,42 @@ type Request struct {
 	ContextDigest   string // digest the report must bind to ("" means null)
 	RemainingTokens int64
 	RemainingWall   time.Duration
-	Env             []string // child environment; nil means os.Environ()
+	Env             []string        // child environment; nil means os.Environ()
+	Session         *SessionBinding // private, verified history for a stateful executor
+}
+
+// Capabilities describe implemented operations, not planned adapters or policy.
+type Capabilities struct {
+	Protocol             string
+	PersistentSessions   bool
+	BidirectionalControl bool
+	UsageEvents          bool
+	RequestBudgetGate    bool
+}
+
+// SessionBinding is an opaque, private executor history binding. The scheduler
+// verifies the contract; the adapter verifies its backend's identity and format.
+type SessionBinding struct {
+	ID, ProviderID, File, Digest, Worktree string
+}
+
+type SessionSnapshot struct {
+	ProviderID, Digest string
+}
+
+// StatefulExecutor keeps protocol/format inspection out of the scheduler. Old
+// executors continue through Execute without advertising session support.
+type StatefulExecutor interface {
+	Executor
+	Capabilities() Capabilities
+	InitializeSession(SessionBinding) (SessionSnapshot, error)
+	InspectSession(SessionBinding) (SessionSnapshot, error)
+}
+
+// SessionOutcome is private evidence after shutdown, not proof of code delivery.
+type SessionOutcome struct {
+	ID, ProviderID, Digest string
+	Confirmed              bool
 }
 
 // Process is the identity of the process group owned by one run.
@@ -129,6 +166,7 @@ type Result struct {
 	Committed   bool                `json:"committed"`
 	Clean       bool                `json:"clean"`
 	Report      *Report             `json:"report"`
+	Session     *SessionOutcome     `json:"-"`
 }
 
 // Executor runs one role step.

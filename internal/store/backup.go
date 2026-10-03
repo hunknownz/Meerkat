@@ -23,7 +23,7 @@ var restoreFault func() error
 
 func badBackup(reason string) error { return fmt.Errorf("%w: %s", ErrBadBackup, reason) }
 
-// Backup writes a consistent, self-contained copy of the database (including prepared Issue bodies) to
+// Backup writes a consistent, self-contained copy of the database (including prepared Issue bodies and idle/unknown session files) to
 // destination, which must not exist. The source store is only read. A partial destination is removed on failure.
 func (s *Store) Backup(destination string) (err error) {
 	dest, err := filepath.Abs(destination)
@@ -51,6 +51,9 @@ func (s *Store) Backup(destination string) (err error) {
 		return fmt.Errorf("store: backup permissions failed")
 	}
 	if err := s.bundleBodies(dest); err != nil {
+		return err
+	}
+	if err := s.bundleSessions(dest); err != nil {
 		return err
 	}
 	return ValidateBackup(dest)
@@ -186,8 +189,8 @@ func verifyBackupBodies(q querier, fn func(IssueReceipt, []byte) error) error {
 	return nil
 }
 
-// ValidateBackup checks integrity, foreign keys, schema and bundled Issue bodies of a backup file. Backups of every
-// supported schema version (v1, v2, v3) are accepted; Restore migrates older ones when it opens the restored store.
+// ValidateBackup checks integrity, foreign keys, schema and bundled private files of a backup file. Backups of every
+// supported schema version (v1, v2, v3, v4) are accepted; Restore migrates older ones when it opens the restored store.
 func ValidateBackup(path string) error {
 	fi, err := os.Lstat(path)
 	if err != nil || !fi.Mode().IsRegular() {
@@ -210,6 +213,9 @@ func ValidateBackup(path string) error {
 		return ErrBadBackup
 	}
 	tables := append([]string{}, schemaTables...)
+	if v >= schemaV4 {
+		tables = append(tables, sessionTables...)
+	}
 	if v >= schemaV3 {
 		tables = append(tables, operationTables...)
 	}
@@ -224,10 +230,15 @@ func ValidateBackup(path string) error {
 			return err
 		}
 	}
+	if v >= schemaV4 {
+		if err := verifySessionBundle(db, nil); err != nil {
+			return err
+		}
+	}
 	return verifyBackupBodies(db, nil)
 }
 
-// Restore materializes a validated backup into dst, which must not exist. Issue bodies are written as private
+// Restore materializes a validated backup into dst, which must not exist. Session histories and Issue bodies are written as private
 // files in dst and receipt body paths are rebased onto dst; receipt ids, hashes, states and revisions are kept.
 // The backup file is only read. If anything fails, the directory this call created is removed.
 func Restore(backup, dst string) (err error) {
@@ -270,6 +281,10 @@ func Restore(backup, dst string) (err error) {
 		return err
 	}
 	if err := s.materializeBodies(); err != nil {
+		s.Close()
+		return err
+	}
+	if err := s.materializeSessions(); err != nil {
 		s.Close()
 		return err
 	}
