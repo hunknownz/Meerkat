@@ -12,7 +12,7 @@ export interface McpMonitor { destroy(): void }
 
 /** Boots the monitor in `container`. Handlers are registered before the SDK `ui/initialize` handshake. */
 export function startMcpMonitor(container: Element): McpMonitor {
-  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.3' });
+  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.4' });
   const bridge: McpBridge = {
     callServerTool: (params, options) => app.callServerTool(params, options) as Promise<McpToolResult>,
   };

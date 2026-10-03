@@ -218,6 +218,12 @@ type dispatcher interface {
 	WaitOperation(context.Context, string, time.Duration) (model.Operation, error)
 }
 
+type budgetController interface {
+	ProposeBudget(model.BudgetIncrease) (model.BudgetProposal, error)
+	ApplyBudgetDecision(model.BudgetDecisionInput) (model.BudgetDecisionSummary, error)
+	BudgetDecision(string) (model.BudgetDecisionSummary, error)
+}
+
 // Do executes one command under the service-owned context.
 func (s *Service) Do(req Request) Response {
 	select {
@@ -226,6 +232,38 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "propose-budget", "apply-budget-decision", "budget-decision":
+		bc, can := s.core.(budgetController)
+		if !can {
+			return bad("unknown op")
+		}
+		if req.Op == "budget-decision" {
+			d, e := bc.BudgetDecision(req.RequestID)
+			if e != nil {
+				return fail(e)
+			}
+			return ok(d)
+		}
+		if req.Op == "propose-budget" {
+			var in model.BudgetIncrease
+			if e := decodeBudgetInput(req.Input, &in); e != nil {
+				return bad("invalid budget input")
+			}
+			p, e := bc.ProposeBudget(in)
+			if e != nil {
+				return fail(e)
+			}
+			return ok(p)
+		}
+		var in model.BudgetDecisionInput
+		if e := decodeBudgetInput(req.Input, &in); e != nil {
+			return bad("invalid budget input")
+		}
+		d, e := bc.ApplyBudgetDecision(in)
+		if e != nil {
+			return fail(e)
+		}
+		return ok(d)
 	case "dispatch", "operation", "wait-operation":
 		dc, can := s.core.(dispatcher)
 		if !can {
@@ -347,6 +385,21 @@ func (s *Service) Do(req Request) Response {
 		return ok(r)
 	}
 	return bad("unknown op")
+}
+
+func decodeBudgetInput(raw []byte, out any) error {
+	if len(raw) == 0 || len(raw) > 16384 {
+		return errors.New("invalid input")
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if e := d.Decode(out); e != nil {
+		return e
+	}
+	if e := d.Decode(new(any)); !errors.Is(e, io.EOF) {
+		return errors.New("trailing input")
+	}
+	return nil
 }
 
 // Call sends one request to the daemon for dataDir and waits for the reply.

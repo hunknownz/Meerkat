@@ -70,13 +70,13 @@ func (a *requestAuthority) Settle(ctx context.Context, v budget.Settlement) erro
 }
 
 func (c *Core) openRequestBudget(t model.Task, p model.Profile, ss *model.Session, runID string, tokens, seconds int64) (*requestAuthority, error) {
-	b := model.DefaultBudget()
-	if t.Budget != nil {
-		b = *t.Budget
+	b, revision, e := c.st.EffectiveBudget(t.ID)
+	if e != nil {
+		return nil, e
 	}
 	policy := budget.Policy{RunID: runID, TaskID: t.ID, SessionID: ss.ID, ProfileID: p.ID, ProfileDigest: ss.ProfileDigest, ContractDigest: ss.ContractDigest,
 		Provider: p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano),
-		TaskTokens: b.MaxTokens, RunTokens: tokens, TaskRequests: budget.MaxRequests, State: "open"}
+		TaskTokens: b.MaxTokens, RunTokens: tokens, TaskRequests: budget.MaxRequests, BudgetRevision: revision, State: "open"}
 	if b.StageReserves != nil {
 		policy.WrapUpTokens = min(b.StageReserves.WrapUpTokens, tokens-1)
 	}

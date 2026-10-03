@@ -33,7 +33,7 @@ func validBudgetPolicy(p budget.Policy) bool {
 		digestRE.MatchString(p.ProfileDigest) && digestRE.MatchString(p.ContractDigest) && p.Provider != "" && p.Model != "" &&
 		!model.LooksLikeCredential(p.Provider) && !model.LooksLikeCredential(p.Model) && len(p.Provider) <= 128 && len(p.Model) <= 256 &&
 		p.Version == budget.PolicyVersion && p.TaskTokens > 0 && p.TaskTokens <= budget.MaxCount && p.RunTokens > 0 && p.RunTokens <= p.TaskTokens &&
-		p.TaskRequests > 0 && p.TaskRequests <= budget.MaxRequests && p.WrapUpTokens >= 0 && p.WrapUpTokens < p.RunTokens && slices.Contains([]string{"open", "closed", "unknown"}, p.State) && e == nil
+		p.TaskRequests > 0 && p.TaskRequests <= budget.MaxRequests && p.BudgetRevision >= 0 && p.BudgetRevision <= 512 && p.WrapUpTokens >= 0 && p.WrapUpTokens < p.RunTokens && slices.Contains([]string{"open", "closed", "unknown"}, p.State) && e == nil
 }
 
 // RequestHeadroomOwned includes reservations and uncertain requests. It never
@@ -286,6 +286,10 @@ func verifyBudgetOwner(q *sql.Tx, token string, p budget.Policy) (*model.State, 
 		ss.ContractDigest != p.ContractDigest || ss.ProfileDigest != p.ProfileDigest {
 		return nil, budget.ErrDenied
 	}
+	v, err := allowanceAt(q, st, *task, nil)
+	if err != nil || p.TaskTokens != v.AuthorizedTokens || p.BudgetRevision != v.Revision {
+		return nil, budget.ErrDenied
+	}
 	return st, nil
 }
 
@@ -298,17 +302,6 @@ func (s *Store) OpenRequestBudgetOwned(token string, p budget.Policy) error {
 		if err != nil {
 			return err
 		}
-		for _, t := range st.Tasks {
-			if t.ID == p.TaskID {
-				b := model.DefaultBudget()
-				if t.Budget != nil {
-					b = *t.Budget
-				}
-				if p.TaskTokens != b.MaxTokens {
-					return budget.ErrDenied
-				}
-			}
-		}
 		if _, err := loadBudgetPolicy(tx, p.RunID); err != ErrNotFound {
 			return budget.ErrConflict
 		}
@@ -317,7 +310,8 @@ func (s *Store) OpenRequestBudgetOwned(token string, p budget.Policy) error {
 			return err
 		}
 		for _, old := range ps {
-			if old.ContractDigest != p.ContractDigest || old.TaskTokens != p.TaskTokens || old.TaskRequests != p.TaskRequests {
+			v, e := allowanceAt(tx, st, *taskByID(st, p.TaskID), &old.BudgetRevision)
+			if e != nil || old.ContractDigest != p.ContractDigest || old.TaskTokens != v.AuthorizedTokens || old.TaskRequests != p.TaskRequests || old.State != "closed" {
 				return budget.ErrConflict
 			}
 		}
@@ -653,6 +647,14 @@ func validateBudgetBackup(q querier) error {
 		return ErrBadBackup
 	}
 	for _, p := range ps {
+		t := taskByID(st, p.TaskID)
+		if t == nil {
+			return ErrBadBackup
+		}
+		v, e := allowanceAt(q, st, *t, &p.BudgetRevision)
+		if e != nil || p.TaskTokens != v.AuthorizedTokens {
+			return ErrBadBackup
+		}
 		ss, err := loadSession(q, p.SessionID)
 		if err != nil || ss.TaskID != p.TaskID || ss.ContractDigest != p.ContractDigest || ss.ProfileDigest != p.ProfileDigest {
 			return ErrBadBackup

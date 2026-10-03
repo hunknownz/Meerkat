@@ -61,19 +61,20 @@ type reportView struct {
 
 // runSummary is the core-written, secret-free run summary.
 type runSummary struct {
-	Purpose       string      `json:"purpose"`
-	FixRound      int         `json:"fixRound,omitempty"`
-	Limits        limits      `json:"limits"`
-	Outcome       string      `json:"outcome,omitempty"`
-	ErrorCategory string      `json:"errorCategory,omitempty"`
-	BaselineSha   string      `json:"baselineSha,omitempty"`
-	ResultSha     string      `json:"resultSha,omitempty"`
-	StartSha      string      `json:"startSha,omitempty"`
-	ChangedPaths  []string    `json:"changedPaths,omitempty"`
-	Verdict       string      `json:"verdict,omitempty"`
-	Decision      string      `json:"decision,omitempty"`
-	Report        *reportView `json:"report,omitempty"`
-	CheckpointID  string      `json:"checkpointId,omitempty"`
+	Purpose        string      `json:"purpose"`
+	FixRound       int         `json:"fixRound,omitempty"`
+	Limits         limits      `json:"limits"`
+	Outcome        string      `json:"outcome,omitempty"`
+	ErrorCategory  string      `json:"errorCategory,omitempty"`
+	BaselineSha    string      `json:"baselineSha,omitempty"`
+	ResultSha      string      `json:"resultSha,omitempty"`
+	StartSha       string      `json:"startSha,omitempty"`
+	ChangedPaths   []string    `json:"changedPaths,omitempty"`
+	Verdict        string      `json:"verdict,omitempty"`
+	Decision       string      `json:"decision,omitempty"`
+	Report         *reportView `json:"report,omitempty"`
+	CheckpointID   string      `json:"checkpointId,omitempty"`
+	BudgetRevision int64       `json:"budgetRevision,omitempty"`
 }
 
 func summaryOf(r model.Run) runSummary {
@@ -380,11 +381,11 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 			if cp != nil {
 				p := pipelineOf(st, t.ID)
 				maxFix := set.MaxFixRounds
-				b := model.DefaultBudget()
-				if t.Budget != nil {
-					b = *t.Budget
-					maxFix = min(maxFix, b.MaxFixRounds)
+				b, _, e := c.st.EffectiveBudget(t.ID)
+				if e != nil {
+					return nil, nil, e
 				}
+				maxFix = min(maxFix, b.MaxFixRounds)
 				s := nextStep(p, maxFix)
 				if e := c.verifyCheckpoint(st, *t, *cp, s); e != nil {
 					return nil, nil, e
@@ -620,9 +621,10 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		return false
 	}
 	usedTok, usedSec := budgetUse(st, t.ID)
-	budget := model.DefaultBudget()
-	if t.Budget != nil {
-		budget = *t.Budget
+	budget, budgetRevision, budgetLookupErr := c.st.EffectiveBudget(t.ID)
+	if budgetLookupErr != nil {
+		c.failTask(t.ID, model.TaskUnknown, "budget_authorization_unverifiable", s.role)
+		return false
 	}
 	remTok, remSec := budget.MaxTokens-usedTok-futureStageReserve(t, p, s), int64(float64(budget.MaxWallSeconds)-usedSec)
 	resumeCP, checkpointErr := c.savedCheckpoint(t.ID)
@@ -713,7 +715,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.lanes, runID); c.mu.Unlock() }()
 
-	sm := runSummary{Purpose: s.purpose, Limits: limits{MaxTokens: capTok, MaxWallSeconds: capSec}}
+	sm := runSummary{Purpose: s.purpose, Limits: limits{MaxTokens: capTok, MaxWallSeconds: capSec}, BudgetRevision: budgetRevision}
 	var resumeRecords []model.Checkpoint
 	if resumeCP != nil {
 		sm.CheckpointID = resumeCP.ID

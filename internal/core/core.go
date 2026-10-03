@@ -392,11 +392,12 @@ func execName(p model.Profile) string {
 // PublicTask is the task projection with aggregate usage.
 type PublicTask struct {
 	model.Task
-	WorktreeExists bool                      `json:"worktreeExists"`
-	Usage          model.AggregateUsage      `json:"usage"`
-	Sessions       []model.SessionSummary    `json:"sessions,omitempty"`
-	BudgetEvidence *model.BudgetEvidence     `json:"budgetEvidence,omitempty"`
-	Checkpoints    []model.CheckpointSummary `json:"checkpoints,omitempty"`
+	WorktreeExists      bool                       `json:"worktreeExists"`
+	Usage               model.AggregateUsage       `json:"usage"`
+	Sessions            []model.SessionSummary     `json:"sessions,omitempty"`
+	BudgetEvidence      *model.BudgetEvidence      `json:"budgetEvidence,omitempty"`
+	Checkpoints         []model.CheckpointSummary  `json:"checkpoints,omitempty"`
+	BudgetAuthorization *model.BudgetAuthorization `json:"budgetAuthorization,omitempty"`
 }
 
 // Counts are snapshot counters.
@@ -501,6 +502,13 @@ func (c *Core) Snapshot() (Snapshot, error) {
 		}
 		for _, cp := range cps {
 			pt.Checkpoints = append(pt.Checkpoints, checkpointSummary(cp))
+		}
+		bv, e := c.st.BudgetAuthorization(t.ID)
+		if e != nil {
+			return Snapshot{}, e
+		}
+		if bv.Revision > 0 {
+			pt.BudgetAuthorization = &bv
 		}
 		for i := range pt.Sessions {
 			pt.Sessions[i].Role = safeName(pt.Sessions[i].Role)

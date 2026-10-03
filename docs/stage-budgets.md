@@ -41,6 +41,7 @@ available allowance, pending/unknown requests and safe session summaries. It
 does not expose prompts, private history paths, credentials or write tokens.
 
 Verified dirty-worktree continuation is described in [checkpoints](checkpoints.md).
-This release does not implement additional
-budget authorization. Preserved files and an idle session alone do not authorize
-continuation. See the [complete plan](../design/session-budget-coordination-20261003.md).
+If effective allowance is exhausted, an [explicit budget decision](budget-decisions.md)
+can append token/time allowance without changing the frozen stage reserves or
+existing usage. Preserved files and an idle session alone do not authorize an
+increase. See the [complete plan](../design/session-budget-coordination-20261003.md).

@@ -26,7 +26,7 @@ SQLite V4 records Session identity, frozen contract, file reference/digest, veri
 
 Public snapshots, MCP results and default metric exports exclude raw history and private session paths. Ledger-backed Run usage comes from raw request settlement; other executor runs retain current event accounting. Pi's historical session total is not added again. Missing token fields and prices remain unknown. Pi-reported cost is an estimate, not a confirmed bill.
 
-Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V5 stores and backups migrate to V6, retaining session, request-budget and checkpoint history.
+Backups include idle and unknown session files. Idle files must match their confirmed digest. Unknown files preserve current bytes without declaring their session recoverable. Backups containing a running session are refused and partial output is removed. Wait until active sessions settle before creating a backup. Restore writes histories into a new private data directory and retains unknown states. Supported V1–V6 stores and backups migrate to V7, retaining session, request-budget and checkpoint history; V7 also preserves [explicit budget decisions](budget-decisions.md).
 
 ## Verification scope
 

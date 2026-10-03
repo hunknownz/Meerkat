@@ -19,6 +19,7 @@ branch, linked worktree, staged changes and every changed/untracked file's
 contents and mode. Pi verifies the worktree fingerprint again before a prompt.
 The checkpoint is consumed atomically with the new Run's session claim, and the
 original task's token/time use remains charged. Resume does not add allowance.
+An exhausted allowance requires a separate [authorized decision](budget-decisions.md).
 
 Changed, missing or extra files, a changed index, unverified commit, modified
 session/history or exhausted allowance require the coordinator. The existing
@@ -48,7 +49,8 @@ continuation in the original worktree, not automatic reconstruction in a new one
 
 ## History, backup and display
 
-SQLite V6 preserves existing V1–V5 records. Saved and consumed checkpoint archives
+Checkpoints were introduced in SQLite V6; V7 adds independent budget decisions
+and preserves existing V1–V6 records. Saved and consumed checkpoint archives
 are bundled into consistent backups and materialized only into a new private data
 directory on restore. A missing/corrupt archive rejects backup or restore. A
 resumed Run that is interrupted after its one-time claim remains unknown after a

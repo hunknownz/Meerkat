@@ -33,6 +33,7 @@ type Policy struct {
 	Provider, Model, Version, Deadline                                 string
 	TaskTokens, RunTokens, TaskRequests                                int64
 	WrapUpTokens                                                       int64
+	BudgetRevision                                                     int64
 	State                                                              string
 }
 

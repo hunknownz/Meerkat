@@ -385,6 +385,7 @@
           }
         },
         "budget": { "$ref": "#/definitions/Budget" },
+        "budgetAuthorization": { "$ref": "#/definitions/BudgetAuthorization" },
         "budgetEvidence": { "$ref": "#/definitions/BudgetEvidence" },
         "sessions": { "type": "array", "items": { "$ref": "#/definitions/SessionSummary" } },
         "checkpoints": { "type": "array", "items": { "$ref": "#/definitions/CheckpointSummary" } },
@@ -906,6 +907,99 @@
           "type": "string"
         }
       }
+    },
+    "BudgetDecisionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "revision",
+        "addTokens",
+        "addWallSeconds",
+        "reason",
+        "createdAt"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "addTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "addWallSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      }
+    },
+    "BudgetAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "taskId": {
+          "$ref": "#/definitions/Id"
+        },
+        "originalTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "originalWallSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "addedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "addedWallSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authorizedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authorizedWallSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 512
+        },
+        "decisions": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/definitions/BudgetDecisionSummary"
+          }
+        }
+      },
+      "required": [
+        "taskId",
+        "originalTokens",
+        "originalWallSeconds",
+        "addedTokens",
+        "addedWallSeconds",
+        "authorizedTokens",
+        "authorizedWallSeconds",
+        "revision",
+        "decisions"
+      ]
     }
   }
 }

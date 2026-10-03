@@ -34,6 +34,15 @@ func (s *Store) ExecutionEvidence(taskID string) ([]model.SessionSummary, *model
 		return nil, nil, err
 	}
 	p := ps[len(ps)-1]
+	t := taskByID(st, taskID)
+	if t == nil {
+		return nil, nil, ErrNotFound
+	}
+	v, err := allowanceAt(tx, st, *t, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	p.TaskTokens = v.AuthorizedTokens // A closed older Run does not cap a later authorized addition.
 	b := &model.BudgetEvidence{AuthorizedTokens: p.TaskTokens}
 	for _, r := range rs {
 		if r.State == budget.Canceled {

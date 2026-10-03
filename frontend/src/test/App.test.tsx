@@ -9,6 +9,18 @@ const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: fal
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('shows original and added allowances separately, without a grant button or private references', () => {
+    const s=snapshot();s.tasks[0]!.budget={maxTokens:100,maxWallSeconds:600,maxFixRounds:1};
+    s.tasks[0]!.budgetAuthorization={taskId:s.tasks[0]!.id,originalTokens:100,originalWallSeconds:600,addedTokens:950,addedWallSeconds:100,authorizedTokens:1050,authorizedWallSeconds:700,revision:1,decisions:[{requestId:'decision-1',revision:1,addTokens:950,addWallSeconds:100,reason:'Finish original scope',createdAt:'2025-01-01T00:10:00Z'}]};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(true);
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({readonly:true})} />);
+    view('Tasks');fireEvent.click(screen.getByText('Fix parser'));
+    const text=screen.getByRole('dialog').textContent!;
+    expect(text).toContain('原始预算100');expect(text).toContain('当前已授权1,050');expect(text).toContain('Finish original scope');expect(text).toContain('保留已用 token');
+    expect(screen.queryByRole('button',{name:/追加|授权|续跑/})).toBeNull();
+    s.tasks[0]!.budgetAuthorization.decisions[0]={...s.tasks[0]!.budgetAuthorization.decisions[0]!,...{authorizationRef:'private'}};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(false);
+  });
   it('shows saved progress without claiming delivery or exposing a resume control', () => {
     const s=snapshot();s.tasks[0]!.state='paused';
     s.tasks[0]!.checkpoints=[{id:'checkpoint-1',runId:RUN_A,role:'developer',headSha:'a'.repeat(40),fileCount:2,state:'saved',resumedRunId:null,createdAt:'2025-01-01T00:10:00Z'}];

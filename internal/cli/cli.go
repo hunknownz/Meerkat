@@ -45,6 +45,9 @@ Via daemon:
   snapshot                                   public snapshot (+ local history summary)
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
+  budget propose --task ID --add-tokens N --add-wall-seconds N --reason TEXT [--output FILE]
+  budget apply --input PROPOSAL.json --request-id UUID --authorization REF --apply
+  budget receipt --request-id UUID          recover an explicitly applied decision; never resumes
   issue update --task ID [--apply]           prepare update; post only with --apply
   mcp                                        MCP stdio: read-only monitor plus model control tools
 Offline:
@@ -87,11 +90,11 @@ func Run(env Env, args []string) int {
 		return ExitOK
 	}
 	run, found := commands[cmd]
-	if cmd == "issue" {
+	if cmd == "issue" || cmd == "budget" {
 		if len(rest) == 0 {
-			return usageFail(env, "issue requires read or update")
+			return usageFail(env, cmd+" requires a subcommand")
 		}
-		run, found = commands["issue "+rest[0]]
+		run, found = commands[cmd+" "+rest[0]]
 		rest = rest[1:]
 	}
 	if !found {
@@ -112,23 +115,26 @@ var commands map[string]func(Env, []string) (int, error)
 
 func init() {
 	commands = map[string]func(Env, []string) (int, error){
-		"serve":        cmdServe,
-		"prepare":      cmdPrepare,
-		"dispatch":     cmdDispatch,
-		"operation":    cmdOperation,
-		"execute":      cmdExecute,
-		"run":          cmdRun,
-		"snapshot":     cmdSnapshot,
-		"stop":         cmdStop,
-		"settings":     cmdSettings,
-		"issue update": cmdIssueUpdate,
-		"issue read":   cmdIssueRead,
-		"migrate":      cmdMigrate,
-		"backup":       cmdBackup,
-		"restore":      cmdRestore,
-		"export":       cmdExport,
-		"doctor":       cmdDoctor,
-		"mcp":          cmdMCP,
+		"serve":          cmdServe,
+		"prepare":        cmdPrepare,
+		"dispatch":       cmdDispatch,
+		"operation":      cmdOperation,
+		"execute":        cmdExecute,
+		"run":            cmdRun,
+		"snapshot":       cmdSnapshot,
+		"stop":           cmdStop,
+		"settings":       cmdSettings,
+		"issue update":   cmdIssueUpdate,
+		"issue read":     cmdIssueRead,
+		"migrate":        cmdMigrate,
+		"backup":         cmdBackup,
+		"restore":        cmdRestore,
+		"export":         cmdExport,
+		"doctor":         cmdDoctor,
+		"mcp":            cmdMCP,
+		"budget propose": cmdBudgetPropose,
+		"budget apply":   cmdBudgetApply,
+		"budget receipt": cmdBudgetReceipt,
 	}
 }
 

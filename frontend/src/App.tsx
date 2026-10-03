@@ -289,7 +289,11 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               })}
             </ol></div>
             {task.budget ? <div className="card"><h3>任务预算</h3><dl className="concl">
-              <dt>已授权</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复</dd>
+              <dt>原始预算</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复</dd>
+              {task.budgetAuthorization ? <>
+                <dt>当前已授权</dt><dd>{num(task.budgetAuthorization.authorizedTokens)} token · {formatDuration(task.budgetAuthorization.authorizedWallSeconds)}</dd>
+                <dt>累计追加</dt><dd>{num(task.budgetAuthorization.addedTokens)} token · {formatDuration(task.budgetAuthorization.addedWallSeconds)} · 预算修订 {task.budgetAuthorization.revision}</dd>
+              </> : null}
               {task.budgetEvidence ? <>
                 <dt>请求账本</dt><dd>{num(task.budgetEvidence.confirmedTokens)} 已结算 · {num(task.budgetEvidence.reservedTokens)} 预留占用</dd>
                 <dt>可申请额度</dt><dd>{task.budgetEvidence.availableTokens == null ? '未知' : num(task.budgetEvidence.availableTokens)}（预留口径）</dd>
@@ -300,7 +304,10 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
                   task.budget.stageReserves.wrapUpTokens > 0 ? `剩余 ${num(task.budget.stageReserves.wrapUpTokens)} token` : '',
                   task.budget.stageReserves.wrapUpSeconds > 0 ? `剩余 ${formatDuration(task.budget.stageReserves.wrapUpSeconds)}` : '',
                 ].filter(Boolean).join(' 或 ') || '未启用'}；原截止时间不变</dd></> : null}
-            </dl></div> : null}
+            </dl>{task.budgetAuthorization?.decisions.map(d=><div className="run" key={d.requestId}>
+              <span className="rt">修订 {d.revision} · +{num(d.addTokens)} token · +{formatDuration(d.addWallSeconds)}</span>
+              <span className="rm">{d.reason} · {formatTime(d.createdAt)} · <code>{short(d.requestId)}</code></span>
+            </div>)}{task.budgetAuthorization ? <p className="k small">追加额度保留已用 token 和耗时；任务仍需显式续跑。此面板仅展示预算决策。</p> : null}</div> : null}
             {task.sessions?.length ? <div className="card"><h3>执行会话</h3><div className="run-table">{task.sessions.map((s) => (
               <div className="run" key={s.id}><span className="rt">{roleLabel(s.role)} · {s.executor}</span><span className="rr">{s.state === 'idle' ? '已核实空闲' : s.state === 'running' ? '执行中' : '身份未知'}</span>
                 <span className="rm"><code>{short(s.id)}</code> · HEAD <code>{short(s.lastSha)}</code>{s.activeRunId ? <> · Run <code>{short(s.activeRunId)}</code></> : null}</span></div>
