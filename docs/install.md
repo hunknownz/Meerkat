@@ -147,8 +147,24 @@ Remote Issue updates need explicit `--apply` and your authorization; nothing is 
 
 ## Update and uninstall
 
-Runtimes are versioned: installing a new tag adds a new `~/.meerkat/runtime/<version>/` directory.
-Update by re-adding the marketplace at the new `--ref` and rerunning `setup.mjs`.
+Runtimes are versioned: installing a new version adds a new
+`~/.meerkat/runtime/<version>/` directory. When changing the marketplace's pinned
+ref, remove its old registration first; Codex otherwise reports that the same
+marketplace is already registered from a different source:
+
+```sh
+codex plugin marketplace remove meerkat
+codex plugin marketplace add hunknownz/Meerkat --ref main
+codex plugin add meerkat@meerkat
+```
+
+Use a published tag or exact commit instead of `main` when pinning a version.
+Install its matching runtime with `setup.mjs`, and open a new chat or restart Codex
+to reload the MCP server and UI. Before switching the local service, finish or
+stop active work, terminate the old service, and make a consistent backup with
+the old runtime's `backup --output /abs/path/to/backup.db` command. Start the new
+service with the same private data directory; keep the backup until history and
+usage are reconciled.
 
 ```sh
 codex plugin remove meerkat@meerkat

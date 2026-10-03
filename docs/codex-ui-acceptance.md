@@ -35,3 +35,27 @@ redesign remains tracked in [the complete plan](../design/session-budget-coordin
 monitor and MCP host transport. Its build and automated checks are recorded in
 [the delivery record](../design/stage-budget-20261003.md). A newly installed plugin
 may require a new chat or host restart to reload its cached stdio server and UI.
+
+## Installed beta.2 verification
+
+The GitHub marketplace was pinned to commit
+`39177979a0b8023a40ec216b1cc4f3d3bba599d0` and installed as `0.4.0-beta.2`.
+The installed plugin's stdio launcher completed `initialize`, `tools/list`,
+`resources/read` and `tools/call open_monitor` against the upgraded service.
+The resource MIME type is `text/html;profile=mcp-app`; its HTML matches the
+committed asset byte for byte, with SHA-256
+`a966ae8f2b5e4b11ffaaf8775389558ee02608313c0eb88d9e66b2044f58b288`.
+Its CSP lists no external connection or resource domains. The monitor response
+passed checks for absent credential and private session fields.
+
+The installed runtime reports `0.4.0-beta.2`, and its binary SHA-256 is
+`31e2deddd1334c58cb9b685511b86972a3c862452f984bdca86412be6e589bcf`.
+Before service cutover, the old runtime exported a consistent backup; the new
+runtime restored it into an isolated data directory. Both restored and live
+databases passed integrity checks at schema V5. Live history before and after
+cutover matched for 14 tasks, 21 runs and their usage, 11 deliveries and 6 reviews.
+No paid model request was made during this verification.
+
+These installed-transport checks supplement the host evidence above. They do not
+claim that an already open Codex panel reloaded beta.2; that requires reopening
+the panel in a fresh chat or restarting the host.
