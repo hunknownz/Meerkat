@@ -66,3 +66,5 @@ restart uncertainty, Unicode bounds, owner checks, Pi RPC forwarding and
 automatic wrap-up, UI connection changes and lost-reply reads. The beta.8
 Codex display screenshot verifies the older display only. Beta.9 interactive
 host acceptance must be checked with a fresh plugin resource and active Run.
+A real loopback-panel instruction reached Pi in the same Session and appeared
+in the reviewed local candidate; see the [verification record](verification/ui-intervention-20261004.md).

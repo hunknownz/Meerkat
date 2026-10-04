@@ -40,6 +40,8 @@ read using the original UUID.
 |---|---:|---:|---|
 | Initial broad UI attempt | 1,709,766 | 93.131 | Paused at the request gate; no code changes. |
 | Bounded model contract | 294,187 | 111.243 | Scoped local candidate, reviewed by the coordinator. |
+| First display probe | 99,342 | 72.819 | Finished before a human instruction was sent; does not verify intervention. |
+| Live UI instruction | 25,954 | 66.564 | Same-session instruction applied in scoped candidate `28529f5`. |
 
 The bounded run reported 29,063 input, 13,476 output and 251,648 cache-read
 tokens. Cache-write usage and monetary cost are unknown. The broad attempt's
@@ -47,11 +49,50 @@ input/cache breakdown is also unknown. Total tokens include cache usage and
 are not a monetary bill. Both runs and the unused paused checkpoint remain
 in private state; the history was not reset.
 
+The live instruction run reported 5,301 input, 2,221 output and 18,432 cache-read
+tokens. Cache-write usage and monetary cost remain unknown. Its wall time
+includes a deliberate 45-second wait for UI interaction; it is not a development
+speed benchmark.
+
+## Installation and service cutover
+
+- Feature source: `1728db9e06033b533fbbfa03833a139e12ae9f91`.
+- Clean-source release build for `darwin/arm64`: passed.
+- Installed runtime and plugin cache both report `0.4.0-beta.9`.
+- Runtime SHA-256: `fa655eb2fe35c9d111e18a7dee5c336853de5c2516197f044cf39e6db628ca56`.
+- Local marketplace tracks the repository's `main`; the previous source was
+  pinned to an older commit, so an upgrade alone did not fetch beta.9.
+- The idle old service was stopped after a consistent database backup. The
+  new owner migrated schema 9 to 10, preserving all 19 tasks and 28 runs present
+  at cutover. Integrity and foreign-key checks passed.
+- Installed stdio MCP initialization, tool listing and UI resource reading
+  passed. The three app-only intervention tools and the new inline UI are
+  present. This protocol check does not prove a host click works.
+
+## Real executor interaction
+
+In the loopback panel, the coordinator expanded a running developer and sent
+an instruction to replace the last line of one scratch document with
+`Human direction verified.` The panel showed a durable queued receipt. Its
+Run and Session IDs stayed the same through the instruction and final delivery.
+Reading the original receipt UUID returned the settled Run outcome without
+resending the instruction.
+
+Pi delivered candidate `28529f5357249dbb3a8d82dc4c0a56cdeea23ae5`. The coordinator
+reviewed the actual diff: one line replaced in the declared document, with the
+heading and session explanation preserved. The linked worktree was clean.
+The scratch candidate was retained for evidence and was not integrated into
+the product repository. No network publishing occurred in that run.
+
 ## Acceptance boundary
 
 The real beta.8 Codex MCP panel was inspected again during development and
 showed live task history. That does not verify beta.9 human controls. Fresh
 beta.9 installation, real executor interaction and native host interaction
-are separate acceptance evidence; update this record after those checks.
+are separate acceptance evidence. Installation and real executor interaction
+passed as recorded above. Native beta.9 intervention remains pending: the
+expanded Codex tab still contains the beta.8 resource. The user has been asked
+to close and reopen it, or restart Codex if the old resource persists. Browser
+interaction and stdio protocol checks do not replace that host acceptance.
 The original project-concurrency task and optional-budget policy remain
 separate unfinished work.
