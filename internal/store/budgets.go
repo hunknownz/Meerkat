@@ -91,7 +91,7 @@ func validBudgetRequest(r budget.Request) bool {
 }
 
 func validSettlement(v budget.Settlement) bool {
-	if !uuidRE.MatchString(v.ID) || !slices.Contains([]string{budget.Settled, budget.Unknown, budget.Canceled}, v.State) {
+	if !uuidRE.MatchString(v.ID) || !slices.Contains([]string{budget.Settled, budget.Unknown, budget.Canceled, budget.RateLimited}, v.State) {
 		return false
 	}
 	for _, n := range []*int64{v.Tokens.Input, v.Tokens.Output, v.Tokens.CacheRead, v.Tokens.CacheWrite, v.Tokens.Total} {
@@ -100,6 +100,18 @@ func validSettlement(v budget.Settlement) bool {
 		}
 	}
 	if v.Tokens.AssistantMessages != nil {
+		return false
+	}
+	if v.State == budget.RateLimited {
+		if v.Terminal || v.Rejection == nil || !budget.ValidRateLimitEvidence(*v.Rejection) {
+			return false
+		}
+		for _, n := range []*int64{v.Tokens.Input, v.Tokens.Output, v.Tokens.CacheRead, v.Tokens.CacheWrite, v.Tokens.Total} {
+			if n != nil {
+				return false
+			}
+		}
+	} else if v.Rejection != nil {
 		return false
 	}
 	// A cancellation is allowed only before a send permit was issued.
@@ -141,7 +153,7 @@ func validBudgetRecord(r budget.Record) bool {
 	if !validBudgetRequest(r.Request) || !uuidRE.MatchString(r.RunID) || r.Grant.ID != r.Request.ID ||
 		r.Grant.MaxOutput < 1 || r.Grant.MaxOutput > r.Request.MaxOutput || r.Grant.MaxOutput > budget.MaxOutput ||
 		r.Grant.ReservedTokens != r.Request.InputEstimate+r.Grant.MaxOutput ||
-		!slices.Contains([]string{budget.Reserved, budget.Sent, budget.Settled, budget.Unknown, budget.Canceled}, r.State) {
+		!slices.Contains([]string{budget.Reserved, budget.Sent, budget.Settled, budget.Unknown, budget.Canceled, budget.RateLimited}, r.State) {
 		return false
 	}
 	for _, at := range []string{r.CreatedAt, r.UpdatedAt} {
@@ -154,13 +166,18 @@ func validBudgetRecord(r budget.Record) bool {
 	}
 	if r.State == budget.Reserved && (r.SentDigest != nil || r.Settlement != nil) ||
 		r.State == budget.Sent && (r.SentDigest == nil || r.Settlement != nil) ||
-		r.State == budget.Settled && (r.SentDigest == nil || r.Settlement == nil) {
+		(r.State == budget.Settled || r.State == budget.RateLimited) && (r.SentDigest == nil || r.Settlement == nil) {
 		return false
 	}
 	if r.Settlement != nil && (!validSettlement(*r.Settlement) || r.Settlement.ID != r.Request.ID || r.Settlement.State != r.State) {
 		return false
 	}
 	if r.State == budget.Canceled && (r.SentDigest != nil || r.Settlement == nil) {
+		return false
+	}
+	if r.Retry != nil && (r.State != budget.RateLimited || r.Retry.ID != r.Request.ID ||
+		r.Retry.WaitMillis < 0 || r.Retry.WaitMillis > 30000 ||
+		!r.Retry.Retry && r.Retry.WaitMillis != 0) {
 		return false
 	}
 	return r.Overrun == requestOverrun(r)
@@ -321,7 +338,7 @@ func (s *Store) OpenRequestBudgetOwned(token string, p budget.Policy) error {
 }
 
 func budgetCharge(r budget.Record) int64 {
-	if r.State == budget.Canceled {
+	if r.State == budget.Canceled || r.State == budget.RateLimited {
 		return 0
 	}
 	if r.State == budget.Settled {
@@ -503,6 +520,7 @@ func (s *Store) CloseRequestBudgetOwned(token, runID string) (budget.Outcome, er
 		result.Confirmed = p.State != "unknown"
 		var counts [5]int64
 		var missing [5]bool
+		measuredRequests := 0
 		for _, r := range rs {
 			if r.RunID != runID {
 				continue
@@ -518,9 +536,10 @@ func (s *Store) CloseRequestBudgetOwned(token, runID string) (budget.Outcome, er
 				result.Confirmed = false
 			}
 			result.Overrun = result.Overrun || r.Overrun
-			if r.State == budget.Canceled {
+			if r.State == budget.Canceled || r.State == budget.RateLimited {
 				continue
 			}
+			measuredRequests++
 			var tc model.TokenCounts
 			if r.Settlement != nil {
 				tc = r.Settlement.Tokens
@@ -542,7 +561,7 @@ func (s *Store) CloseRequestBudgetOwned(token, runID string) (budget.Outcome, er
 		}
 		result.Usage = model.Usage{UsageCompleteness: model.UsagePartial, Source: model.UsageSourceExecutor}
 		ptrs := []**int64{&result.Usage.Tokens.Input, &result.Usage.Tokens.Output, &result.Usage.Tokens.CacheRead, &result.Usage.Tokens.CacheWrite, &result.Usage.Tokens.Total}
-		if result.Requests > 0 {
+		if measuredRequests > 0 {
 			for i := range ptrs {
 				if !missing[i] {
 					n := counts[i]
@@ -686,4 +705,65 @@ func validateBudgetBackup(q querier) error {
 		}
 	}
 	return nil
+}
+
+// RateLimitRetryOwned records definite rejection before deciding another attempt.
+// It never changes a token counter or grants a network send permit.
+func (s *Store) RateLimitRetryOwned(token, runID string, v budget.RateLimitReport) (budget.RetryGrant, error) {
+	result := budget.RetryGrant{ID: v.ID}
+	if !uuidRE.MatchString(v.ID) || !budget.ValidRateLimitEvidence(v.Evidence) {
+		return result, budget.ErrConflict
+	}
+	err := s.tx(func(tx *sql.Tx) error {
+		p, err := loadBudgetPolicy(tx, runID)
+		if err != nil {
+			return err
+		}
+		if _, err = verifyBudgetOwner(tx, token, p); err != nil {
+			return err
+		}
+		r, err := loadBudgetRecord(tx, v.ID)
+		if err != nil {
+			return err
+		}
+		settlement := budget.Settlement{ID: v.ID, State: budget.RateLimited, Rejection: &v.Evidence}
+		if r.RunID != runID {
+			return budget.ErrConflict
+		}
+		if r.Retry != nil {
+			if r.Settlement == nil || !reflect.DeepEqual(*r.Settlement, settlement) {
+				return budget.ErrConflict
+			}
+			result = *r.Retry
+			return nil
+		}
+		if p.State != "open" || r.State != budget.Sent || r.Settlement != nil {
+			return budget.ErrConflict
+		}
+		_, rs, err := budgetRows(tx, p.TaskID)
+		if err != nil {
+			return err
+		}
+		// Count only earlier attempts. A duplicate reads the retained decision above.
+		consecutive := 1
+		for i := len(rs) - 1; i >= 0; i-- {
+			if rs[i].RunID != runID || rs[i].Request.ID == v.ID {
+				continue
+			}
+			if rs[i].State != budget.RateLimited {
+				break
+			}
+			consecutive++
+		}
+		if consecutive <= 3 {
+			wait := max(v.Evidence.RetryAfterMillis, int64(1000)<<max(0, consecutive-1))
+			at, e := time.Parse(time.RFC3339Nano, p.Deadline)
+			if e == nil && time.Now().Add(time.Duration(wait)*time.Millisecond).Before(at) {
+				result.WaitMillis, result.Retry = wait, true
+			}
+		}
+		r.State, r.Settlement, r.Retry, r.UpdatedAt = budget.RateLimited, &settlement, &result, now()
+		return putBudgetRecord(tx, r)
+	})
+	return result, err
 }

@@ -30,11 +30,23 @@ CREATE INDEX run_controls_task ON run_controls(task_id);
 CREATE UNIQUE INDEX run_controls_wrap_up ON run_controls(run_id) WHERE kind='wrap_up';
 PRAGMA user_version=10;`
 
+const migrationV11 = `
+ALTER TABLE run_controls RENAME TO run_controls_v10;
+CREATE TABLE run_controls(request_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+ task_id TEXT NOT NULL REFERENCES tasks(id), session_id TEXT NOT NULL REFERENCES execution_sessions(id),
+ kind TEXT NOT NULL CHECK(kind IN ('wrap_up','instruction','pause','follow_up')), state TEXT NOT NULL, payload TEXT NOT NULL);
+INSERT INTO run_controls SELECT * FROM run_controls_v10 ORDER BY rowid;
+DROP TABLE run_controls_v10;
+CREATE INDEX run_controls_task ON run_controls(task_id);
+CREATE UNIQUE INDEX run_controls_wrap_up ON run_controls(run_id) WHERE kind='wrap_up';
+CREATE UNIQUE INDEX run_controls_pause ON run_controls(run_id) WHERE kind='pause';
+PRAGMA user_version=11;`
+
 func controlDigest(v model.ControlRecord) string {
 	return model.RecoveryDigest([]any{v.Input, v.TaskID, v.ContractDigest, v.ProfileDigest, v.CreatedAt})
 }
 func validControl(v model.ControlRecord) bool {
-	if !(model.ValidWrapUpInput(v.Input) || model.ValidInstructionInput(v.Input)) || !uuidRE.MatchString(v.TaskID) || !digestRE.MatchString(v.ContractDigest) || !digestRE.MatchString(v.ProfileDigest) || controlDigest(v) != v.Digest || !model.ValidControlState(v.State) {
+	if !model.ValidOwnedControlInput(v.Input) || !uuidRE.MatchString(v.TaskID) || !digestRE.MatchString(v.ContractDigest) || !digestRE.MatchString(v.ProfileDigest) || controlDigest(v) != v.Digest || !model.ValidControlState(v.State) {
 		return false
 	}
 	start, e := time.Parse(time.RFC3339Nano, v.CreatedAt)
@@ -86,7 +98,7 @@ func controlBinding(q querier, v model.ControlRecord) error {
 	if err != nil || t == nil || r == nil || r.TaskID != t.ID || ss.TaskID != t.ID || ss.ProfileID != r.ProfileID || ss.Role != r.Role || ss.ContractDigest != v.ContractDigest || ss.ProfileDigest != v.ProfileDigest || model.FrozenTaskDigest(st, *t) != v.ContractDigest {
 		return ErrConflict
 	}
-	if model.ControlKind(v.Input) == "instruction" && r.Role != "developer" && r.Role != "polisher" {
+	if model.ControlKind(v.Input) != "wrap_up" && r.Role != "developer" && r.Role != "polisher" {
 		return ErrConflict
 	}
 	if !model.IsActiveRunState(r.State) || r.State == model.RunStopping || ss.State != model.SessionRunning || ss.ActiveRunID == nil || *ss.ActiveRunID != r.ID {
@@ -120,9 +132,21 @@ func (s *Store) RequestInstructionOwned(token string, in model.WrapUpInput) (mod
 	}
 	return s.requestControlOwned(token, in)
 }
+func (s *Store) RequestPauseOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
+	if !model.ValidPauseInput(in) {
+		return model.ControlRecord{}, model.Invalidf("invalid pause")
+	}
+	return s.requestControlOwned(token, in)
+}
+func (s *Store) RequestFollowUpOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
+	if !model.ValidFollowUpInput(in) {
+		return model.ControlRecord{}, model.Invalidf("invalid follow-up")
+	}
+	return s.requestControlOwned(token, in)
+}
 func (s *Store) requestControlOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
 	var out model.ControlRecord
-	if !(model.ValidWrapUpInput(in) || model.ValidInstructionInput(in)) {
+	if !model.ValidOwnedControlInput(in) {
 		return out, model.Invalidf("explicit control authorization required")
 	}
 	err := s.tx(func(tx *sql.Tx) error {
@@ -144,8 +168,13 @@ func (s *Store) requestControlOwned(token string, in model.WrapUpInput) (model.C
 		if tx.QueryRow("SELECT count(*) FROM stop_receipts WHERE request_id=?", in.RequestID).Scan(&n) != nil || n != 0 {
 			return ErrConflict
 		}
-		if tx.QueryRow("SELECT count(*) FROM run_controls WHERE run_id=? AND kind=?", in.RunID, model.ControlKind(in)).Scan(&n) != nil || (model.ControlKind(in) == "wrap_up" && n != 0) || n >= 256 {
+		if tx.QueryRow("SELECT count(*) FROM run_controls WHERE run_id=? AND kind=?", in.RunID, model.ControlKind(in)).Scan(&n) != nil || (slices.Contains([]string{"wrap_up", "pause"}, model.ControlKind(in)) && n != 0) || n >= 256 {
 			return ErrConflict
+		}
+		if model.ControlKind(in) != "pause" {
+			if tx.QueryRow("SELECT count(*) FROM run_controls WHERE run_id=? AND kind='pause' AND state!='rejected'", in.RunID).Scan(&n) != nil || n != 0 {
+				return ErrConflict
+			}
 		}
 		ss, err := loadSession(tx, in.SessionID)
 		if err != nil {
@@ -159,6 +188,21 @@ func (s *Store) requestControlOwned(token string, in model.WrapUpInput) (model.C
 		}
 		if !validControl(out) {
 			return ErrConflict
+		}
+		if model.ControlKind(in) == "pause" {
+			all, err := controls(tx, "")
+			if err != nil {
+				return err
+			}
+			for _, old := range all {
+				if old.Input.RunID == in.RunID && old.State == model.ControlAccepted && slices.Contains([]string{"instruction", "follow_up"}, model.ControlKind(old.Input)) {
+					why := "pause_requested"
+					old.State, old.Reason, old.UpdatedAt = model.ControlRejected, &why, at
+					if err := putControl(tx, old); err != nil {
+						return err
+					}
+				}
+			}
 		}
 		_, err = tx.Exec("INSERT INTO run_controls(request_id,run_id,task_id,session_id,kind,state,payload) VALUES(?,?,?,?,?,?,?)", in.RequestID, in.RunID, out.TaskID, in.SessionID, model.ControlKind(in), out.State, mustJSON(out))
 		return err
@@ -417,6 +461,25 @@ func validateControlsBackup(q querier) error {
 		var n int
 		if q.QueryRow("SELECT count(*) FROM stop_receipts WHERE request_id=?", v.Input.RequestID).Scan(&n) != nil || n != 0 {
 			return ErrBadBackup
+		}
+	}
+	return nil
+}
+
+func (s *Store) PendingControlsForRun(runID string) ([]model.ControlRecord, error) {
+	all, err := controls(s.rdb, "")
+	return slices.DeleteFunc(all, func(v model.ControlRecord) bool {
+		return v.Input.RunID != runID || !slices.Contains([]string{model.ControlAccepted, model.ControlSending}, v.State)
+	}), err
+}
+func (s *Store) VerifyControlsKnown(runID string) error {
+	all, err := controls(s.rdb, "")
+	if err != nil {
+		return err
+	}
+	for _, v := range all {
+		if v.Input.RunID == runID && v.State == model.ControlUnknown {
+			return ErrConflict
 		}
 	}
 	return nil

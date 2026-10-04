@@ -64,6 +64,8 @@ export class McpTransport implements Transport {
   readonly readonly = true;
   readonly intervention: InterventionActions = {
     send: async (input) => parseControlReceipt(await this.#control('send_run_instruction', { ...input }), input.requestId, input.runId, input.sessionId),
+    followUp: async (input) => parseControlReceipt(await this.#control('queue_follow_up_from_ui', {...input}), input.requestId, input.runId, input.sessionId, 'follow_up'),
+    pause: async (input) => parseControlReceipt(await this.#control('pause_run_from_ui', {...input}), input.requestId, input.runId, input.sessionId, 'pause'),
     receipt: async (requestId) => parseControlReceipt(await this.#control('get_intervention_receipt', { requestId }), requestId),
     stop: async (runId, requestId) => parseControlReceipt(await this.#control('stop_run_from_ui', { runId, requestId }), requestId, runId),
   };

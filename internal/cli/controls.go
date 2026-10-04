@@ -48,8 +48,8 @@ func controlCall(env Env, dd string, req server.Request, id string) (int, error)
 		if err == errHandled {
 			return code, nil
 		}
-		if req.Op == "request-wrap-up" {
-			return code, errors.New("wrap-up reply unconfirmed; query control receipt with the same request ID before another write")
+		if req.Op != "control-receipt" {
+			return code, errors.New("control reply unconfirmed; query control receipt with the same request ID before another write")
 		}
 		return code, err
 	}
@@ -59,4 +59,43 @@ func controlCall(env Env, dd string, req server.Request, id string) (int, error)
 	}
 	writeJSON(env.Stdout, map[string]any{"ok": true, "data": v})
 	return ExitOK, nil
+}
+
+func cmdControlPause(env Env, args []string) (int, error) { return cmdOwnedControl(env, args, "pause") }
+func cmdControlFollowUp(env Env, args []string) (int, error) {
+	return cmdOwnedControl(env, args, "follow_up")
+}
+func cmdOwnedControl(env Env, args []string, kind string) (int, error) {
+	fs, dd := newFlags("control " + kind)
+	run := fs.String("run", "", "owned Run UUID")
+	session := fs.String("session", "", "owned Session UUID")
+	id := fs.String("request-id", "", "stable request UUID")
+	ref := fs.String("authorization", "", "actual authorization reference")
+	apply := fs.Bool("apply", false, "explicit control")
+	input := fs.String("input", "", "bounded text file or stdin (-), follow-up only")
+	if err := parse(fs, args); err != nil {
+		return ExitUsage, err
+	}
+	v := model.WrapUpInput{Kind: kind, RunID: *run, SessionID: *session, RequestID: *id, AuthorizationRef: *ref, Apply: *apply}
+	if kind == "follow_up" {
+		if *input == "" {
+			return ExitUsage, usageErr{"--input FILE|- required"}
+		}
+		text, err := readInput(env, *input)
+		if err != nil {
+			return ExitUsage, err
+		}
+		v.Message = string(text)
+	} else if *input != "" {
+		return ExitUsage, usageErr{"pause does not accept input text"}
+	}
+	if !model.ValidOwnedControlInput(v) {
+		return ExitUsage, usageErr{"valid owned binding, bounded text, authorization and --apply required"}
+	}
+	b, _ := json.Marshal(v)
+	op := "request-pause"
+	if kind == "follow_up" {
+		op = "request-follow-up"
+	}
+	return controlCall(env, *dd, server.Request{Op: op, Input: b}, *id)
 }

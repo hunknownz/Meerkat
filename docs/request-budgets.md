@@ -43,6 +43,24 @@ Verified session history and verified budget outcome are separate. A known idle 
 
 ## Supported scope
 
+### Definite rate-limit rejection (beta.13)
+
+Automatic waiting requires HTTP 429 plus the configured gateway's explicit
+`X-Meerkat-Request-Status: rejected-before-generation` proof. An ordinary 429,
+5xx, disconnect or missing receipt remains unknown and never retries. Current
+Magpie responses are not assumed to provide this proof.
+
+Go saves the rejection and retry decision atomically, permits at most three
+consecutive retries, and refuses waiting beyond the frozen deadline. Delay is
+the larger of bounded Retry-After and 1/2/4 seconds. Each attempt obtains a new
+reservation and one-time send permit. Querying an earlier decision cannot
+change it. Cancellation during waiting makes no new model request.
+
+Rejection token fields and fees remain null. The proven rejection releases its
+reservation; this is an authorization decision, not a measured zero bill. The
+ledger retains all attempts. No strict monetary ceiling is advertised without
+reliable pricing and request-size bounds.
+
 The current bridge is verified with Pi **0.99.1**, text requests using **`openai-completions` over HTTP SSE**. Unsupported versions, APIs, media inputs, alternate models and transports are refused. Scheduler-driven Pi runs require the bridge. Direct executor fixtures without a budget authority exercise only the RPC adapter.
 
 Input reservation uses request UTF-8 byte length plus 1024 and the controlled maximum output. This is an explicit estimate, not a validated tokenizer or monetary ceiling. Request count and deadline are checked before sending. The bridge controls Pi provider requests; it does not sandbox shell commands or arbitrary network activity.

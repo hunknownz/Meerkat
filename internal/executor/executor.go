@@ -20,6 +20,7 @@ const (
 	CatInvalidRequest   = "invalid_request"
 	CatSpawn            = "spawn_error"
 	CatCanceled         = "canceled"
+	CatPauseRequested   = "pause_requested"
 	CatWallTimeout      = "wall_timeout"
 	CatTokenLimit       = "token_limit"
 	CatProviderError    = "provider_error"
@@ -40,7 +41,7 @@ const (
 )
 
 var catMessages = map[string]string{
-	CatSpawn: "executor process could not be started", CatCanceled: "run canceled",
+	CatSpawn: "executor process could not be started", CatCanceled: "run canceled", CatPauseRequested: "graceful pause requested",
 	CatWallTimeout: "wall-time budget exhausted", CatTokenLimit: "token budget exhausted",
 	CatProviderError: "provider reported an error", CatExit: "executor exited with failure",
 	CatProtocol: "executor did not complete its JSON protocol", CatReportMissing: "role report missing",
@@ -98,6 +99,8 @@ type Capabilities struct {
 	UsageEvents          bool
 	RequestBudgetGate    bool
 	GracefulWrapUp       bool
+	GracefulPause        bool
+	QueuedFollowUp       bool
 }
 
 // SessionBinding is an opaque, private executor history binding. The scheduler

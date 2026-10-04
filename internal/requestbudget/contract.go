@@ -18,6 +18,7 @@ const (
 	Settled       = "settled"
 	Unknown       = "unknown"
 	Canceled      = "canceled"
+	RateLimited   = "rate_limited"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 // Policy is private frozen authority for a Run. Tokens are estimate reservations,
 // not a proven tokenizer/price ceiling. The request count and deadline are gates.
 type Policy struct {
-	TokenMode                                                         string `json:"TokenMode,omitempty"`
+	TokenMode                                                          string `json:"TokenMode,omitempty"`
 	RunID, TaskID, SessionID, ProfileID, ProfileDigest, ContractDigest string
 	Provider, Model, Version, Deadline                                 string
 	TaskTokens, RunTokens, TaskRequests                                int64
@@ -60,10 +61,11 @@ type Begin struct {
 }
 
 type Settlement struct {
-	ID       string            `json:"id"`
-	State    string            `json:"state"`
-	Tokens   model.TokenCounts `json:"tokens"`
-	Terminal bool              `json:"terminal"`
+	ID        string             `json:"id"`
+	State     string             `json:"state"`
+	Tokens    model.TokenCounts  `json:"tokens"`
+	Terminal  bool               `json:"terminal"`
+	Rejection *RateLimitEvidence `json:"rejection,omitempty"`
 }
 
 type Record struct {
@@ -73,6 +75,7 @@ type Record struct {
 	State                string      `json:"state"`
 	SentDigest           *string     `json:"sentDigest"`
 	Settlement           *Settlement `json:"settlement"`
+	Retry                *RetryGrant `json:"retry,omitempty"`
 	Overrun              bool        `json:"overrun"`
 	CreatedAt, UpdatedAt string
 }
@@ -89,4 +92,27 @@ type Outcome struct {
 	Overrun   bool
 	Requests  int
 	Usage     model.Usage
+}
+
+// Attestation belongs to the configured model gateway, not a guessed HTTP code.
+type RateLimitEvidence struct {
+	Status           int    `json:"status"`
+	Proof            string `json:"proof"`
+	RetryAfterMillis int64  `json:"retryAfterMillis"`
+}
+type RateLimitReport struct {
+	ID       string            `json:"id"`
+	Evidence RateLimitEvidence `json:"evidence"`
+}
+type RetryGrant struct {
+	ID         string `json:"id"`
+	WaitMillis int64  `json:"waitMillis"`
+	Retry      bool   `json:"retry"`
+}
+type RetryAuthority interface {
+	RateLimit(context.Context, RateLimitReport) (RetryGrant, error)
+}
+
+func ValidRateLimitEvidence(v RateLimitEvidence) bool {
+	return v.Status == 429 && v.Proof == "rejected-before-generation" && v.RetryAfterMillis >= 0 && v.RetryAfterMillis <= 30000
 }

@@ -75,7 +75,9 @@
           "enum": [
             "wrap_up",
             "stop",
-            "instruction"
+            "instruction",
+            "pause",
+            "follow_up"
           ]
         },
         "state": {
@@ -106,7 +108,8 @@
             "wrap_up_already_requested",
             "protocol_reply_unknown",
             "controller_interrupted",
-            "unsupported_control"
+            "unsupported_control",
+                "pause_requested"
           ]
         },
         "outcome": {

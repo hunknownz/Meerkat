@@ -200,7 +200,7 @@ export interface ControlReceipt {
   updatedAt: string;
   runState: string;
   sessionId: string | null;
-  kind: 'wrap_up' | 'stop' | 'instruction';
+  kind: 'wrap_up' | 'stop' | 'instruction' | 'pause' | 'follow_up';
   state: 'accepted' | 'sending' | 'acknowledged' | 'rejected' | 'unknown' | 'processed';
   disposition: null | 'queued' | 'handled';
   reason:
@@ -212,7 +212,8 @@ export interface ControlReceipt {
     | 'wrap_up_already_requested'
     | 'protocol_reply_unknown'
     | 'controller_interrupted'
-    | 'unsupported_control';
+    | 'unsupported_control'
+    | 'pause_requested';
   outcome: string | null;
 }
 /**

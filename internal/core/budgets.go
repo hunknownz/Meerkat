@@ -108,3 +108,18 @@ func (c *Core) closeRequestBudget(runID string) (budget.Outcome, error) {
 	}
 	return o, err
 }
+
+func (a *requestAuthority) RateLimit(ctx context.Context, v budget.RateLimitReport) (budget.RetryGrant, error) {
+	var result budget.RetryGrant
+	err := a.call(ctx, func() error { var e error; result, e = a.c.st.RateLimitRetryOwned(a.c.token, a.runID, v); return e })
+	if err == nil && result.Retry {
+		err = a.c.update(func(st *model.State) error {
+			r := findRun(st, a.runID)
+			if r != nil {
+				pushEvent(r, "budget", "rate_limit_wait")
+			}
+			return nil
+		})
+	}
+	return result, err
+}

@@ -1,8 +1,36 @@
 # Run controls and receipts
 
-`0.4.0-beta.6` records one explicit bounded wrap-up instruction for an exact
-owned Run and Session. It also reads retained stop receipts without sending
-another stop. Go owns the control ledger; Pi is the implemented adapter.
+Controls bind to an exact owned Run and Session. Go owns durable receipts;
+Pi is the implemented adapter. Receipt queries never send a control again.
+
+## Pause and follow-up (beta.13)
+
+Pause requests a graceful end at a verified idle boundary. It does not discard
+working changes or start another Run. Continue only when the Task has a verified
+checkpoint, using `execute --task <id> --resume` (workflow) or
+`run --task <id> --resume` (developer-only). Original usage and frozen limits carry
+forward. Unknown tools, requests, controls or process identity block continuation.
+A candidate already completed and verified remains a candidate.
+
+```sh
+node scripts/launch.mjs control pause --run <run-id> --session <session-id> \
+  --request-id <uuid> --authorization <actual-authorization-reference> --apply
+node scripts/launch.mjs control follow-up --run <run-id> --session <session-id> \
+  --request-id <uuid> --authorization <actual-authorization-reference> \
+  --input /private/direction.txt --apply
+node scripts/launch.mjs control receipt --request-id <uuid>
+```
+
+The follow-up file contains bounded plain text, not JSON. Pi handles it after
+the current turn, in the same Session. It grants no new scope, budget or external
+permission. Pause refuses later directions and rejects earlier directions that
+were definitely not sent. In-flight or acknowledged directions retain their
+actual receipts. Pending follow-ups must drain before a normal Run shutdown.
+Hard stop remains separate and may abort immediately.
+
+The Codex panel offers app-only `pause_run_from_ui` and
+`queue_follow_up_from_ui`. They are not model-visible tools. Its timing selector
+chooses steering after the current tools or a follow-up after the current turn.
 
 ## Request and query
 
@@ -57,8 +85,9 @@ request gate still apply, including any model call triggered by steering.
 
 ## History and display
 
-SQLite V9 adds immutable Run/Session/contract bindings and mutable protocol
-receipts. V1–V8 stores and backups migrate without inventing old controls.
+SQLite V11 extends control kinds and preserves existing payloads and ordering.
+V12 adds a ledger compatibility boundary for definite rate-limit rejections.
+Older supported stores and backups migrate without inventing old controls.
 Backup validation rejects corrupt or conflicting records. Current Task details
 show the latest 50 control/retained stop summaries. The stop ledger keeps its
 existing limit of processed receipts (`MaxStopReceipts`); it is not an unlimited

@@ -1,7 +1,7 @@
 # Human intervention
 
 In **Agents**, expand a running Agent. The inline **干预当前 Agent** section lets
-you send a direction or stop the Run. No terminal is needed.
+you send a direction, queue a follow-up, pause or stop the Run. No terminal is needed.
 
 ## Sending a direction
 
@@ -13,7 +13,8 @@ outside that contract needs a separate task prepared by the coordinator.
 
 The service saves the bounded text (up to 4000 codepoints / 16000 UTF-8 bytes)
 in private SQLite storage before sending it to the same execution session.
-Pi queues it after the current tool calls, before the next model request.
+Choose **当前工具后** to steer before the next model request, or
+**当前轮结束后** to queue a follow-up in the same Session.
 Subsequent calls retain the same task usage and original limits.
 
 ## Reading the result
@@ -40,10 +41,16 @@ replay occurs. The Tasks detail view also retains public control receipts.
 through the existing process lifecycle. Accepted means recorded; inspect the
 actual Run outcome before treating the process as stopped.
 
+**暂停并保留进度** requests a graceful end and disables new directions. Its
+acknowledgement is not a saved checkpoint. Check the Task's pause/checkpoint
+result before resuming through the coordinator. Unsent directions are rejected;
+in-flight directions retain their receipts. A late verified candidate remains
+a candidate. Closing the panel neither pauses nor stops execution.
+
 ## Codex and browser transports
 
 The MCP Apps panel uses app-only tools `send_run_instruction`,
-`get_intervention_receipt` and `stop_run_from_ui` through the host bridge and
+`queue_follow_up_from_ui`, `pause_run_from_ui`, `get_intervention_receipt` and `stop_run_from_ui` through the host bridge and
 the private Unix socket. No browser write token is included in MCP UI data.
 Instruction text is not echoed in model-visible tool results or public snapshots.
 Settings remain read-only in the Codex panel. The legacy CDP connector remains

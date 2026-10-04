@@ -94,6 +94,36 @@ func (s *Service) HTTPHandler(port int) http.Handler {
 		}
 		writeJSON(w, 200, map[string]any{"ok": true, "data": v})
 	}))
+	for _, pair := range []struct{ path, kind string }{{"pause", "pause"}, {"follow-up", "follow_up"}} {
+		mux.HandleFunc("POST /api/workflow/runs/{runId}/"+pair.path, s.write(func(w http.ResponseWriter, r *http.Request, body []byte) {
+			var in struct {
+				SessionID string `json:"sessionId"`
+				RequestID string `json:"requestId"`
+				Message   string `json:"message,omitempty"`
+			}
+			if decodeInstructionInput(body, &in, "sessionId", "requestId", "message") != nil {
+				writeErr(w, 400, "invalid control")
+				return
+			}
+			v := model.WrapUpInput{Kind: pair.kind, RunID: r.PathValue("runId"), SessionID: in.SessionID, RequestID: in.RequestID, Message: in.Message, Apply: true, AuthorizationRef: "Direct user control in Meerkat UI"}
+			b, _ := json.Marshal(v)
+			op := "request-pause"
+			if pair.kind == "follow_up" {
+				op = "request-follow-up"
+			}
+			response := s.Do(Request{Op: op, Input: b})
+			if !response.OK {
+				writeErr(w, 409, "control refused")
+				return
+			}
+			var rc model.ControlReceipt
+			if json.Unmarshal(response.Data, &rc) != nil {
+				writeErr(w, 500, "control unknown")
+				return
+			}
+			writeJSON(w, 200, map[string]any{"ok": true, "data": rc})
+		}))
+	}
 	mux.HandleFunc("GET /api/workflow/controls/{requestId}", func(w http.ResponseWriter, r *http.Request) {
 		cc, can := s.core.(runController)
 		if !can {

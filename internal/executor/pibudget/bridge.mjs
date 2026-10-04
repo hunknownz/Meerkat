@@ -115,6 +115,27 @@ export function createGatedFetch(config, baseFetch = globalThis.fetch, communica
       await settle();
       throw failure();
     }
+    // Retry only an explicit pre-generation rejection from the configured gateway.
+    // Ordinary 429 has unknown billing/execution and follows the unknown path below.
+    const retryAfter = response.headers.get('retry-after');
+    if (response.status === 429 && response.headers.get('x-meerkat-request-status') === 'rejected-before-generation' &&
+        (retryAfter === null || /^\d+$/.test(retryAfter) && Number(retryAfter) <= 30)) {
+      finalized = true;
+      const next = await communicate(config, '/rate-limit', { id, evidence: { status: 429,
+        proof: 'rejected-before-generation', retryAfterMillis: Number(retryAfter ?? 0) * 1000 } });
+      if (next.id !== id || typeof next.retry !== 'boolean' || !count(next.waitMillis) || next.waitMillis > 30000) throw failure();
+      if (!next.retry) return response;
+      await response.body?.cancel();
+      await new Promise((resolve, reject) => {
+        const cancel = () => { clearTimeout(timer); original.signal.removeEventListener('abort', cancel); reject(failure()); };
+        const timer = setTimeout(() => { original.signal.removeEventListener('abort', cancel); resolve(); }, next.waitMillis);
+        original.signal.addEventListener('abort', cancel, { once: true });
+        if (original.signal.aborted) cancel();
+      });
+      // Each new attempt obtains its own reservation, ID and one-time permit.
+      return createGatedFetch(config, baseFetch, communicate)(new Request(original.url, {
+        method: 'POST', headers: original.headers, body: raw, signal: original.signal }));
+    }
     if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
       await settle();
       return response;

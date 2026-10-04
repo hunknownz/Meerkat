@@ -117,3 +117,55 @@ test('version and all-provider wrapping block alternate compaction routes', asyn
   await start({}, ctx);
   assert.equal(ready.at(-1).installed, false);
 });
+
+
+test('only attested rejection waits; every retry receives a new send permit',async()=>{
+ const events=[];let attempts=0;
+ const communicate=async(c,path,value)=>{
+ events.push({path,value});
+ if(path==='/rate-limit')return {id:value.id,retry:true,waitMillis:1};
+ if(path==='/reserve')return {id:value.id,maxOutput:50,reservedTokens:value.inputEstimate+50};
+ return {accepted:true};
+ };
+ const fetch=createGatedFetch(config,async()=>{
+ if(++attempts===1)return new Response('rejected',{status:429,headers:{'x-meerkat-request-status':'rejected-before-generation'}});
+ return new Response(data({usage})+'data: [DONE]\n\n',{headers:{'Content-Type':'text/event-stream'}});
+ },communicate);
+ await (await fetch(input(payload()))).text();
+ assert.equal(attempts,2);
+ assert.deepEqual(events.map(e=>e.path),['/reserve','/begin','/rate-limit','/reserve','/begin','/settle']);
+ assert.notEqual(events[0].value.id,events[3].value.id);
+ assert.equal(events[2].value.evidence.proof,'rejected-before-generation');
+});
+
+test('plain 429 and missing retry receipt never replay',async()=>{
+ for(const attested of [false,true]){
+ let attempts=0;const events=[];
+ const communicate=async(c,path,value)=>{if(path==='/rate-limit')throw Error('lost reply');return authority(events)(c,path,value);};
+ const fetch=createGatedFetch(config,async()=>{attempts++;return new Response('rejected',{status:429,headers:attested?{'x-meerkat-request-status':'rejected-before-generation'}:{}});},communicate);
+ if(attested)await assert.rejects(fetch(input(payload())));
+ else {await fetch(input(payload()));assert.equal(events.at(-1).value.state,'unknown');}
+ assert.equal(attempts,1);
+ }
+});
+
+test('canceling an authorized retry wait does not obtain another permit', async () => {
+  const controller = new AbortController(), events = [];
+  const communicate = async (_c, path, value) => {
+    events.push({ path, value });
+    if (path === '/rate-limit') {
+      setTimeout(() => controller.abort(), 1);
+      return { id: value.id, retry: true, waitMillis: 30000 };
+    }
+    if (path === '/reserve') return { id: value.id, maxOutput: 50, reservedTokens: value.inputEstimate + 50 };
+    return { accepted: true };
+  };
+  let network = 0;
+  const fetch = createGatedFetch(config, async () => {
+    network++;
+    return new Response('rejected', { status: 429, headers: { 'x-meerkat-request-status': 'rejected-before-generation' } });
+  }, communicate);
+  await assert.rejects(fetch(input(payload()), { signal: controller.signal }));
+  assert.equal(network, 1);
+  assert.deepEqual(events.map(e => e.path), ['/reserve', '/begin', '/rate-limit']);
+});

@@ -148,6 +148,16 @@ func Start(provider, model string, a budget.Authority) (*Server, error) {
 			if err == nil {
 				err = a.Begin(r.Context(), v)
 			}
+		case "/rate-limit":
+			var v budget.RateLimitReport
+			err = decode(&v)
+			if err == nil {
+				if authority, ok := a.(budget.RetryAuthority); ok {
+					value, err = authority.RateLimit(r.Context(), v)
+				} else {
+					err = budget.ErrDenied
+				}
+			}
 		case "/settle":
 			var v budget.Settlement
 			err = decode(&v)

@@ -213,6 +213,17 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 						uncertain, o.protocolErr = true, true
 						break waiting
 					}
+					if sent && control.Kind == "pause" {
+						o.pauseRequested = true
+						wrapUp, wrapTime = nil, nil
+						if wrapTimer != nil {
+							wrapTimer.Stop()
+						}
+						safeEvent(onEvent, "control", "pause_acknowledged")
+					}
+					if sent && control.Kind == "follow_up" {
+						safeEvent(onEvent, "control", "follow_up_acknowledged")
+					}
 					if sent && control.Kind == "instruction" {
 						safeEvent(onEvent, "control", "instruction_acknowledged")
 					}
@@ -256,6 +267,26 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 				case <-settled:
 					state, e = client.State(rctx)
 					verified = e == nil && rpcIdle(state, *req.Session, req)
+					if e != nil {
+						uncertain, o.protocolErr = true, true
+						break waiting
+					}
+					if !verified {
+						continue
+					}
+					if req.Controls != nil {
+						if drain, ok := req.Controls.Authority.(ControlDrainAuthority); ok {
+							ready, err := drain.Quiesce()
+							if err != nil {
+								uncertain, o.protocolErr = true, true
+								break waiting
+							}
+							if !ready {
+								verified = false
+								continue
+							}
+						}
+					}
 					break waiting
 				case <-limit:
 					o.stop = CatTokenLimit
@@ -361,21 +392,33 @@ func sendRunControl(ctx context.Context, client *pirpc.Client, authority Control
 	reject := func(reason string) (bool, bool) {
 		return false, authority.Finish(v.ID, model.ControlRejected, "", reason) != nil
 	}
-	if v.Kind != "wrap_up" && v.Kind != "instruction" || v.Kind == "instruction" && !model.ValidInstructionMessage(v.Message) {
+	if !((v.Kind == "wrap_up" || v.Kind == "pause") && v.Message == "" || (v.Kind == "instruction" || v.Kind == "follow_up") && model.ValidInstructionMessage(v.Message)) {
 		return reject("unsupported_control")
 	}
 	if alreadySent && v.Kind == "wrap_up" {
 		return reject("wrap_up_already_requested")
 	}
-	if authority.Begin(v.ID) != nil {
+	if err := authority.Begin(v.ID); err != nil {
+		if errors.Is(err, ErrControlRejected) {
+			return false, false
+		}
 		return false, true
 	}
 	sctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	message := budgetWrapUpMessage
-	if v.Kind == "instruction" {
+	if v.Kind == "instruction" || v.Kind == "follow_up" {
 		message = v.Message
 	}
-	rc, err := client.Steer(sctx, message)
+	if v.Kind == "pause" {
+		message = gracefulPauseMessage
+	}
+	var rc pirpc.Receipt
+	var err error
+	if v.Kind == "follow_up" {
+		rc, err = client.FollowUp(sctx, message)
+	} else {
+		rc, err = client.Steer(sctx, message)
+	}
 	cancel()
 	if err != nil {
 		var rpcErr *pirpc.Error
@@ -393,3 +436,5 @@ func sendRunControl(ctx context.Context, client *pirpc.Client, authority Control
 }
 
 const budgetWrapUpMessage = "Meerkat budget wrap-up: stop expanding scope. Finish only the current safe operation, preserve work and report the remaining steps and known gaps. If the role contract is already satisfied, write the required report and finish. Do not claim delivery or manufacture a commit when the work is incomplete. No further scope expansion or remote actions. All requests remain within the existing allowance."
+
+const gracefulPauseMessage = "Meerkat graceful pause: finish only the current safe bounded operation, preserve all in-scope staged and unstaged work, and stop this turn. Do not commit incomplete work, start new work, or claim delivery. Briefly record completed and remaining steps in this session. If the original role was already fully completed with its valid report and commit, preserve that result. No remote actions; existing scope and allowance still apply."

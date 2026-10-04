@@ -72,7 +72,7 @@ func TestV9MigrationPreservesHistoricalControlPayload(t *testing.T) {
 	}
 	// Downgrade only the table shape in this isolated database, then exercise the
 	// actual Open migration. The legacy serialized input omits kind and message.
-	_, e = s.db.Exec(`DROP INDEX run_controls_task; DROP INDEX run_controls_wrap_up;
+	_, e = s.db.Exec(`DROP INDEX run_controls_task; DROP INDEX run_controls_wrap_up; DROP INDEX run_controls_pause;
 ALTER TABLE run_controls RENAME TO controls_new;
 CREATE TABLE run_controls(request_id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),task_id TEXT NOT NULL REFERENCES tasks(id),session_id TEXT NOT NULL REFERENCES execution_sessions(id),kind TEXT NOT NULL CHECK(kind='wrap_up'),state TEXT NOT NULL,payload TEXT NOT NULL,UNIQUE(run_id,kind));
 INSERT INTO run_controls SELECT * FROM controls_new; DROP TABLE controls_new;
@@ -93,7 +93,7 @@ CREATE INDEX run_controls_task ON run_controls(task_id); PRAGMA user_version=9;`
 	}
 	var version int
 	next.db.QueryRow("PRAGMA user_version").Scan(&version)
-	if version != 10 {
+	if version != 12 {
 		t.Fatal(version)
 	}
 }

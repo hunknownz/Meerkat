@@ -6,14 +6,16 @@ export interface StopAccepted { accepted: true; requestId: string }
 export interface InstructionInput { runId: string; sessionId: string; requestId: string; message: string }
 export interface InterventionActions {
   send(input: InstructionInput): Promise<ControlReceipt>;
+  followUp(input: InstructionInput): Promise<ControlReceipt>;
+  pause(input: Omit<InstructionInput, 'message'>): Promise<ControlReceipt>;
   receipt(requestId: string): Promise<ControlReceipt>;
   stop(runId: string, requestId: string): Promise<ControlReceipt>;
 }
 
-export function parseControlReceipt(body: unknown, requestId: string, runId?: string, sessionId?: string): ControlReceipt {
+export function parseControlReceipt(body: unknown, requestId: string, runId?: string, sessionId?: string, kind: ControlReceipt['kind'] = 'instruction'): ControlReceipt {
   if (!validateControlReceipt(body)) throw new ContractError('回执格式无效，请查询原请求');
   const rc = body as ControlReceipt;
-  if (rc.requestId !== requestId || runId && rc.runId !== runId || sessionId && (rc.sessionId !== sessionId || rc.kind !== 'instruction')) throw new ContractError('回执不属于当前请求');
+  if (rc.requestId !== requestId || runId && rc.runId !== runId || sessionId && (rc.sessionId !== sessionId || rc.kind !== kind)) throw new ContractError('回执不属于当前请求');
   return rc;
 }
 
@@ -67,6 +69,14 @@ export class BrowserTransport implements Transport {
     send: async (input) => {
       const body = await this.#write('POST', `/api/workflow/runs/${encodeURIComponent(input.runId)}/instruction`, { sessionId: input.sessionId, requestId: input.requestId, message: input.message });
       return parseControlReceipt((body as { data?: unknown })?.data, input.requestId, input.runId, input.sessionId);
+    },
+    followUp: async (input) => {
+      const body = await this.#write('POST', `/api/workflow/runs/${encodeURIComponent(input.runId)}/follow-up`, {sessionId: input.sessionId, requestId: input.requestId, message: input.message});
+      return parseControlReceipt((body as {data?:unknown})?.data, input.requestId, input.runId, input.sessionId, 'follow_up');
+    },
+    pause: async (input) => {
+      const body = await this.#write('POST', `/api/workflow/runs/${encodeURIComponent(input.runId)}/pause`, {sessionId: input.sessionId, requestId: input.requestId});
+      return parseControlReceipt((body as {data?:unknown})?.data, input.requestId, input.runId, input.sessionId, 'pause');
     },
     receipt: async (id) => {
       if (!isUuid(id)) throw new Error('无效请求 ID');

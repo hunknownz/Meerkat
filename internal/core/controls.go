@@ -23,8 +23,20 @@ func (c *Core) RequestInstruction(in model.WrapUpInput) (model.ControlReceipt, e
 	}
 	return c.requestControl(in)
 }
+func (c *Core) RequestPause(in model.WrapUpInput) (model.ControlReceipt, error) {
+	if !model.ValidPauseInput(in) {
+		return model.ControlReceipt{}, invalid("invalid pause input")
+	}
+	return c.requestControl(in)
+}
+func (c *Core) RequestFollowUp(in model.WrapUpInput) (model.ControlReceipt, error) {
+	if !model.ValidFollowUpInput(in) {
+		return model.ControlReceipt{}, invalid("invalid follow-up input")
+	}
+	return c.requestControl(in)
+}
 func (c *Core) requestControl(in model.WrapUpInput) (model.ControlReceipt, error) {
-	if !(model.ValidWrapUpInput(in) || model.ValidInstructionInput(in)) {
+	if !model.ValidOwnedControlInput(in) {
 		return model.ControlReceipt{}, invalid("explicit control authorization required")
 	}
 	c.wmu.Lock()
@@ -40,7 +52,13 @@ func (c *Core) requestControl(in model.WrapUpInput) (model.ControlReceipt, error
 		c.mu.Lock()
 		l := c.lanes[in.RunID]
 		can := !c.closed && l != nil && l.controls != nil && !l.controlClosed && l.controlSession == in.SessionID
-		if can && model.ControlKind(in) == "instruction" {
+		if can && model.ControlKind(in) == "pause" {
+			can = l.canPause
+		}
+		if can && model.ControlKind(in) == "follow_up" {
+			can = l.canFollowUp
+		}
+		if can && model.ControlKind(in) != "wrap_up" {
 			st, e := c.st.Read()
 			can = e == nil
 			if can {
@@ -54,9 +72,14 @@ func (c *Core) requestControl(in model.WrapUpInput) (model.ControlReceipt, error
 		}
 	}
 	var err error
-	if model.ControlKind(in) == "instruction" {
+	switch model.ControlKind(in) {
+	case "instruction":
 		_, err = c.st.RequestInstructionOwned(c.token, in)
-	} else {
+	case "follow_up":
+		_, err = c.st.RequestFollowUpOwned(c.token, in)
+	case "pause":
+		_, err = c.st.RequestPauseOwned(c.token, in)
+	default:
 		_, err = c.st.RequestWrapUpOwned(c.token, in)
 	}
 	if err != nil {
@@ -111,6 +134,18 @@ func (a *controlAuthority) Begin(id string) error {
 	if err != nil || v.Input.RunID != a.runID {
 		return store.ErrConflict
 	}
+	if v.State == model.ControlRejected {
+		c.mu.Lock()
+		if l := c.lanes[a.runID]; l != nil && l.controlID == id {
+			l.controlID = ""
+		}
+		c.mu.Unlock()
+		select {
+		case c.kick <- struct{}{}:
+		default:
+		}
+		return executor.ErrControlRejected
+	}
 	st, err := c.st.Read()
 	if err != nil {
 		return err
@@ -161,6 +196,31 @@ func (a *controlAuthority) Finish(id, state, disposition, reason string) error {
 	return err
 }
 
+// Quiesce atomically seals input only after all accepted controls were sent.
+// The adapter must independently verify its protocol queue is empty first.
+func (a *controlAuthority) Quiesce() (bool, error) {
+	c := a.c
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	if c.isLost() {
+		return false, ErrLeaseLost
+	}
+	all, err := c.st.PendingControlsForRun(a.runID)
+	if err != nil {
+		return false, err
+	}
+	if len(all) != 0 {
+		return false, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	l := c.lanes[a.runID]
+	if l == nil {
+		return false, store.ErrConflict
+	}
+	l.controlClosed = true
+	return true, nil
+}
 func (c *Core) closeControls(runID string, l *lane) error {
 	c.mu.Lock()
 	l.controlClosed = true
@@ -170,5 +230,8 @@ func (c *Core) closeControls(runID string, l *lane) error {
 	if c.isLost() {
 		return ErrLeaseLost
 	}
-	return c.st.CloseControlsOwned(c.token, runID)
+	if err := c.st.CloseControlsOwned(c.token, runID); err != nil {
+		return err
+	}
+	return c.st.VerifyControlsKnown(runID)
 }

@@ -9,7 +9,7 @@ import { RUN_A, RUN_B, snapshot } from './fixtures';
 
 afterEach(() => { cleanup(); sessionStorage.clear(); });
 const rc = (id = RUN_B): ControlReceipt => ({requestId:id,taskId:'t1',runId:RUN_A,sessionId:RUN_B,kind:'instruction',state:'acknowledged',disposition:'queued',reason:null,createdAt:'2026-10-04T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z',runState:'running',outcome:null});
-const actions = (): InterventionActions => ({ send: vi.fn(async input => rc(input.requestId)), receipt: vi.fn(async id => rc(id)), stop: vi.fn(async (_run, id) => ({...rc(id),kind:'stop' as const,state:'accepted' as const,disposition:null})) });
+const actions = (): InterventionActions => ({ send: vi.fn(async input => rc(input.requestId)), followUp: vi.fn(async input=>({...rc(input.requestId),kind:'follow_up' as const})), pause: vi.fn(async input=>({...rc(input.requestId),kind:'pause' as const})), receipt: vi.fn(async id => rc(id)), stop: vi.fn(async (_run, id) => ({...rc(id),kind:'stop' as const,state:'accepted' as const,disposition:null})) });
 
 it('sends to the same session once, displays queue acknowledgement and retains request ID only', async () => {
   const a=actions(); const run=snapshot().runs[0]!;
@@ -63,4 +63,17 @@ it('MCP controls use app-only host tools and query a lost reply without replayin
   await expect(t.intervention.receipt(RUN_B)).resolves.toEqual(rc());
   expect(callServerTool.mock.calls.map(c=>c[0].name)).toEqual(['send_run_instruction','get_intervention_receipt']);
   t.close();await expect(t.intervention.receipt(RUN_B)).rejects.toThrow('未连接');
+});
+
+
+it('queues follow-up after a turn and graceful pause closes new input without claiming completion',async()=>{
+ const a=actions();render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+ fireEvent.change(screen.getByLabelText('指令生效时机'),{target:{value:'follow_up'}});
+ fireEvent.change(screen.getByLabelText('指令'),{target:{value:'finish after this turn'}});
+ fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/后续指令 · 已排队/);
+ expect(a.followUp).toHaveBeenCalledTimes(1);expect(a.send).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'暂停并保留进度'}));await screen.findByText(/暂停 · 已排队/);
+ expect(a.pause).toHaveBeenCalledTimes(1);expect((screen.getByLabelText('指令') as HTMLTextAreaElement).disabled).toBe(true);
+ expect(screen.queryByText('已暂停')).toBeNull();
+ expect(JSON.stringify(sessionStorage)).not.toContain('finish after this turn');
 });

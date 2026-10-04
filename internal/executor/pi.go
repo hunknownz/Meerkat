@@ -291,6 +291,7 @@ type procOutcome struct {
 	session        *SessionOutcome
 	protocolErr    bool
 	checkpointSafe bool
+	pauseRequested bool
 }
 
 func (p *Pi) run(ctx context.Context, pp *prepared, onEvent func(model.RunEvent), onStart func(Process)) procOutcome {
@@ -474,6 +475,9 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	if rep != nil && req.Role != "reviewer" && (rep.Decision == "changed") != res.Committed {
 		set(CatDecisionMismatch)
 	}
+	if o.pauseRequested && head == pp.baseline && (cat == CatNoCommit || cat == CatDirty || cat == CatReportMissing) {
+		cat = CatPauseRequested
+	}
 	if repCat == "" {
 		res.Report = rep
 	}
@@ -481,7 +485,7 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	switch {
 	case cat == "":
 		res.Outcome = model.RunSucceeded
-	case cat == CatCanceled:
+	case cat == CatCanceled || cat == CatPauseRequested:
 		res.Outcome = model.RunStopped
 	default:
 		res.Outcome = model.RunFailed

@@ -46,6 +46,8 @@ type lane struct {
 	controlID      string
 	controlSession string
 	controlClosed  bool
+	canPause       bool
+	canFollowUp    bool
 }
 
 // Core owns the controller lease for one store.

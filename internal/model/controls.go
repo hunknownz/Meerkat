@@ -66,6 +66,15 @@ func ValidInstructionInput(v WrapUpInput) bool {
 	return validControlInputBase(v) && ControlKind(v) == "instruction" && ValidInstructionMessage(v.Message)
 }
 
+func ValidPauseInput(v WrapUpInput) bool {
+	return validControlInputBase(v) && ControlKind(v) == "pause" && v.Message == ""
+}
+func ValidFollowUpInput(v WrapUpInput) bool {
+	return validControlInputBase(v) && ControlKind(v) == "follow_up" && ValidInstructionMessage(v.Message)
+}
+func ValidOwnedControlInput(v WrapUpInput) bool {
+	return ValidWrapUpInput(v) || ValidInstructionInput(v) || ValidPauseInput(v) || ValidFollowUpInput(v)
+}
 func ValidControlID(v string) bool { return budgetUUID.MatchString(v) }
 
 func ValidControlState(v string) bool {
@@ -73,7 +82,7 @@ func ValidControlState(v string) bool {
 }
 
 func ValidControlReason(v string) bool {
-	return slices.Contains([]string{"run_ended_before_send", "run_interrupted", "contract_changed", "executor_refused", "wrap_up_already_requested", "protocol_reply_unknown", "controller_interrupted", "unsupported_control"}, v)
+	return slices.Contains([]string{"run_ended_before_send", "run_interrupted", "contract_changed", "executor_refused", "wrap_up_already_requested", "protocol_reply_unknown", "controller_interrupted", "unsupported_control", "pause_requested"}, v)
 }
 
 func ValidControlReceipt(v ControlReceipt) bool {
@@ -94,7 +103,7 @@ func ValidControlReceipt(v ControlReceipt) bool {
 	if v.Kind == "stop" {
 		return v.Disposition == nil && v.Reason == nil && (v.State == ControlAccepted && v.Outcome == nil || v.State == "processed" && v.Outcome != nil && *v.Outcome != RunUnknown || v.State == ControlUnknown && v.Outcome != nil && *v.Outcome == RunUnknown)
 	}
-	if (v.Kind != "wrap_up" && v.Kind != "instruction") || v.SessionID == nil || !ValidControlState(v.State) {
+	if !slices.Contains([]string{"wrap_up", "instruction", "pause", "follow_up"}, v.Kind) || v.SessionID == nil || !ValidControlState(v.State) {
 		return false
 	}
 	if v.State == ControlAcknowledged {

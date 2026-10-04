@@ -240,6 +240,12 @@ type instructionController interface {
 	RequestInstruction(model.WrapUpInput) (model.ControlReceipt, error)
 }
 
+type pauseController interface {
+	RequestPause(model.WrapUpInput) (model.ControlReceipt, error)
+}
+type followUpController interface {
+	RequestFollowUp(model.WrapUpInput) (model.ControlReceipt, error)
+}
 type runController interface {
 	RequestWrapUp(model.WrapUpInput) (model.ControlReceipt, error)
 	ControlReceipt(string) (model.ControlReceipt, error)
@@ -253,6 +259,30 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "request-pause", "request-follow-up":
+		var in model.WrapUpInput
+		if decodeInstructionInput(req.Input, &in, "runId", "sessionId", "requestId", "message", "kind", "authorizationRef", "apply") != nil {
+			return bad("invalid control")
+		}
+		var rc model.ControlReceipt
+		var err error
+		if req.Op == "request-pause" {
+			cc, ok := s.core.(pauseController)
+			if !ok || !model.ValidPauseInput(in) {
+				return bad("pause unavailable or invalid")
+			}
+			rc, err = cc.RequestPause(in)
+		} else {
+			cc, ok := s.core.(followUpController)
+			if !ok || !model.ValidFollowUpInput(in) {
+				return bad("follow-up unavailable or invalid")
+			}
+			rc, err = cc.RequestFollowUp(in)
+		}
+		if err != nil {
+			return fail(err)
+		}
+		return ok(rc)
 	case "request-instruction":
 		cc, can := s.core.(instructionController)
 		if !can {

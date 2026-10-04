@@ -46,6 +46,8 @@ Via daemon:
   snapshot                                   public snapshot (+ local history summary)
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   control wrap-up --run ID --session ID --request-id UUID --authorization REF --apply
+  control pause --run ID --session ID --request-id UUID --authorization REF --apply
+  control follow-up --input FILE|-          queue a bounded direction after the current turn
                                              bounded instruction; accepted != acknowledged != delivered
   control receipt --request-id UUID         read a wrap-up or stop receipt without resending
   settings  [--input FILE|-] [--max-concurrency N] [--max-fix-rounds N]
@@ -122,31 +124,33 @@ var commands map[string]func(Env, []string) (int, error)
 
 func init() {
 	commands = map[string]func(Env, []string) (int, error){
-		"serve":            cmdServe,
-		"prepare":          cmdPrepare,
-		"dispatch":         cmdDispatch,
-		"operation":        cmdOperation,
-		"execute":          cmdExecute,
-		"run":              cmdRun,
-		"snapshot":         cmdSnapshot,
-		"stop":             cmdStop,
-		"settings":         cmdSettings,
-		"issue update":     cmdIssueUpdate,
-		"issue read":       cmdIssueRead,
-		"migrate":          cmdMigrate,
-		"backup":           cmdBackup,
-		"restore":          cmdRestore,
-		"export":           cmdExport,
-		"doctor":           cmdDoctor,
-		"mcp":              cmdMCP,
-		"budget propose":   cmdBudgetPropose,
-		"budget apply":     cmdBudgetApply,
-		"budget receipt":   cmdBudgetReceipt,
-		"recovery inspect": cmdRecoveryInspect,
-		"recovery apply":   cmdRecoveryApply,
-		"recovery receipt": cmdRecoveryReceipt,
-		"control wrap-up":  cmdControlWrapUp,
-		"control receipt":  cmdControlReceipt,
+		"serve":             cmdServe,
+		"prepare":           cmdPrepare,
+		"dispatch":          cmdDispatch,
+		"operation":         cmdOperation,
+		"execute":           cmdExecute,
+		"run":               cmdRun,
+		"snapshot":          cmdSnapshot,
+		"stop":              cmdStop,
+		"settings":          cmdSettings,
+		"issue update":      cmdIssueUpdate,
+		"issue read":        cmdIssueRead,
+		"migrate":           cmdMigrate,
+		"backup":            cmdBackup,
+		"restore":           cmdRestore,
+		"export":            cmdExport,
+		"doctor":            cmdDoctor,
+		"mcp":               cmdMCP,
+		"budget propose":    cmdBudgetPropose,
+		"budget apply":      cmdBudgetApply,
+		"budget receipt":    cmdBudgetReceipt,
+		"recovery inspect":  cmdRecoveryInspect,
+		"recovery apply":    cmdRecoveryApply,
+		"recovery receipt":  cmdRecoveryReceipt,
+		"control wrap-up":   cmdControlWrapUp,
+		"control receipt":   cmdControlReceipt,
+		"control pause":     cmdControlPause,
+		"control follow-up": cmdControlFollowUp,
 	}
 }
 

@@ -719,6 +719,8 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		if x, ok := c.reg[execName(prof)].(executor.StatefulExecutor); ok && x.Capabilities().GracefulWrapUp {
 			l.controls = make(chan executor.RunControl, 1)
 			l.controlSession = ss.ID
+			l.canPause = x.Capabilities().GracefulPause
+			l.canFollowUp = x.Capabilities().QueuedFollowUp
 		}
 	}
 	c.mu.Lock()
@@ -897,6 +899,8 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			stopped, reason = true, "stop_requested"
 		case cause != nil:
 			stopped, reason = true, "controller_stopped"
+		case cat == executor.CatPauseRequested:
+			stopped, reason = true, "pause_requested"
 		case cat == executor.CatTokenLimit:
 			stopped = true
 			if float64(capTok) < prof.Limits.MaxTokens {
@@ -930,7 +934,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		}
 	}
 	var saved []model.Checkpoint
-	partial := cat == executor.CatTokenLimit || cat == executor.CatWallTimeout || wrapRequested.Load() && slices.Contains([]string{executor.CatReportMissing, executor.CatDirty, executor.CatNoCommit}, cat)
+	partial := cat == executor.CatPauseRequested || cat == executor.CatTokenLimit || cat == executor.CatWallTimeout || wrapRequested.Load() && slices.Contains([]string{executor.CatReportMissing, executor.CatDirty, executor.CatNoCommit}, cat)
 	if partial && cause == nil && ss != nil && sessionKnown && budgetKnown && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil && s.role != "reviewer" && after.Head == base {
 		if cp, e := c.captureCheckpoint(st, t, *ss, runID, base, s); e == nil {
 			saved = append(saved, *cp)

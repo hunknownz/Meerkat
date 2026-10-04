@@ -51,6 +51,8 @@ func (s *Store) ExecutionEvidence(taskID string) ([]model.SessionSummary, *model
 		b.Requests++
 		b.Overrun = b.Overrun || r.Overrun
 		switch r.State {
+		case budget.RateLimited:
+			// Definite generation rejection is neither pending nor measured usage.
 		case budget.Settled:
 			b.ConfirmedTokens += budgetCharge(r)
 		case budget.Unknown:

@@ -11,6 +11,8 @@ import (
 
 const (
 	ToolSendInstruction     = "send_run_instruction"
+	ToolPauseFromUI         = "pause_run_from_ui"
+	ToolFollowUpFromUI      = "queue_follow_up_from_ui"
 	ToolInterventionReceipt = "get_intervention_receipt"
 	ToolStopFromUI          = "stop_run_from_ui"
 )
@@ -28,6 +30,8 @@ func interventionTools() []any {
 	}
 	return []any{
 		tool(ToolSendInstruction, "Send a bounded human instruction to the exact owned Run and Session. Keep the request UUID. Acknowledgement means queued/handled, not completed. A lost reply must be queried, never automatically replayed.", map[string]any{"runId": uuid, "sessionId": uuid, "requestId": uuid, "message": map[string]any{"type": "string", "minLength": 1, "maxLength": 4000}}, []string{"runId", "sessionId", "requestId", "message"}, false),
+		tool(ToolPauseFromUI, "Request graceful pause for the exact owned Run and Session. Acceptance is not a verified checkpoint; inspect task state before resume.", map[string]any{"runId": uuid, "sessionId": uuid, "requestId": uuid}, []string{"runId", "sessionId", "requestId"}, false),
+		tool(ToolFollowUpFromUI, "Queue one bounded human direction after the current turn in the same owned Run and Session. Query the same UUID after a missing reply; never replay automatically.", map[string]any{"runId": uuid, "sessionId": uuid, "requestId": uuid, "message": map[string]any{"type": "string", "minLength": 1, "maxLength": 4000}}, []string{"runId", "sessionId", "requestId", "message"}, false),
 		tool(ToolInterventionReceipt, "Query one durable control receipt without resending. No instruction text or private contract is returned.", map[string]any{"requestId": uuid}, []string{"requestId"}, true),
 		tool(ToolStopFromUI, "Record a human stop request for one Run. Accepted is not stopped. Keep the request UUID and query after a missing reply.", map[string]any{"runId": uuid, "requestId": uuid}, []string{"runId", "requestId"}, false),
 	}
@@ -41,8 +45,11 @@ func (s *Server) interventionTool(ctx context.Context, name string, raw json.Raw
 		Message   string `json:"message"`
 	}
 	allowed := []string{"requestId"}
-	if name == ToolSendInstruction {
+	if name == ToolSendInstruction || name == ToolFollowUpFromUI {
 		allowed = []string{"runId", "sessionId", "requestId", "message"}
+	}
+	if name == ToolPauseFromUI {
+		allowed = []string{"runId", "sessionId", "requestId"}
 	}
 	if name == ToolStopFromUI {
 		allowed = []string{"runId", "requestId"}
@@ -54,13 +61,27 @@ func (s *Server) interventionTool(ctx context.Context, name string, raw json.Raw
 		return nil, invalidParams("valid control UUIDs required")
 	}
 	req := server.Request{Op: "control-receipt", RequestID: in.RequestID}
-	if name == ToolSendInstruction {
+	if name == ToolSendInstruction || name == ToolFollowUpFromUI {
 		v := model.WrapUpInput{Kind: "instruction", RunID: in.RunID, SessionID: in.SessionID, RequestID: in.RequestID, Message: in.Message, AuthorizationRef: "Direct user instruction in Meerkat UI", Apply: true}
-		if !model.ValidInstructionInput(v) {
+		if name == ToolFollowUpFromUI {
+			v.Kind = "follow_up"
+		}
+		if !model.ValidOwnedControlInput(v) {
 			return nil, invalidParams("bounded instruction without credentials required")
 		}
 		b, _ := json.Marshal(v)
-		req = server.Request{Op: "request-instruction", Input: b}
+		op := "request-instruction"
+		if name == ToolFollowUpFromUI {
+			op = "request-follow-up"
+		}
+		req = server.Request{Op: op, Input: b}
+	} else if name == ToolPauseFromUI {
+		v := model.WrapUpInput{Kind: "pause", RunID: in.RunID, SessionID: in.SessionID, RequestID: in.RequestID, AuthorizationRef: "Direct user pause in Meerkat UI", Apply: true}
+		if !model.ValidPauseInput(v) {
+			return nil, invalidParams("valid pause binding required")
+		}
+		b, _ := json.Marshal(v)
+		req = server.Request{Op: "request-pause", Input: b}
 	} else if name == ToolStopFromUI {
 		req = server.Request{Op: "stop", RunID: in.RunID, RequestID: in.RequestID}
 	}
@@ -85,7 +106,7 @@ func (s *Server) interventionTool(ctx context.Context, name string, raw json.Raw
 		}
 	}
 	var rc model.ControlReceipt
-	if json.Unmarshal(resp.Data, &rc) != nil || !model.ValidControlReceipt(rc) || rc.RequestID != in.RequestID || name != ToolInterventionReceipt && rc.RunID != in.RunID || name == ToolSendInstruction && (rc.Kind != "instruction" || rc.SessionID == nil || *rc.SessionID != in.SessionID) || name == ToolStopFromUI && rc.Kind != "stop" {
+	if json.Unmarshal(resp.Data, &rc) != nil || !model.ValidControlReceipt(rc) || rc.RequestID != in.RequestID || name != ToolInterventionReceipt && rc.RunID != in.RunID || name == ToolSendInstruction && (rc.Kind != "instruction" || rc.SessionID == nil || *rc.SessionID != in.SessionID) || name == ToolStopFromUI && rc.Kind != "stop" || name == ToolFollowUpFromUI && (rc.Kind != "follow_up" || rc.SessionID == nil || *rc.SessionID != in.SessionID) || name == ToolPauseFromUI && (rc.Kind != "pause" || rc.SessionID == nil || *rc.SessionID != in.SessionID) {
 		return interventionUnknown(in.RequestID), nil
 	}
 	r := structured("Control receipt: "+rc.State+". Protocol acknowledgement does not prove completion.", map[string]any{"schemaVersion": 1, "status": rc.State, "requestId": rc.RequestID})

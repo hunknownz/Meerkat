@@ -486,7 +486,7 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		if p.Name == ToolRequestWrapUp || p.Name == ToolGetControlReceipt {
 			return s.runControlTool(ctx, p.Name, p.Arguments)
 		}
-		if p.Name == ToolSendInstruction || p.Name == ToolInterventionReceipt || p.Name == ToolStopFromUI {
+		if p.Name == ToolSendInstruction || p.Name == ToolInterventionReceipt || p.Name == ToolStopFromUI || p.Name == ToolPauseFromUI || p.Name == ToolFollowUpFromUI {
 			return s.interventionTool(ctx, p.Name, p.Arguments)
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
