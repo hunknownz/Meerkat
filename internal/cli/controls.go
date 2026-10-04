@@ -81,7 +81,7 @@ func cmdOwnedControl(env Env, args []string, kind string) (int, error) {
 		if *input == "" {
 			return ExitUsage, usageErr{"--input FILE|- required"}
 		}
-		text, err := readInput(env, *input)
+		text, err := readInputBytes(env, *input, 16000)
 		if err != nil {
 			return ExitUsage, err
 		}

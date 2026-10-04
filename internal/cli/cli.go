@@ -219,6 +219,17 @@ func dataDir(flagVal string) (string, error) {
 }
 
 func readInput(env Env, path string) ([]byte, error) {
+	b, err := readInputBytes(env, path, core.MaxInput)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(b) {
+		return nil, usageErr{"input is not JSON"}
+	}
+	return b, nil
+}
+
+func readInputBytes(env Env, path string, limit int64) ([]byte, error) {
 	var r io.Reader
 	if path == "-" {
 		r = env.Stdin
@@ -230,12 +241,9 @@ func readInput(env Env, path string) ([]byte, error) {
 		defer f.Close()
 		r = f
 	}
-	b, err := io.ReadAll(io.LimitReader(r, core.MaxInput+1))
-	if err != nil || len(b) > core.MaxInput || len(b) == 0 {
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil || int64(len(b)) > limit || len(b) == 0 {
 		return nil, usageErr{"input missing or too large"}
-	}
-	if !json.Valid(b) {
-		return nil, usageErr{"input is not JSON"}
 	}
 	return b, nil
 }
