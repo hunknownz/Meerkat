@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.6` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.7` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.6
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.7
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.6` / `--branch v0.4.0-beta.6`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.7` / `--branch v0.4.0-beta.7`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
@@ -82,6 +82,16 @@ node scripts/launch.mjs serve --port 47826
 ```
 
 It runs in the foreground until terminated.
+
+Check setup before the first task:
+
+```sh
+node scripts/launch.mjs doctor --profile /Users/me/.meerkat/profiles/example.json --probe-executor
+```
+
+This checks local state/configuration and the isolated executable version without
+calling a model. Read warnings and unverified checks; a passing report is not an
+execution-readiness guarantee. See [diagnostics](doctor.md).
 
 ## 5. Open the monitor
 

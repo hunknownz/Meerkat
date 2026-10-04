@@ -378,6 +378,16 @@ var authEnvRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`)
 
 // freezeProfile reads a private absolute config file and returns the frozen profile with its digest.
 func freezeProfile(configFile, role, projectID string) (model.Profile, error) {
+	return inspectProfile(configFile, role, &projectID)
+}
+
+// InspectProfile validates one explicit private config without creating a Task
+// or reading the credential referenced by authEnv. Prepare uses the same parser.
+func InspectProfile(configFile string) (model.Profile, error) {
+	return inspectProfile(configFile, "developer", nil)
+}
+
+func inspectProfile(configFile, role string, expectedProject *string) (model.Profile, error) {
 	var p model.Profile
 	where := "profiles." + role
 	if !filepath.IsAbs(configFile) || filepath.Clean(configFile) != configFile {
@@ -403,8 +413,11 @@ func freezeProfile(configFile, role, projectID string) (model.Profile, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return p, invalid("%s config is not valid JSON", where)
 	}
-	if c.ProjectID != projectID {
+	if expectedProject != nil && c.ProjectID != *expectedProject {
 		return p, invalid("%s config projectId does not match project.id", where)
+	}
+	if !plainRE.MatchString(c.ProjectID) || model.LooksLikeCredential(c.ProjectID) {
+		return p, invalid("%s config projectId must be a plain name", where)
 	}
 	if c.Executor == "" {
 		c.Executor = "pi"
@@ -452,7 +465,7 @@ func freezeProfile(configFile, role, projectID string) (model.Profile, error) {
 	if lim.MaxWallSeconds < 1 || lim.MaxWallSeconds > maxProfileWall || lim.MaxTokens < 1 || lim.MaxTokens > maxProfileTokens {
 		return p, invalid("%s limits out of range", where)
 	}
-	p = model.Profile{ProjectID: projectID, Role: role, Executor: c.Executor, Provider: c.Provider, Model: c.Model, AuthEnv: c.AuthEnv,
+	p = model.Profile{ProjectID: c.ProjectID, Role: role, Executor: c.Executor, Provider: c.Provider, Model: c.Model, AuthEnv: c.AuthEnv,
 		Instructions: slices.Clone(c.Instructions), Limits: lim, PiCommand: cmd, ConfigFile: real}
 	p.ConfigDigest = profileDigest(p)
 	return p, nil

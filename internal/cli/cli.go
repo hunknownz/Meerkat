@@ -62,7 +62,7 @@ Offline:
   backup    --output FILE
   restore   --backup FILE --to NEWDIR        restore into a fresh directory only
   export    [--format json|csv] [--output FILE]
-  doctor
+  doctor [--profile /absolute/private/profile.json] [--probe-executor]
   version | help
 `
 

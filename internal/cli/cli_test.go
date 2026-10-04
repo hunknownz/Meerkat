@@ -114,6 +114,9 @@ func TestServeSocketCommandsAndOwnerExclusion(t *testing.T) {
 	if c, out, e := run(t, "snapshot", "--data-dir", d); c != 0 || !strings.Contains(out, `"schemaVersion": 1`) || !strings.Contains(out, "localHistory") {
 		t.Fatalf("snapshot %d %s", c, e)
 	}
+	if c, out, e := run(t, "doctor", "--data-dir", d); c != 0 || !strings.Contains(out, `"daemonActive": true`) || !strings.Contains(out, `"serviceVersion": "`+server.Version+`"`) {
+		t.Fatalf("doctor %d %s %s", c, out, e)
+	}
 	if c, out, _ := run(t, "settings", "--data-dir", d, "--max-concurrency", "3"); c != 0 || !strings.Contains(out, `"maxConcurrency": 3`) {
 		t.Fatal(out)
 	}

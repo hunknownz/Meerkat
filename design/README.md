@@ -8,3 +8,5 @@
 真实任务编排、Issue 适配和共享 UI 已有本地实现及测试，见 [实现记录](implementation-20261002.md) 和 [当前使用指南](../README.md)。当前运行栈为 Go / SQLite / React；标准 MCP Apps 面板已取得 [真实 Codex 证据](../docs/codex-ui-acceptance.md)，新增版本详情仍单独核验。已安装插件、源码和历史设计的状态分开记录。
 
 后续重构见 [会话、预算与协作完整计划](session-budget-coordination-20261003.md)。阶段实施分别见持久会话、请求预算、检查点、追加预算与 [已完成步骤的中断恢复](session-recovery-20261003.md)；该完整计划的全部工作包尚未完成。
+
+安装与执行前的只读诊断见 [doctor 实施记录](doctor-20261004.md) 和 [用法](../docs/doctor.md)。

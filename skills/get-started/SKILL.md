@@ -18,17 +18,24 @@ Requirements: macOS/Linux (arm64/amd64), Node 22+, Git, and Pi 0.99.1
 1. Runtime: `node scripts/setup.mjs` downloads and verifies the platform binary
    (`SHA256SUMS`, `release.json`) into `~/.meerkat/runtime/<version>/<os>-<arch>`.
    Use `--artifact-dir` for offline files or `--runtime-dir` for an isolated install.
+   Until binary assets are published, use the install guide's source build and
+   `--artifact-dir` path; a plugin install alone does not install the runtime.
 2. Profile: reuse an existing private profile when suitable. Otherwise use supplied project ID,
    provider, model and credential environment-variable name; ask only for missing values. Run:
    `node scripts/configure.mjs --project-id ID --provider P --model M --auth-env VAR_NAME`
-   (custom endpoints add `--base-url URL --api anthropic-messages|openai-completions`).
+   (the current budget bridge requires custom endpoints to use `--base-url URL --api openai-completions`).
    It refuses to overwrite an existing profile.
 3. Key: tell the user to `export VAR_NAME=...` in their own shell. Never ask for, accept,
    echo or store the key.
 4. Service: reuse a running service for the chosen data directory. Otherwise start
    `node scripts/launch.mjs serve --port 47826` with the named key available and `pi` on PATH.
    If the key is unavailable to your environment, ask the user to start it in their shell.
-5. Monitor: after install, in a new chat, call the `open_monitor` tool and report the counts
+5. Diagnose: run `node scripts/launch.mjs doctor --profile /absolute/private/profile.json`.
+   If the executable version needs verification, add `--probe-executor`; this runs only
+   an isolated version command, without keys or model calls. Read blocking findings and
+   unverified checks before a task. A passing report does not verify credentials, balance
+   or a live request gate. See [diagnostics](../../docs/doctor.md) for interpretation.
+6. Monitor: after install, in a new chat, call the `open_monitor` tool and report the counts
    it shows (agents, tasks, deliveries). If the host lacks MCP Apps, run
    `node scripts/launch.mjs snapshot` and say it is a CLI fallback, not the native panel.
 

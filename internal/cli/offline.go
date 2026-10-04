@@ -228,51 +228,6 @@ func cmdExport(env Env, args []string) (int, error) {
 	return ExitOK, nil
 }
 
-// cmdDoctor reports local health without creating or mutating anything.
-func cmdDoctor(env Env, args []string) (int, error) {
-	fs, dd := newFlags("doctor")
-	if err := parse(fs, args); err != nil {
-		return ExitUsage, err
-	}
-	dir, err := dataDir(*dd)
-	if err != nil {
-		return ExitUsage, err
-	}
-	rep := map[string]any{"version": server.Version, "dataDir": dir}
-	okAll := true
-	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
-		rep["dataDirExists"] = false
-		writeJSON(env.Stdout, map[string]any{"ok": true, "data": rep})
-		return ExitOK, nil
-	}
-	private := server.CheckPrivateDir(dir) == nil
-	rep["dataDirPrivate"] = private
-	okAll = okAll && private
-	alive := private && server.Alive(dir)
-	rep["daemonActive"] = alive
-	if private && !alive {
-		if _, err := os.Lstat(filepath.Join(dir, "meerkat.db")); err == nil {
-			if st, err := store.Open(dir); err == nil {
-				if lf, err := st.LeaseFacts(); err == nil {
-					rep["lease"] = map[string]any{"present": lf.Present, "stale": lf.Stale}
-				}
-				if im, err := st.Imports(); err == nil {
-					rep["imports"] = len(im)
-				}
-				st.Close()
-			} else {
-				rep["storeOpen"] = false
-				okAll = false
-			}
-		}
-	}
-	writeJSON(env.Stdout, map[string]any{"ok": okAll, "data": rep})
-	if !okAll {
-		return ExitUsage, nil
-	}
-	return ExitOK, nil
-}
-
 // conflictMessage renders sanitized conflict kind/id pairs (bounded; no payload content).
 func conflictMessage(cs []store.ImportConflict) string {
 	const maxShown, maxID = 3, 48
