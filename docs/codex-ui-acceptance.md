@@ -157,5 +157,45 @@ Codex reported a failed MCP initialization while beta.10's direct stdio probe
 worked. Its launch command resolved the script under an unrelated project rather
 than the installed plugin. Beta.11 supplies a plugin-relative `cwd` and forwards
 the host Node path; see the [launch repair record](verification/mcp-launch-root-20261004.md).
-Earlier native screenshots remain historical evidence. A freshly opened panel
-after this repair still requires separate native acceptance.
+Earlier native screenshots remain historical evidence. The fresh panel check
+after this repair is recorded below.
+
+## Beta.11 native panel verification (2026-10-04)
+
+After restarting Codex, the user expanded `open_monitor` into the side panel.
+The MCP Apps automation backend found the expanded Meerkat app on the native
+`codex-sandbox` surface. Its DOM and screenshots supplied the following evidence:
+
+- Agents, Tasks and Usage render and switch in the real host. The connection
+  stays connected and the coordinator heartbeat advances.
+- A delivered Task opens with separate execution, phase and delivery states,
+  its exact candidate SHA, frozen Context digest, checks and review results.
+- Usage displays input, output and cache categories, preserves partial totals
+  as lower bounds and missing fees as unknown, and separates wall span from
+  summed Agent execution time.
+- Settings display their read-only explanation and the save button is disabled.
+
+The service had 23 Tasks, 32 Runs, no active or queued Runs and one unknown Run.
+No paid request, instruction, stop, recovery or budget change was submitted.
+No CDP port, application modification or in-app browser was used. Screenshots
+remain in private maintainer evidence storage, outside Git:
+
+| Native screenshot | SHA-256 |
+| --- | --- |
+| Agents | `740a109dcc348da4f3174ed383041b79c788d1ecb34f03510e409ff232f92e8e` |
+| Task detail | `95a8d276b48e4395e662bf9c6987f9797021b2ec1e531cbb484b5342b7b03a8a` |
+| Usage | `2993c5a6cb1d2460dc73e73b689fe92ea34da434f9e115b1be3836c9de5b822e` |
+| Read-only settings | `5273af2cd865ac447a701571d194615d35dad67f88d16a8dc0fe067c7a7396b0` |
+
+### Remaining host checks
+
+Human instruction delivery and stopping an active Run still need native host
+acceptance. There was no active Run during this check. An attempt to inspect the
+unknown Run's controls timed out in the automation backend; subsequent DOM and
+screenshot access also timed out. This supplies no acceptance evidence for those
+controls and does not establish a product failure. The unknown Run remains
+unknown and has not been replayed. The expanded panel was not closed.
+
+Visibility of a fresh global sidebar entry also remains unverified. This check
+accepts the expanded tool panel on the observed Codex installation, not every
+host entrypoint or the entire delivery plan.

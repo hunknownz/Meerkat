@@ -55,14 +55,30 @@ repeated only after that process exited. No lease was bypassed.
 
 The HTTPS marketplace refresh failed twice on this machine. Installation then
 succeeded through Codex's supported Git SSH source for the same GitHub repository.
-Native acceptance remains pending: the current chat's available tools still
-omit Meerkat, and there is no expanded MCP App tab. The user was asked to reload
-Codex after the installed configuration change.
+Before the host reload, this chat's available tools still omitted Meerkat and
+there was no expanded MCP App tab. The user was asked to reload Codex after the
+installed configuration change.
 
 Installed runtime/protocol probes are separate from native display acceptance.
 The monitor already declares both global and thread entrypoints; those appear
-only if the host discovers the tools and supports the relevant surface. After
-the update, reload the plugin in Codex and open Meerkat again. A successful
-stdio probe or browser view does not count as a fresh native panel screenshot.
+only if the host discovers the tools and supports the relevant surface. A
+successful stdio probe or browser view does not count as a fresh native panel
+screenshot.
 
 No paid model request, task recovery or budget increase is part of this repair.
+
+## Fresh native acceptance after reload
+
+The user restarted Codex and expanded Meerkat. The chat then discovered its
+tools, and the MCP Apps backend found the real expanded `codex-sandbox` panel.
+Agents / Tasks / Usage, live heartbeat, a delivered Task's exact candidate and
+review details, execution/phase/delivery states, usage categories and unknown
+fees, and disabled settings save passed native inspection. Four private native
+screenshots and their hashes are recorded in
+[host acceptance](../codex-ui-acceptance.md#beta11-native-panel-verification-2026-10-04).
+
+There was no active Run. Native instruction and stop delivery remain pending,
+as does fresh global sidebar entry visibility. Inspecting the unknown Run's
+controls and later screenshot access timed out in the automation backend;
+those operations have no passing evidence. The panel was not closed, no
+control was submitted and no new model request was made.

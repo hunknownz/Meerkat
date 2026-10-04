@@ -71,10 +71,21 @@ A native-host probe received HTTP 502 through the model gateway and lacked a
 reliable settlement. Its one request retains a 17,994-token reservation as unknown;
 it was not retried or counted as zero.
 
-The new Codex MCP App was readable through the host surface, but its screenshot
-and button click failed because the visible region had zero size. The computer-use
-tool explicitly prohibits operating `com.openai.codex`. The user is away and has
-been asked to reopen and visibly expand the panel after returning. No shell/CDP
+Before the beta.11 startup repair and host reload, the Codex MCP App was readable
+through the host surface, but its screenshot and button click failed because the
+visible region had zero size. The computer-use tool explicitly prohibits
+operating `com.openai.codex`. At that time the user was away and had been asked
+to reopen and visibly expand the panel after returning. No shell/CDP
 workaround was used. Loopback screenshots and protocol probes do not count as
 native control acceptance. The beta.8 host screenshot remains historical evidence;
 beta.9 real Pi/browser instruction evidence remains valid for that tested path.
+
+After the beta.11 repair, the user restarted Codex and expanded Meerkat. Native
+Agents / Tasks / Usage, live heartbeat, delivered Task details, usage and
+read-only settings passed DOM and screenshot checks. See
+[the fresh host evidence](../codex-ui-acceptance.md#beta11-native-panel-verification-2026-10-04).
+Native human instruction and stop delivery still need an active Run; the existing
+unknown Run was not replayed. Automation timed out while inspecting its controls,
+so that inspection has no passing evidence. Fresh global sidebar entry visibility
+also remains unverified. These remaining checks prevent a claim of complete
+native control acceptance.
