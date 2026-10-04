@@ -241,6 +241,9 @@ var roleHeader = map[string][]string{
 func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 	parts := []string{"You are the " + req.Role + ` for project "` + req.Profile.ProjectID + `". Work only in the current Git worktree (` + wt + ")."}
 	parts = append(parts, roleHeader[req.Role]...)
+	if req.Checkpoint != nil {
+		parts = append(parts, "This is an explicit continuation of your saved session, not a new task. Keep the prior investigation and plan; do not repeat repository discovery or reread unchanged files already present in that history. Verify the saved working changes, then implement the remaining scope using targeted reads and batched edits/checks. All previous usage remains charged to this task.")
+	}
 	parts = append(parts, "Do not push, open PRs, merge, deploy, create branches or worktrees, or touch production systems. Never print secrets.",
 		"", "## Task", strings.TrimSpace(req.TaskBrief))
 	if t := strings.TrimSpace(req.Context.Text); t != "" {
