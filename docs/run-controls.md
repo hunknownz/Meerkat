@@ -83,6 +83,16 @@ in that Run. Automatic budget notifications retain their existing Run events;
 they are not explicit-authority records in this ledger. The hard deadline and
 request gate still apply, including any model call triggered by steering.
 
+## Final report
+
+Final reporting processes pending accepted directions first: Go seals input only
+after accepted/sending directions drain, and Pi checks its pending messages
+before and after that seal. A pending follow-up defers the final report until it
+is processed. Submitting a final report closes new directions for that Run.
+Stop remains available. The report binds the final HEAD and the frozen Context,
+and its reply is not final delivery: local delivery, QA, human check and
+repository integration remain separate states.
+
 ## History and display
 
 SQLite V11 extends control kinds and preserves existing payloads and ordering.
