@@ -31,6 +31,34 @@ MCP and server tests passed with the Go race detector.
 All 66 Node distribution/launcher tests passed with Node 22 on PATH. An initial
 run that inherited a broken system Node was superseded by this passing run.
 
+## Installed verification
+
+All four release artifacts were built from committed implementation
+`b6596cb47c5c32f14da5fa75a6db716b09825091`. The installed darwin/arm64 binary
+reports beta.11 and has SHA-256
+`7cf7f02f8dc07922a42d243e03504f46e3337160725e122dc70eb8f4a7b9458c`.
+Codex reports the beta.11 plugin installed and enabled. Its resolved MCP
+transport points `cwd` at that installed version's directory and explicitly
+forwards the host Node path.
+
+Using that resolved transport, the bundled desktop Node and no plugin-root
+environment variables, initialization, discovery of 21 tools, resource loading
+and `open_monitor` passed against the real service. The returned entrypoint
+metadata contains both `global` and `thread`. The actual private browser control
+token is absent from both the resource and the monitor result.
+
+The service switched after the old owner exited and an offline backup was made.
+All 23 Tasks, 32 Runs, deliveries, reviews, frozen contexts/profiles, settings and
+usage matched before and after. The existing unknown Run stayed unknown; it was
+not replayed. The first startup attempt met the still-held old lease and was
+repeated only after that process exited. No lease was bypassed.
+
+The HTTPS marketplace refresh failed twice on this machine. Installation then
+succeeded through Codex's supported Git SSH source for the same GitHub repository.
+Native acceptance remains pending: the current chat's available tools still
+omit Meerkat, and there is no expanded MCP App tab. The user was asked to reload
+Codex after the installed configuration change.
+
 Installed runtime/protocol probes are separate from native display acceptance.
 The monitor already declares both global and thread entrypoints; those appear
 only if the host discovers the tools and supports the relevant surface. After
