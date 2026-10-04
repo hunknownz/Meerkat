@@ -1,7 +1,9 @@
 # Additional allowance with explicit authorization
 
 Meerkat preserves the frozen original Task budget and appends each authorized
-increase to the SQLite V7 decision ledger. Previously consumed tokens and execution
+increase to the SQLite V7 decision ledger. New monitor-mode tasks have no hard
+task token cap; only time additions apply. Historical hard-cap tasks remain
+unchanged. Previously consumed tokens and execution
 time remain charged. A proposal does not grant allowance or start an Agent.
 
 ## CLI
@@ -44,8 +46,7 @@ Review and delivery gates still apply.
 
 This owner-controlled local API records an authorization reference; free text is
 not proof that a human granted permission. A coordinator cannot infer permission
-from the proposal or from the task needing more budget. The monitor remains
-read-only, showing original allowance, cumulative additions, totals and reasons;
+from the proposal or from the task needing more budget. The monitor shows original allowance, cumulative additions, totals and reasons;
 it exposes neither authorization references nor authority digests.
 
 ## Conflicts and recovery

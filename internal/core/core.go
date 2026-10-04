@@ -314,12 +314,18 @@ func (c *Core) settings() (model.Settings, error) {
 	if s.DefaultProfiles == nil {
 		s.DefaultProfiles = map[string]map[string]string{}
 	}
+	if !model.ValidProjectConcurrency(s.ProjectConcurrency) || !model.ValidProviderConcurrency(s.ProviderConcurrency) {
+		return s, invalid("stored concurrency caps are invalid")
+	}
 	return s, nil
 }
 
 // ParseSettingsPatch strictly decodes a settings patch.
 func ParseSettingsPatch(raw []byte) (model.SettingsPatch, error) {
 	var p model.SettingsPatch
+	if !model.ValidSettingsJSON(raw) {
+		return p, invalid("invalid settings input")
+	}
 	return p, decodeStrict(raw, &p, 64<<10)
 }
 
@@ -379,6 +385,31 @@ func (c *Core) Settings(p model.SettingsPatch) (model.Settings, error) {
 		}
 		cur.DefaultProfiles = merged
 	}
+	if p.ProjectConcurrency != nil || p.ProviderConcurrency != nil {
+		st, err := c.st.Read()
+		if err != nil {
+			return cur, err
+		}
+		if !model.ValidProjectConcurrency(p.ProjectConcurrency) || !model.ValidProviderConcurrency(p.ProviderConcurrency) {
+			return cur, invalid("invalid concurrency caps")
+		}
+		for id := range p.ProjectConcurrency {
+			if !slices.ContainsFunc(st.Projects, func(x model.Project) bool { return x.ID == id }) {
+				return cur, invalid("unknown project concurrency key")
+			}
+		}
+		for id := range p.ProviderConcurrency {
+			if !slices.ContainsFunc(st.Profiles, func(x model.Profile) bool { return x.Provider == id }) {
+				return cur, invalid("unknown provider concurrency key")
+			}
+		}
+		if p.ProjectConcurrency != nil {
+			cur.ProjectConcurrency = model.CopyProjectConcurrency(p.ProjectConcurrency)
+		}
+		if p.ProviderConcurrency != nil {
+			cur.ProviderConcurrency = model.CopyProjectConcurrency(p.ProviderConcurrency)
+		}
+	}
 	cur.UpdatedAt = now()
 	if c.isLost() {
 		return cur, ErrLeaseLost
@@ -386,6 +417,9 @@ func (c *Core) Settings(p model.SettingsPatch) (model.Settings, error) {
 	err = c.st.SetSettingsOwned(c.token, cur)
 	if errors.Is(err, store.ErrLeaseLost) {
 		go c.loseLease()
+	}
+	if err == nil {
+		c.wakeQueue()
 	}
 	return cur, err
 }
@@ -402,6 +436,7 @@ func execName(p model.Profile) string {
 // PublicTask is the task projection with aggregate usage.
 type PublicTask struct {
 	model.Task
+	Progress            model.TaskProgress         `json:"progress"`
 	WorktreeExists      bool                       `json:"worktreeExists"`
 	Usage               model.AggregateUsage       `json:"usage"`
 	Sessions            []model.SessionSummary     `json:"sessions,omitempty"`
@@ -560,6 +595,7 @@ func (c *Core) Snapshot() (Snapshot, error) {
 		if pt.State == model.TaskQueued {
 			out.Counts.Queued++
 		}
+		pt.Progress = model.Progress(pt.Task, st.Runs, st.Reviews)
 		out.Tasks = append(out.Tasks, pt)
 	}
 	for _, p := range st.Profiles {

@@ -199,13 +199,17 @@ type IssueRef struct {
 	BodyHash  string `json:"bodyHash,omitempty"`
 }
 
-// Budget bounds one task.
+// Budget records task limits. Empty Mode preserves legacy token enforcement.
 type Budget struct {
+	Mode           string         `json:"mode,omitempty"`
 	MaxTokens      int64          `json:"maxTokens"`
 	MaxWallSeconds int64          `json:"maxWallSeconds"`
 	MaxFixRounds   int            `json:"maxFixRounds"`
 	StageReserves  *StageReserves `json:"stageReserves,omitempty"`
 }
+
+func (b Budget) HardTokenCap() bool { return b.Mode != "monitor" }
+func (b Budget) ValidMode() bool    { return b.Mode == "" || b.Mode == "monitor" || b.Mode == "enforce" }
 
 // StageReserves is explicit frozen configuration, not a prediction of model use.
 // Wrap-up is part of the current role's allowance, never extra authorization.
@@ -357,22 +361,27 @@ func EmptyState() *State {
 
 // Settings are future-run settings.
 type Settings struct {
-	MaxConcurrency  int                          `json:"maxConcurrency"`
-	MaxFixRounds    int                          `json:"maxFixRounds"`
-	DefaultProfiles map[string]map[string]string `json:"defaultProfiles"`
-	UpdatedAt       string                       `json:"updatedAt,omitempty"`
+	MaxConcurrency      int                          `json:"maxConcurrency"`
+	MaxFixRounds        int                          `json:"maxFixRounds"`
+	DefaultProfiles     map[string]map[string]string `json:"defaultProfiles"`
+	ProjectConcurrency  map[string]int               `json:"projectConcurrency,omitempty"`
+	ProviderConcurrency map[string]int               `json:"providerConcurrency,omitempty"`
+	UpdatedAt           string                       `json:"updatedAt,omitempty"`
 }
 
-// DefaultSettings returns maxConcurrency 2, maxFixRounds 2, defaultProfiles {}.
+// DefaultSettings returns maxConcurrency 2, maxFixRounds 2, defaultProfiles {},
+// projectConcurrency {}.
 func DefaultSettings() Settings {
-	return Settings{MaxConcurrency: DefaultMaxConcurrency, MaxFixRounds: DefaultMaxFixRounds, DefaultProfiles: map[string]map[string]string{}}
+	return Settings{MaxConcurrency: DefaultMaxConcurrency, MaxFixRounds: DefaultMaxFixRounds, DefaultProfiles: map[string]map[string]string{}, ProjectConcurrency: map[string]int{}}
 }
 
 // SettingsPatch is a partial settings update; nil fields are unchanged.
 type SettingsPatch struct {
-	MaxConcurrency  *int                         `json:"maxConcurrency,omitempty"`
-	MaxFixRounds    *int                         `json:"maxFixRounds,omitempty"`
-	DefaultProfiles map[string]map[string]string `json:"defaultProfiles,omitempty"`
+	MaxConcurrency      *int                         `json:"maxConcurrency,omitempty"`
+	MaxFixRounds        *int                         `json:"maxFixRounds,omitempty"`
+	DefaultProfiles     map[string]map[string]string `json:"defaultProfiles,omitempty"`
+	ProjectConcurrency  map[string]int               `json:"projectConcurrency,omitempty"`
+	ProviderConcurrency map[string]int               `json:"providerConcurrency,omitempty"`
 }
 
 // StopRequest is a pending request to stop one run.

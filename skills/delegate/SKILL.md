@@ -9,7 +9,7 @@ The coordinator prepares a clean linked Git worktree on a task branch and a stri
 
 1. Locate the plugin root relative to this skill (`../..`) and run commands as `node <root>/scripts/launch.mjs <command>`. An existing absolute `meerkat` binary (`MEERKAT_BIN`) is an acceptable fallback. If no runtime or profile exists, follow [get started](../get-started/SKILL.md) / [install](../../docs/install.md). Credentials stay in the profile's named environment variable.
 2. Run `launch.mjs run --input <task-json> --dry-run`.
-3. With the service running, run without --dry-run. This yields the first local candidate only, unreviewed. Respect the declared budget; if stopped, retain changes and inspect the reason before another run.
+3. With the service running, run without --dry-run. This yields the first local candidate only, unreviewed. New tasks default to token monitoring; explicit `maxTokens` retains hard-cap behavior. Respect selected caps and Profile Run/time limits; if stopped, retain changes and inspect the reason before another run.
 4. Read the receipt, review the baseline-to-result diff and rerun relevant checks. Report local SHA, checks, gaps and actual usage; missing cost remains unknown.
 
 For an existing paused delegate task, use `launch.mjs run --task <task-id> --resume`.

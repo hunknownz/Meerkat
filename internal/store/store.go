@@ -600,7 +600,7 @@ func (s *Store) GetSettings() (model.Settings, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return set, nil
 	}
-	if err != nil || json.Unmarshal(p, &set) != nil {
+	if err != nil || json.Unmarshal(p, &set) != nil || !model.ValidProjectConcurrency(set.ProjectConcurrency) || !model.ValidProviderConcurrency(set.ProviderConcurrency) {
 		return set, fmt.Errorf("store: read settings failed")
 	}
 	return set, nil
@@ -608,11 +608,14 @@ func (s *Store) GetSettings() (model.Settings, error) {
 
 // SetSettings replaces the settings.
 func (s *Store) SetSettings(set model.Settings) error {
-	if set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency || set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit {
+	if set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency || set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit || !model.ValidProjectConcurrency(set.ProjectConcurrency) || !model.ValidProviderConcurrency(set.ProviderConcurrency) {
 		return model.Invalidf("settings out of range")
 	}
 	if set.DefaultProfiles == nil {
 		set.DefaultProfiles = map[string]map[string]string{}
+	}
+	if set.ProjectConcurrency == nil {
+		set.ProjectConcurrency = map[string]int{}
 	}
 	_, err := s.db.Exec("INSERT INTO settings (id, payload) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload", mustJSON(set))
 	if err != nil {

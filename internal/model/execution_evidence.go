@@ -12,8 +12,11 @@ type SessionSummary struct {
 }
 
 // BudgetEvidence summarizes the request ledger, not a monetary billing limit.
-// AvailableTokens includes conservative reservations; nil means unverifiable.
+// AvailableTokens includes conservative reservations. In monitor mode it is nil
+// because there is no hard task token cap; otherwise nil means unverifiable.
 type BudgetEvidence struct {
+	Mode             string `json:"mode,omitempty"`
+	Warning          bool   `json:"warning,omitempty"`
 	AuthorizedTokens int64  `json:"authorizedTokens"`
 	AvailableTokens  *int64 `json:"availableTokens"`
 	ConfirmedTokens  int64  `json:"confirmedTokens"`

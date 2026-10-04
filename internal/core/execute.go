@@ -391,7 +391,7 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 					return nil, nil, e
 				}
 				u, sec := budgetUse(st, t.ID)
-				if b.MaxTokens-u-futureStageReserve(*t, p, s) < 1 || float64(b.MaxWallSeconds)-sec < 1 {
+				if b.HardTokenCap() && b.MaxTokens-u-futureStageReserve(*t, p, s) < 1 || float64(b.MaxWallSeconds)-sec < 1 {
 					return nil, nil, invalid("checkpoint requires a new budget decision; original allowance is exhausted")
 				}
 				states[t.ID] = t.State
@@ -419,7 +419,11 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 // inspectFailed is the reason used when Git could not determine worktree facts (unknown, not a mismatch).
 const inspectFailed = "worktree_inspection_failed"
 
-type active struct{ worktree string }
+type active struct {
+	worktree  string
+	projectID string
+	providers []string
+}
 
 // depStatus reports a blocking reason or whether to wait. Delivered candidates are verified in Git.
 func (c *Core) depStatus(st *model.State, t model.Task, pending []string, running map[string]active, selected []string) (string, bool) {
@@ -593,6 +597,9 @@ func brief(st *model.State, t model.Task, s step, candidate string, ctxRec model
 
 // frozenOK re-derives the frozen context digest and scope.
 func frozenOK(st *model.State, t model.Task) (model.Context, string) {
+	if t.Budget != nil && !t.Budget.ValidMode() {
+		return model.Context{}, "budget_mode_invalid"
+	}
 	ctxRec := findContext(st, t.ContextRef)
 	if ctxRec == nil || ContextDigest(ctxRec.Text, ctxRec.Sources) != t.ContextRef.Digest {
 		return model.Context{}, "context_changed"
@@ -627,6 +634,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		return false
 	}
 	remTok, remSec := budget.MaxTokens-usedTok-futureStageReserve(t, p, s), int64(float64(budget.MaxWallSeconds)-usedSec)
+	if !budget.HardTokenCap() {
+		remTok = int64(prof.Limits.MaxTokens)
+	}
 	resumeCP, checkpointErr := c.savedCheckpoint(t.ID)
 	if checkpointErr != nil {
 		c.failTask(t.ID, model.TaskFailed, "checkpoint_unreadable", s.role)

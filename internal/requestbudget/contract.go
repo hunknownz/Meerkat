@@ -29,6 +29,7 @@ var (
 // Policy is private frozen authority for a Run. Tokens are estimate reservations,
 // not a proven tokenizer/price ceiling. The request count and deadline are gates.
 type Policy struct {
+	TokenMode                                                         string `json:"TokenMode,omitempty"`
 	RunID, TaskID, SessionID, ProfileID, ProfileDigest, ContractDigest string
 	Provider, Model, Version, Deadline                                 string
 	TaskTokens, RunTokens, TaskRequests                                int64

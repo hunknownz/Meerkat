@@ -15,6 +15,11 @@ import (
 
 func budgetFixture(t *testing.T, tokens, requests int64) (*Store, model.ControllerLease, model.Session, budget.Policy) {
 	t.Helper()
+	return budgetFixtureMode(t, tokens, requests, "", tokens)
+}
+
+func budgetFixtureMode(t *testing.T, tokens, requests int64, mode string, runTokens int64) (*Store, model.ControllerLease, model.Session, budget.Policy) {
+	t.Helper()
 	s, l, ss, rid := sessionFixture(t)
 	var policy budget.Policy
 	if err := s.UpdateOwned(l.Token, func(st *model.State) error {
@@ -25,10 +30,11 @@ func budgetFixture(t *testing.T, tokens, requests int64) (*Store, model.Controll
 		tt.ProfileIDs = map[string]string{"developer": p.ID}
 		b := model.DefaultBudget()
 		b.MaxTokens = tokens
+		b.Mode = mode
 		tt.Budget = &b
 		ss.ProfileDigest, ss.ContractDigest = model.FrozenProfileDigest(p), model.FrozenTaskDigest(st, *tt)
 		policy = budget.Policy{RunID: rid, TaskID: ss.TaskID, SessionID: ss.ID, ProfileID: p.ID, ProfileDigest: ss.ProfileDigest, ContractDigest: ss.ContractDigest,
-			Provider: p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), TaskTokens: tokens, RunTokens: tokens, TaskRequests: requests, State: "open"}
+			Provider: p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), TokenMode: mode, TaskTokens: tokens, RunTokens: runTokens, TaskRequests: requests, State: "open"}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -330,5 +336,93 @@ func TestRequestBudgetBackupRestoreAndTamperedOverrun(t *testing.T) {
 	editBackup(t, bk, "UPDATE budget_requests SET payload=? WHERE id=?", mustJSON(rows[0]), r.ID)
 	if err := ValidateBackup(bk); !errors.Is(err, ErrBadBackup) {
 		t.Fatal("tampered receipt accepted", err)
+	}
+}
+
+func TestMonitorBudgetWarnsWithoutCappingTaskButKeepsRunCap(t *testing.T) {
+	s, l, _, p := budgetFixtureMode(t, 100, 256, "monitor", 1000)
+	r := budgetRequest(1, 100, 200)
+	if _, err := s.ReserveRequestOwned(l.Token, p.RunID, r); err != nil {
+		t.Fatal(err)
+	}
+	settleRequest(t, s, l.Token, p.RunID, measuredRequest(r.ID, 100, 50))
+	_, ev, err := s.ExecutionEvidence(p.TaskID)
+	if err != nil || ev.Mode != "monitor" || !ev.Warning || ev.ConfirmedTokens != 150 || ev.AvailableTokens != nil {
+		t.Fatal(ev, err)
+	}
+	g, err := s.ReserveRequestOwned(l.Token, p.RunID, budgetRequest(2, 100, 1000))
+	if err != nil || g.ReservedTokens != 850 || g.MaxOutput != 750 {
+		t.Fatal("task threshold stopped a monitored task", g, err)
+	}
+	settleRequest(t, s, l.Token, p.RunID, measuredRequest(g.ID, 800, 50))
+	if _, err = s.ReserveRequestOwned(l.Token, p.RunID, budgetRequest(3, 1, 1)); !errors.Is(err, budget.ErrDenied) {
+		t.Fatal("run cap bypassed", err)
+	}
+	o, err := s.CloseRequestBudgetOwned(l.Token, p.RunID)
+	if err != nil || !o.Confirmed || *o.Usage.Tokens.Total != 1000 {
+		t.Fatal(o, err)
+	}
+}
+
+func TestMonitorBudgetCannotAuthorizeChangedFrozenMode(t *testing.T) {
+	s, l, _, p := budgetFixtureMode(t, 100, 256, "monitor", 1000)
+	p.TokenMode = "enforce"
+	p.RunTokens = 100
+	if err := s.OpenRequestBudgetOwned(l.Token, p); !errors.Is(err, budget.ErrDenied) {
+		t.Fatal("mode change accepted", err)
+	}
+}
+
+func TestMonitorBudgetAndConcurrencyBackupRestore(t *testing.T) {
+	s, l, ss, p := budgetFixtureMode(t, 100, 256, "monitor", 1000)
+	r := budgetRequest(1, 100, 200)
+	if _, err := s.ReserveRequestOwned(l.Token, p.RunID, r); err != nil {
+		t.Fatal(err)
+	}
+	settleRequest(t, s, l.Token, p.RunID, measuredRequest(r.ID, 100, 50))
+	if _, err := s.CloseRequestBudgetOwned(l.Token, p.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishSessionRunOwned(l.Token, ss, p.RunID, func(st *model.State) error {
+		st.Runs[0].State = model.RunSucceeded
+		st.Tasks[0].State = model.TaskDelivered
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	set := model.DefaultSettings()
+	set.ProjectConcurrency = map[string]int{"p": 1}
+	set.ProviderConcurrency = map[string]int{"fixture": 2}
+	if err := s.SetSettingsOwned(l.Token, set); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(t.TempDir(), "monitor.db")
+	if err := s.Backup(backup); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "restored")
+	if err := Restore(backup, dst); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	got, err := restored.GetSettings()
+	if err != nil || got.ProjectConcurrency["p"] != 1 || got.ProviderConcurrency["fixture"] != 2 {
+		t.Fatal(got, err)
+	}
+	_, ev, err := restored.ExecutionEvidence(p.TaskID)
+	if err != nil || ev.Mode != "monitor" || !ev.Warning || ev.ConfirmedTokens != 150 || ev.AvailableTokens != nil {
+		t.Fatal(ev, err)
+	}
+	st, err := restored.Read()
+	if err != nil || model.FrozenTaskDigest(st, st.Tasks[0]) != p.ContractDigest {
+		t.Fatal("frozen contract changed on restore", err)
+	}
+	editBackup(t, backup, `UPDATE settings SET payload=? WHERE id=1`, `{"maxConcurrency":2,"maxFixRounds":2,"projectConcurrency":{"p":0}}`)
+	if !errors.Is(ValidateBackup(backup), ErrBadBackup) {
+		t.Fatal("corrupt cap accepted on restore")
 	}
 }

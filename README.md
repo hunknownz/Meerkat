@@ -48,7 +48,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.9` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
+Version `0.4.0-beta.10` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
 
 ```sh
 codex plugin marketplace add hunknownz/Meerkat --ref main
@@ -56,7 +56,7 @@ codex plugin add meerkat@meerkat
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.9
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.10
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
 export MY_PROVIDER_KEY=...        # in your own shell only
 node scripts/launch.mjs serve --port 47826
@@ -78,9 +78,9 @@ node scripts/launch.mjs execute --task <task-id> --resume
 
 See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. Expand a running Agent to send a bounded instruction to its current session or stop it. The Codex MCP Apps panel uses host tools for these actions; settings remain read-only there. The browser also supports future-run settings. Neither panel starts tasks. See [human intervention](docs/ui-intervention.md).
 
-The runtime supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits.
+The runtime supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue with global, project and Provider task caps. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits.
 
-Scheduler-driven Pi runs use [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. [Request budget authorization](docs/request-budgets.md) reserves allowance before supported Pi HTTP requests and settles raw usage. [Stage reserves and early wrap-up](docs/stage-budgets.md) retain later-role allowance and request bounded completion. [Verified checkpoints](docs/checkpoints.md) can retain bounded incomplete work; [completed-step recovery](docs/session-recovery.md) can restore a Go-verified result after interrupted settlement. [Durable Run controls](docs/run-controls.md) separate saved instructions, protocol receipts and actual results. Both recovery paths require explicit continuation, and missing or uncertain evidence stays blocked. The current bridge supports Pi 0.99.1 text HTTP SSE with `openai-completions` only.
+Scheduler-driven Pi runs use [persistent sessions](docs/persistent-sessions.md) through private RPC. Development/fixes reuse verified task history; every review starts independently. [Request budget authorization](docs/request-budgets.md) reserves allowance before supported Pi HTTP requests and settles raw usage. [Stage reserves and early wrap-up](docs/stage-budgets.md) retain later-role allowance and request bounded completion. [Verified checkpoints](docs/checkpoints.md) can retain bounded incomplete work; [completed-step recovery](docs/session-recovery.md) can restore a Go-verified result after interrupted settlement. [Durable Run controls](docs/run-controls.md) separate saved instructions, protocol receipts and actual results. Both recovery paths require explicit continuation, and missing or uncertain evidence stays blocked. New tasks monitor cumulative tokens by default; explicit task caps and all per-Run Profile/time limits remain enforced. The current bridge supports Pi 0.99.1 text HTTP SSE with `openai-completions` only.
 
 Single delegation runs only the developer and records a first local candidate, unreviewed:
 

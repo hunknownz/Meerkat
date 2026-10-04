@@ -52,6 +52,9 @@ func controlTools() []any {
 		"maxConcurrency": map[string]any{"type": "integer", "minimum": model.MinConcurrency, "maximum": model.MaxConcurrency},
 		"maxFixRounds":   map[string]any{"type": "integer", "minimum": 0, "maximum": model.MaxFixRoundsLimit},
 	})
+	for _, key := range []string{"projectConcurrency", "providerConcurrency"} {
+		settings["properties"].(map[string]any)[key] = map[string]any{"type": "object", "maxProperties": 128, "additionalProperties": map[string]any{"type": "integer", "minimum": 1, "maximum": 4}}
+	}
 	settings["minProperties"] = 1
 	return []any{
 		tool(ToolListRuns, "List bounded run summaries, optionally filtered by task or state. Use nextCursor with the same filters; changed data requires restarting pagination. Missing usage stays unknown.", schema(map[string]any{
@@ -67,7 +70,7 @@ func controlTools() []any {
 }
 
 // decodeArgs enforces object arguments, unique keys and advertised field types.
-// No tool in this slice accepts nested objects or arbitrary executor commands.
+// Nested concurrency maps receive an additional duplicate-key check before use.
 func decodeArgs(raw json.RawMessage, dst any, allowed ...string) *rpcError {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
@@ -226,19 +229,25 @@ func (s *Server) controlTool(ctx context.Context, name string, args json.RawMess
 		return structured(text, map[string]any{"schemaVersion": 1, "receipt": rc}), nil
 	case ToolUpdateSettings:
 		var p struct {
-			MaxConcurrency *int `json:"maxConcurrency"`
-			MaxFixRounds   *int `json:"maxFixRounds"`
+			MaxConcurrency      *int           `json:"maxConcurrency"`
+			MaxFixRounds        *int           `json:"maxFixRounds"`
+			ProjectConcurrency  map[string]int `json:"projectConcurrency"`
+			ProviderConcurrency map[string]int `json:"providerConcurrency"`
 		}
-		if err := decodeArgs(args, &p, "maxConcurrency", "maxFixRounds"); err != nil {
+		if err := decodeArgs(args, &p, "maxConcurrency", "maxFixRounds", "projectConcurrency", "providerConcurrency"); err != nil {
 			return nil, err
 		}
-		if p.MaxConcurrency == nil && p.MaxFixRounds == nil {
+		if !model.ValidSettingsJSON(args) {
+			return nil, invalidParams("invalid concurrency map")
+		}
+		if p.MaxConcurrency == nil && p.MaxFixRounds == nil && p.ProjectConcurrency == nil && p.ProviderConcurrency == nil {
 			return nil, invalidParams("at least one setting is required")
 		}
 		if p.MaxConcurrency != nil && (*p.MaxConcurrency < model.MinConcurrency || *p.MaxConcurrency > model.MaxConcurrency) || p.MaxFixRounds != nil && (*p.MaxFixRounds < 0 || *p.MaxFixRounds > model.MaxFixRoundsLimit) {
 			return nil, invalidParams("settings out of range")
 		}
-		patch, _ := json.Marshal(model.SettingsPatch{MaxConcurrency: p.MaxConcurrency, MaxFixRounds: p.MaxFixRounds})
+		// Preserve explicitly empty maps when forwarding clear operations.
+		patch := []byte(args)
 		resp, err := s.command(ctx, server.Request{Op: "settings", Input: patch})
 		if err != nil {
 			return controlFailure(err, "", ""), nil
@@ -247,7 +256,7 @@ func (s *Server) controlTool(ctx context.Context, name string, args json.RawMess
 			return commandFailure(resp.Code, "", ""), nil
 		}
 		var set model.Settings
-		if json.Unmarshal(resp.Data, &set) != nil || !validSettings(set) || p.MaxConcurrency != nil && set.MaxConcurrency != *p.MaxConcurrency || p.MaxFixRounds != nil && set.MaxFixRounds != *p.MaxFixRounds {
+		if json.Unmarshal(resp.Data, &set) != nil || !validSettings(set) || p.ProjectConcurrency != nil && !model.EqualProjectConcurrency(p.ProjectConcurrency, set.ProjectConcurrency) || p.ProviderConcurrency != nil && !model.EqualProjectConcurrency(p.ProviderConcurrency, set.ProviderConcurrency) || p.MaxConcurrency != nil && set.MaxConcurrency != *p.MaxConcurrency || p.MaxFixRounds != nil && set.MaxFixRounds != *p.MaxFixRounds {
 			return controlFailure(errors.New("unreadable settings"), "", ""), nil
 		}
 		return structured("Future-run settings updated.", settingsView(set)), nil
@@ -330,11 +339,11 @@ func publicRun(r model.Run) runView {
 }
 
 func validSettings(s model.Settings) bool {
-	return s.MaxConcurrency >= model.MinConcurrency && s.MaxConcurrency <= model.MaxConcurrency && s.MaxFixRounds >= 0 && s.MaxFixRounds <= model.MaxFixRoundsLimit
+	return s.MaxConcurrency >= model.MinConcurrency && s.MaxConcurrency <= model.MaxConcurrency && s.MaxFixRounds >= 0 && s.MaxFixRounds <= model.MaxFixRoundsLimit && model.ValidProjectConcurrency(s.ProjectConcurrency) && model.ValidProviderConcurrency(s.ProviderConcurrency)
 }
 
 func settingsView(s model.Settings) map[string]any {
-	return map[string]any{"schemaVersion": 1, "maxConcurrency": s.MaxConcurrency, "maxFixRounds": s.MaxFixRounds, "updatedAt": safeAtom(s.UpdatedAt)}
+	return map[string]any{"schemaVersion": 1, "maxConcurrency": s.MaxConcurrency, "maxFixRounds": s.MaxFixRounds, "updatedAt": safeAtom(s.UpdatedAt), "projectConcurrency": model.CopyProjectConcurrency(s.ProjectConcurrency), "providerConcurrency": model.CopyProjectConcurrency(s.ProviderConcurrency)}
 }
 
 func validReceipt(r model.StopReceipt) bool {

@@ -45,11 +45,14 @@ func (s *Store) UpdateOwned(token string, fn func(*model.State) error) error {
 
 // SetSettingsOwned replaces settings only while token holds the lease.
 func (s *Store) SetSettingsOwned(token string, set model.Settings) error {
-	if set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency || set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit {
+	if set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency || set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit || !model.ValidProjectConcurrency(set.ProjectConcurrency) || !model.ValidProviderConcurrency(set.ProviderConcurrency) {
 		return model.Invalidf("settings out of range")
 	}
 	if set.DefaultProfiles == nil {
 		set.DefaultProfiles = map[string]map[string]string{}
+	}
+	if set.ProjectConcurrency == nil {
+		set.ProjectConcurrency = map[string]int{}
 	}
 	return s.tx(func(tx *sql.Tx) error {
 		if err := checkToken(tx, token); err != nil {

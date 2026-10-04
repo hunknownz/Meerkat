@@ -27,14 +27,14 @@ Optional:
 - `context.id` (lowercase UUID) to add a version to an existing context family; `context.sources`: up to 50 `{ "url": "https://…", "title", "hash": "<sha256 hex>" }`. Same id + version with different text is refused.
 - `issueRef`: the object printed by `meerkat issue read` (`url`, `title`, optional `updatedAt`, `bodyHash`).
 - `dependencies`: task UUIDs of the same project that must be delivered first.
-- `budget`: `{ "maxTokens": 500000, "maxWallSeconds": 1800, "maxFixRounds": 2 }` (defaults shown; fix rounds 0–2).
+- `budget`: time defaults to 1800 seconds and fix rounds to 2. Token monitoring is the default (`mode: "monitor"`, 500000-token warning threshold). Select a hard cap with `{ "mode": "enforce", "maxTokens": 150000 }`; an explicit `maxTokens` without `mode` also keeps legacy hard-cap behavior. Explicit monitor mode may set a custom warning threshold. Profile limits still cap each Run.
 
 Optional `budget.stageReserves` contains nonnegative `reviewTokens`, `fixTokens`,
 `polishTokens`, `wrapUpTokens` and `wrapUpSeconds` (omitted fields default to zero).
 Go keeps remaining role allowances and requests early wrap-up within the existing
 cap; it rejects reserves that consume the entire task authorization. See
 [stage budgets](../../../docs/stage-budgets.md) for a complete example. Zero disables
-the corresponding wrap-up trigger. Dirty-worktree checkpoint recovery is not available.
+the corresponding wrap-up trigger. Verified dirty-worktree [checkpoint continuation](../../../docs/checkpoints.md) is available through explicit resume; uncertain state remains blocked.
 
 Optional `changeId` links task and run metrics to one change. Profiles must be private files owned by the current user. Old configs default to executor pi; new ones should declare it explicitly.
 

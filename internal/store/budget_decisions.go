@@ -61,6 +61,9 @@ func originalBudget(t model.Task) model.Budget {
 }
 func allowanceAt(q querier, st *model.State, t model.Task, revision *int64) (model.BudgetAuthorization, error) {
 	b := originalBudget(t)
+	if !b.ValidMode() {
+		return model.BudgetAuthorization{}, ErrConflict
+	}
 	v := model.BudgetAuthorization{TaskID: t.ID, OriginalTokens: b.MaxTokens, OriginalWallSeconds: b.MaxWallSeconds, AuthorizedTokens: b.MaxTokens, AuthorizedWallSeconds: b.MaxWallSeconds, Decisions: []model.BudgetDecisionSummary{}}
 	ds, e := budgetDecisions(q, t.ID)
 	if e != nil {
@@ -137,6 +140,9 @@ func proposeBudget(q querier, st *model.State, in model.BudgetIncrease) (model.B
 	t := taskByID(st, in.TaskID)
 	if t == nil {
 		return model.BudgetProposal{}, ErrNotFound
+	}
+	if !originalBudget(*t).HardTokenCap() && in.AddTokens != 0 {
+		return model.BudgetProposal{}, model.Invalidf("monitor mode has no hard task token cap to increase")
 	}
 	if t.State != model.TaskPaused && !(t.State == model.TaskStopped && t.StateReason != nil && slices.Contains([]string{"budget_tokens", "budget_time", "token_limit", "wall_timeout"}, *t.StateReason)) {
 		return model.BudgetProposal{}, model.Invalidf("budget decision requires a paused or budget-stopped task")

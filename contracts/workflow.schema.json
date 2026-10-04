@@ -347,21 +347,62 @@
     },
     "Budget": {
       "type": "object",
-      "required": ["maxTokens", "maxWallSeconds", "maxFixRounds"],
+      "required": [
+        "maxTokens",
+        "maxWallSeconds",
+        "maxFixRounds"
+      ],
       "properties": {
-        "maxTokens": { "type": "integer", "minimum": 1 },
-        "maxWallSeconds": { "type": "integer", "minimum": 1 },
-        "maxFixRounds": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxWallSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxFixRounds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
         "stageReserves": {
           "type": "object",
-          "required": ["reviewTokens", "fixTokens", "polishTokens", "wrapUpTokens", "wrapUpSeconds"],
+          "required": [
+            "reviewTokens",
+            "fixTokens",
+            "polishTokens",
+            "wrapUpTokens",
+            "wrapUpSeconds"
+          ],
           "properties": {
-            "reviewTokens": { "type": "integer", "minimum": 0 },
-            "fixTokens": { "type": "integer", "minimum": 0 },
-            "polishTokens": { "type": "integer", "minimum": 0 },
-            "wrapUpTokens": { "type": "integer", "minimum": 0 },
-            "wrapUpSeconds": { "type": "integer", "minimum": 0 }
+            "reviewTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fixTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "polishTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "wrapUpTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "wrapUpSeconds": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
+        },
+        "mode": {
+          "enum": [
+            "monitor",
+            "enforce"
+          ]
         }
       }
     },
@@ -380,16 +421,56 @@
     },
     "BudgetEvidence": {
       "type": "object",
-      "required": ["authorizedTokens", "availableTokens", "confirmedTokens", "reservedTokens", "requests", "pendingRequests", "unknownRequests", "overrun"],
+      "required": [
+        "authorizedTokens",
+        "availableTokens",
+        "confirmedTokens",
+        "reservedTokens",
+        "requests",
+        "pendingRequests",
+        "unknownRequests",
+        "overrun"
+      ],
       "properties": {
-        "authorizedTokens": { "type": "integer", "minimum": 1 },
-        "availableTokens": { "$ref": "#/definitions/NullableCount" },
-        "confirmedTokens": { "type": "integer", "minimum": 0 },
-        "reservedTokens": { "type": "integer", "minimum": 0 },
-        "requests": { "type": "integer", "minimum": 0 },
-        "pendingRequests": { "type": "integer", "minimum": 0 },
-        "unknownRequests": { "type": "integer", "minimum": 0 },
-        "overrun": { "type": "boolean" }
+        "authorizedTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "availableTokens": {
+          "$ref": "#/definitions/NullableCount"
+        },
+        "confirmedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reservedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pendingRequests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknownRequests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overrun": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "monitor",
+            "enforce"
+          ]
+        },
+        "warning": {
+          "type": "boolean"
+        }
       }
     },
     "CheckpointSummary": {
@@ -408,6 +489,14 @@
         "createdAt": { "type": "string", "maxLength": 100 }
       }
     },
+    "TaskProgress": {
+      "type": "object", "required": ["execution", "phase", "delivery"],
+      "properties": {
+        "execution": { "enum": ["ready", "queued", "running", "wrapping_up", "paused", "ended", "failed", "blocked", "unknown"] },
+        "phase": { "enum": ["none", "development", "review", "fix", "polish", "recheck", "complete"] },
+        "delivery": { "enum": ["none", "candidate", "reviewed", "local_delivery"] }
+      }
+    },
     "Task": {
       "title": "Task",
       "type": "object",
@@ -418,6 +507,7 @@
         "state"
       ],
       "properties": {
+        "progress": { "$ref": "#/definitions/TaskProgress" },
         "id": {
           "$ref": "#/definitions/Id"
         },
@@ -949,6 +1039,30 @@
         },
         "updatedAt": {
           "type": "string"
+        },
+        "projectConcurrency": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          }
+        },
+        "providerConcurrency": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
+          }
         }
       }
     },
@@ -974,6 +1088,30 @@
             "additionalProperties": {
               "type": "string"
             }
+          }
+        },
+        "projectConcurrency": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          }
+        },
+        "providerConcurrency": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
           }
         }
       }

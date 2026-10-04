@@ -279,6 +279,12 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             <button type="button" className="icon" aria-label="关闭" onClick={() => setOpenTask(null)}><Close /></button></div>
           <div className="dlg-b">
             <div className="card"><h3>概览</h3><dl className="concl">
+              {task.progress ? <>
+                <dt>执行</dt><dd>{({ready:'待开始',queued:'排队中',running:'运行中',wrapping_up:'收尾中',paused:'已暂停',ended:'已结束',failed:'失败',blocked:'被阻塞',unknown:'未知'})[task.progress.execution]}</dd>
+                <dt>阶段</dt><dd>{({none:'尚未开始',development:'开发',review:'审查',fix:'修复',polish:'精修',recheck:'复审',complete:'流程完成'})[task.progress.phase]}</dd>
+                <dt>交付</dt><dd>{({none:'尚无候选',candidate:'候选待检查',reviewed:'当前候选已通过审查',local_delivery:'最终本地交付'})[task.progress.delivery]}</dd>
+              </> : null}
+              {task.state === 'queued' ? <><dt>等待原因</dt><dd>{({project_concurrency:'项目并发已满',provider_concurrency:'模型服务并发已满',concurrency:'本地并发已满',worktree:'工作目录正在使用',dependencies:'等待依赖任务',dispatch_queue:'等待调度'} as Record<string,string>)[task.stateReason ?? ''] ?? '等待调度核对'}</dd></> : null}
               <dt>目标</dt><dd>{task.goal || '—'}</dd>
               <dt>基线 SHA</dt><dd><code>{task.baselineSha ?? '—'}</code></dd>
               <dt>候选 SHA</dt><dd><code>{task.candidateSha ?? '—'}</code></dd>
@@ -292,14 +298,14 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
               })}
             </ol></div>
             {task.budget ? <div className="card"><h3>任务预算</h3><dl className="concl">
-              <dt>原始预算</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复</dd>
+              <dt>{task.budget.mode === 'monitor' ? 'token 提示阈值' : '原始预算'}</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复{task.budget.mode === 'monitor' ? '；任务累计 token 仅监测，不因达到阈值停止' : ''}</dd>
               {task.budgetAuthorization ? <>
-                <dt>当前已授权</dt><dd>{num(task.budgetAuthorization.authorizedTokens)} token · {formatDuration(task.budgetAuthorization.authorizedWallSeconds)}</dd>
+                <dt>当前已授权</dt><dd>{task.budget.mode === 'monitor' ? '无任务 token 硬上限 · ' : `${num(task.budgetAuthorization.authorizedTokens)} token · `}{formatDuration(task.budgetAuthorization.authorizedWallSeconds)}</dd>
                 <dt>累计追加</dt><dd>{num(task.budgetAuthorization.addedTokens)} token · {formatDuration(task.budgetAuthorization.addedWallSeconds)} · 预算修订 {task.budgetAuthorization.revision}</dd>
               </> : null}
               {task.budgetEvidence ? <>
                 <dt>请求账本</dt><dd>{num(task.budgetEvidence.confirmedTokens)} 已结算 · {num(task.budgetEvidence.reservedTokens)} 预留占用</dd>
-                <dt>可申请额度</dt><dd>{task.budgetEvidence.availableTokens == null ? '未知' : num(task.budgetEvidence.availableTokens)}（预留口径）</dd>
+                <dt>{task.budget.mode === 'monitor' ? '监测状态' : '可申请额度'}</dt><dd>{task.budget.mode === 'monitor' ? (task.budgetEvidence.warning ? '已达到 token 提示阈值' : '仅监测；每次运行的配置上限仍生效') : `${task.budgetEvidence.availableTokens == null ? '未知' : num(task.budgetEvidence.availableTokens)}（预留口径）`}</dd>
                 <dt>请求状态</dt><dd>{task.budgetEvidence.requests} 次 · 在途 {task.budgetEvidence.pendingRequests} · 结果未知 {task.budgetEvidence.unknownRequests}{task.budgetEvidence.overrun ? ' · 已确认超额' : ''}</dd>
               </> : <><dt>请求账本</dt><dd>此任务尚无逐次请求记录</dd></>}
               {task.budget.stageReserves ? <><dt>阶段预留</dt><dd>每次审查 {num(task.budget.stageReserves.reviewTokens)} · 每轮修复 {num(task.budget.stageReserves.fixTokens)} · 精修 {num(task.budget.stageReserves.polishTokens)}</dd>
@@ -405,12 +411,14 @@ function SettingsSheet({ snapshot, project, disabledReason, onSave, onClose }: {
   const s = snapshot?.settings ?? null;
   const [conc, setConc] = useState(s?.maxConcurrency ?? 2);
   const [rounds, setRounds] = useState(s?.maxFixRounds ?? 2);
+  const [projectCaps, setProjectCaps] = useState<Record<string, number>>({ ...s?.projectConcurrency });
+  const [providerCaps, setProviderCaps] = useState<Record<string, number>>({ ...s?.providerConcurrency });
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const disabled = !!disabledReason || !s || busy;
   const save = async () => {
-    const input: SettingsInput = { maxConcurrency: conc, maxFixRounds: rounds };
+    const input: SettingsInput = { maxConcurrency: conc, maxFixRounds: rounds, projectConcurrency: projectCaps, providerConcurrency: providerCaps };
     const map = Object.fromEntries(Object.entries(profiles).filter(([, v]) => v));
     if (project !== 'all' && Object.keys(map).length) input.defaultProfiles = { [project]: map };
     setBusy(true);
@@ -431,6 +439,14 @@ function SettingsSheet({ snapshot, project, disabledReason, onSave, onClose }: {
             <div className="set-row"><label className="lbl" htmlFor="mk-set-rounds">最大修复轮数<small>达到后停止并交给 Codex（0–2）</small></label>
               <span className="ctl"><select id="mk-set-rounds" value={rounds} disabled={disabled} onChange={(e) => setRounds(Number(e.target.value))}>{[0, 1, 2].map((v) => <option key={v} value={v}>{v}</option>)}</select></span></div>
           </div>
+          <div className="sec-h"><b>项目与模型服务并发</b></div>
+          <div className="list">{[
+            ...(snapshot?.projects ?? []).map(p => ({ key:p.id, label:p.name || p.id, kind:'项目', caps:projectCaps, set:setProjectCaps })),
+            ...[...new Set((snapshot?.profiles ?? []).map(p => p.provider).filter((p):p is string => !!p))].sort().map(p => ({ key:p, label:p, kind:'服务', caps:providerCaps, set:setProviderCaps })),
+          ].map(p => <div className="set-row" key={`${p.kind}:${p.key}`}><label className="lbl" htmlFor={`mk-cap-${p.kind}-${p.key}`}>{p.label}<small>{p.kind}同时占用的任务数；受本地并发总上限约束</small></label>
+            <span className="ctl"><select id={`mk-cap-${p.kind}-${p.key}`} value={p.caps[p.key] ?? ''} disabled={disabled} onChange={e => { const next={...p.caps}; if(e.target.value) next[p.key]=Number(e.target.value); else delete next[p.key]; p.set(next); }}>
+              <option value="">跟随总上限</option>{[1,2,3,4].map(v => <option key={v} value={v}>{v}</option>)}
+            </select></span></div>)}</div>
           <div className="sec-h"><b>默认角色配置</b></div>
           <div className="list">{project === 'all'
             ? <div className="set-row"><span className="lbl">选择具体项目后可设置默认配置<small>只能从该项目已注册的配置 ID 中选择</small></span></div>

@@ -10,3 +10,5 @@
 后续重构见 [会话、预算与协作完整计划](session-budget-coordination-20261003.md)。阶段实施分别见持久会话、请求预算、检查点、追加预算与 [已完成步骤的中断恢复](session-recovery-20261003.md)；该完整计划的全部工作包尚未完成。
 
 安装与执行前的只读诊断见 [doctor 实施记录](doctor-20261004.md) 和 [用法](../docs/doctor.md)。
+
+本轮核对见 [2026-10-04 状态与证据](../docs/verification/plan-completion-20261004.md)：项目/Provider 并发、可选任务 token 硬上限和三个状态维度已实现；完整方案仍保留明确的未完成项。

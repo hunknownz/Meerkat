@@ -416,3 +416,39 @@ func TestMCPControlsThroughPrivateSocketAndSQLite(t *testing.T) {
 		t.Fatalf("no durable receipt %+v %v", stored, err)
 	}
 }
+
+func TestConcurrencyMapsUseSameSettingsAuthority(t *testing.T) {
+	for _, raw := range []string{`{"projectConcurrency":{"demo":1},"providerConcurrency":{"relay":2}}`, `{"projectConcurrency":{},"providerConcurrency":{}}`} {
+		s := controlled(snapshotWith(), func(_ context.Context, req server.Request) (server.Response, error) {
+			if req.Op != "settings" || string(req.Input) != raw {
+				t.Fatalf("clear or values lost: %s", req.Input)
+			}
+			var patch model.SettingsPatch
+			if json.Unmarshal(req.Input, &patch) != nil {
+				t.Fatal("bad forwarded patch")
+			}
+			set := model.DefaultSettings()
+			set.ProjectConcurrency = patch.ProjectConcurrency
+			set.ProviderConcurrency = patch.ProviderConcurrency
+			b, _ := json.Marshal(set)
+			return server.Response{OK: true, Data: b}, nil
+		})
+		v := data(t, callControl(t, context.Background(), s, ToolUpdateSettings, raw))
+		if v["projectConcurrency"] == nil || v["providerConcurrency"] == nil {
+			t.Fatal(v)
+		}
+	}
+	var calls atomic.Int32
+	s := controlled(snapshotWith(), func(context.Context, server.Request) (server.Response, error) {
+		calls.Add(1)
+		return server.Response{}, nil
+	})
+	for _, raw := range []string{`{"projectConcurrency":null}`, `{"providerConcurrency":{"relay":0}}`, `{"projectConcurrency":{"demo":1,"demo":2}}`, `{"providerConcurrency":{"relay":1.5}}`} {
+		if errCode(callControl(t, context.Background(), s, ToolUpdateSettings, raw)) != codeInvalidParams {
+			t.Fatal(raw)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatal("invalid maps reached authority")
+	}
+}

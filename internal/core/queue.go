@@ -379,6 +379,10 @@ func (c *Core) queueLoop() {
 						reason = "dependencies"
 					case busy:
 						reason = "worktree"
+					case projectSaturated(t.ProjectID, running, set):
+						reason = "project_concurrency"
+					case providerSaturated(taskProviders(st, *t), running, set):
+						reason = "provider_concurrency"
 					case len(running) >= set.MaxConcurrency:
 						reason = "concurrency"
 					}
@@ -426,7 +430,7 @@ func (c *Core) queueLoop() {
 					}
 					slot := slices.Index(slots, false)
 					slots[slot] = true
-					running[t.ID] = active{worktree: t.Worktree}
+					running[t.ID] = active{worktree: t.Worktree, projectID: t.ProjectID, providers: taskProviders(st, *t)}
 					at, _ := time.Parse(time.RFC3339Nano, op.CreatedAt)
 					qw := queueWait{at: at, until: time.Now()}
 					go func(op model.Operation, m model.OperationTask, slot int, qw queueWait) {
@@ -504,4 +508,50 @@ func (c *Core) finishMember(opID, taskID, why string, blocked bool) error {
 		}
 		return nil
 	})
+}
+
+// Reserve every frozen role provider for the whole task; a role transition
+// cannot silently oversubscribe a provider. This is a task cap, not a key quota.
+func taskProviders(st *model.State, t model.Task) []string {
+	out := []string{}
+	for _, id := range t.ProfileIDs {
+		for _, p := range st.Profiles {
+			if p.ID == id && !slices.Contains(out, p.Provider) {
+				out = append(out, p.Provider)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+func projectSaturated(id string, running map[string]active, set model.Settings) bool {
+	cap, ok := set.ProjectConcurrency[id]
+	if !ok {
+		return false
+	}
+	n := 0
+	for _, a := range running {
+		if a.projectID == id {
+			n++
+		}
+	}
+	return n >= cap
+}
+func providerSaturated(ids []string, running map[string]active, set model.Settings) bool {
+	for _, id := range ids {
+		cap, ok := set.ProviderConcurrency[id]
+		if !ok {
+			continue
+		}
+		n := 0
+		for _, a := range running {
+			if slices.Contains(a.providers, id) {
+				n++
+			}
+		}
+		if n >= cap {
+			return true
+		}
+	}
+	return false
 }

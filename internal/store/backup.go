@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/hunknownz/Meerkat/internal/model"
 )
 
 // backupBodiesTable exists only inside backup files. It carries the private Issue update bodies referenced by
@@ -242,6 +244,15 @@ func ValidateBackup(path string) error {
 		if err := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", t).Scan(&n); err != nil || n != 1 {
 			return ErrBadBackup
 		}
+	}
+	var settingsRaw []byte
+	if err := db.QueryRow("SELECT payload FROM settings WHERE id=1").Scan(&settingsRaw); err == nil {
+		var set model.Settings
+		if json.Unmarshal(settingsRaw, &set) != nil || set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency || set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit || !model.ValidProjectConcurrency(set.ProjectConcurrency) || !model.ValidProviderConcurrency(set.ProviderConcurrency) {
+			return ErrBadBackup
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return ErrBadBackup
 	}
 	if v >= schemaV3 {
 		if err := validateOperations(db); err != nil {

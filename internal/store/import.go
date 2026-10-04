@@ -889,7 +889,7 @@ func (s *Store) ImportLegacyWithOptions(from string, runRoots []string, opts Imp
 	if setB != nil {
 		set := model.DefaultSettings()
 		if decodeStrict(setB, &set) != nil || set.MaxConcurrency < model.MinConcurrency || set.MaxConcurrency > model.MaxConcurrency ||
-			set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit {
+			set.MaxFixRounds < 0 || set.MaxFixRounds > model.MaxFixRoundsLimit || !model.ValidProjectConcurrency(set.ProjectConcurrency) || !model.ValidProviderConcurrency(set.ProviderConcurrency) {
 			return zero, corrupt("settings are malformed")
 		}
 		var anyv any
@@ -899,6 +899,9 @@ func (s *Store) ImportLegacyWithOptions(from string, runRoots []string, opts Imp
 		}
 		if set.DefaultProfiles == nil {
 			set.DefaultProfiles = map[string]map[string]string{}
+		}
+		if set.ProjectConcurrency == nil {
+			set.ProjectConcurrency = map[string]int{}
 		}
 		p.settings = &set
 	}

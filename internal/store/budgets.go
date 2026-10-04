@@ -32,7 +32,7 @@ func validBudgetPolicy(p budget.Policy) bool {
 	return uuidRE.MatchString(p.RunID) && uuidRE.MatchString(p.TaskID) && uuidRE.MatchString(p.SessionID) && p.ProfileID != "" &&
 		digestRE.MatchString(p.ProfileDigest) && digestRE.MatchString(p.ContractDigest) && p.Provider != "" && p.Model != "" &&
 		!model.LooksLikeCredential(p.Provider) && !model.LooksLikeCredential(p.Model) && len(p.Provider) <= 128 && len(p.Model) <= 256 &&
-		p.Version == budget.PolicyVersion && p.TaskTokens > 0 && p.TaskTokens <= budget.MaxCount && p.RunTokens > 0 && p.RunTokens <= p.TaskTokens &&
+		(model.Budget{Mode: p.TokenMode}).ValidMode() && p.Version == budget.PolicyVersion && p.TaskTokens > 0 && p.TaskTokens <= budget.MaxCount && p.RunTokens > 0 && p.RunTokens <= budget.MaxCount && (p.TokenMode == "monitor" || p.RunTokens <= p.TaskTokens) &&
 		p.TaskRequests > 0 && p.TaskRequests <= budget.MaxRequests && p.BudgetRevision >= 0 && p.BudgetRevision <= 512 && p.WrapUpTokens >= 0 && p.WrapUpTokens < p.RunTokens && slices.Contains([]string{"open", "closed", "unknown"}, p.State) && e == nil
 }
 
@@ -287,7 +287,7 @@ func verifyBudgetOwner(q *sql.Tx, token string, p budget.Policy) (*model.State, 
 		return nil, budget.ErrDenied
 	}
 	v, err := allowanceAt(q, st, *task, nil)
-	if err != nil || p.TaskTokens != v.AuthorizedTokens || p.BudgetRevision != v.Revision {
+	if err != nil || !originalBudget(*task).ValidMode() || p.TokenMode != originalBudget(*task).Mode || p.TaskTokens != v.AuthorizedTokens || p.BudgetRevision != v.Revision {
 		return nil, budget.ErrDenied
 	}
 	return st, nil
@@ -311,7 +311,7 @@ func (s *Store) OpenRequestBudgetOwned(token string, p budget.Policy) error {
 		}
 		for _, old := range ps {
 			v, e := allowanceAt(tx, st, *taskByID(st, p.TaskID), &old.BudgetRevision)
-			if e != nil || old.ContractDigest != p.ContractDigest || old.TaskTokens != v.AuthorizedTokens || old.TaskRequests != p.TaskRequests || old.State != "closed" {
+			if e != nil || old.ContractDigest != p.ContractDigest || old.TokenMode != p.TokenMode || old.TaskTokens != v.AuthorizedTokens || old.TaskRequests != p.TaskRequests || old.State != "closed" {
 				return budget.ErrConflict
 			}
 		}
@@ -368,7 +368,12 @@ func budgetRemaining(st *model.State, p budget.Policy, ps []budget.Policy, rs []
 			requests++
 		}
 	}
-	return max(0, p.TaskTokens-taskUsed), max(0, p.RunTokens-runUsed), max(0, p.TaskRequests-requests), nil
+	taskLeft := max(0, p.TaskTokens-taskUsed)
+	if p.TokenMode == "monitor" {
+		// Task tokens are only a warning threshold; the explicit Run cap still gates requests.
+		taskLeft = budget.MaxCount
+	}
+	return taskLeft, max(0, p.RunTokens-runUsed), max(0, p.TaskRequests-requests), nil
 }
 
 func (s *Store) ReserveRequestOwned(token, runID string, r budget.Request) (budget.Grant, error) {
@@ -652,7 +657,7 @@ func validateBudgetBackup(q querier) error {
 			return ErrBadBackup
 		}
 		v, e := allowanceAt(q, st, *t, &p.BudgetRevision)
-		if e != nil || p.TaskTokens != v.AuthorizedTokens {
+		if e != nil || !originalBudget(*t).ValidMode() || p.TokenMode != originalBudget(*t).Mode || p.TaskTokens != v.AuthorizedTokens {
 			return ErrBadBackup
 		}
 		ss, err := loadSession(q, p.SessionID)

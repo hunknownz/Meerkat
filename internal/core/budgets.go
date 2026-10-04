@@ -75,7 +75,8 @@ func (c *Core) openRequestBudget(t model.Task, p model.Profile, ss *model.Sessio
 		return nil, e
 	}
 	policy := budget.Policy{RunID: runID, TaskID: t.ID, SessionID: ss.ID, ProfileID: p.ID, ProfileDigest: ss.ProfileDigest, ContractDigest: ss.ContractDigest,
-		Provider: p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano),
+		TokenMode: b.Mode,
+		Provider:  p.Provider, Model: p.Model, Version: budget.PolicyVersion, Deadline: time.Now().Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano),
 		TaskTokens: b.MaxTokens, RunTokens: tokens, TaskRequests: budget.MaxRequests, BudgetRevision: revision, State: "open"}
 	if b.StageReserves != nil {
 		policy.WrapUpTokens = min(b.StageReserves.WrapUpTokens, tokens-1)

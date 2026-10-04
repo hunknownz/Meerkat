@@ -1,6 +1,6 @@
 {
   "name": "meerkat",
-  "version": "0.4.0-beta.9",
+  "version": "0.4.0-beta.10",
   "description": "Meerkat coordinates bounded local task delivery: Codex prepares worktrees and frozen context, a configured execution adapter runs developer, reviewer and polisher roles, and a standard MCP Apps monitor shows local agent runs.",
   "author": {
     "name": "hunknownz"
@@ -13,7 +13,7 @@
   "interface": {
     "displayName": "Meerkat",
     "shortDescription": "Coordinate bounded development, review and polish runs with a live agent monitor.",
-    "longDescription": "Meerkat is a generic local plugin. Codex coordinates: it turns an Issue or local requirement into a bounded task with frozen shared context and prepares a linked Git worktree. A deterministic local controller then runs the managed workflow through the configured execution adapter: a developer run commits, a reviewer run reviews the exact candidate, bounded fixes follow, a polisher run makes optional small changes, and the reviewer rechecks. Token, time and fix-round budgets apply; history and usage stay in private SQLite storage; nothing is pushed, merged or deployed, and a delivered commit is a locally AI-reviewed commit, not QA, acceptance or deployment. The bundled stdio MCP server exposes a standard MCP Apps monitor of tasks, runs, local agents and usage; the beta.8 standard Codex MCP Apps display was verified on 2026-10-03; beta.9 human controls await separate host acceptance. A loopback browser monitor shows the same view and accepts bounded human instructions, stop requests and future-run settings. Skills: meerkat:workflow (multi-role delivery) and meerkat:delegate (one bounded run). Current limitation: only the Pi CLI execution adapter is supported; other executors are not available.",
+    "longDescription": "Meerkat is a generic local plugin. Codex coordinates: it turns an Issue or local requirement into a bounded task with frozen shared context and prepares a linked Git worktree. A deterministic local controller then runs the managed workflow through the configured execution adapter: a developer run commits, a reviewer run reviews the exact candidate, bounded fixes follow, a polisher run makes optional small changes, and the reviewer rechecks. Task token caps are optional; per-Run limits, time and fix-round bounds apply; history and usage stay in private SQLite storage; nothing is pushed, merged or deployed, and a delivered commit is a locally AI-reviewed commit, not QA, acceptance or deployment. The bundled stdio MCP server exposes a standard MCP Apps monitor of tasks, runs, local agents and usage; the beta.8 standard Codex MCP Apps display was verified on 2026-10-03; new human controls and task details await separate host acceptance. A loopback browser monitor shows the same view and accepts bounded human instructions, stop requests and future-run settings. Skills: meerkat:workflow (multi-role delivery) and meerkat:delegate (one bounded run). Current limitation: only the Pi CLI execution adapter is supported; other executors are not available.",
     "developerName": "hunknownz",
     "category": "Productivity",
     "capabilities": [],

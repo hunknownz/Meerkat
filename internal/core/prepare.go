@@ -163,6 +163,7 @@ type issueInput struct {
 }
 
 type budgetInput struct {
+	Mode           *string              `json:"mode"`
 	MaxTokens      *int64               `json:"maxTokens"`
 	MaxWallSeconds *int64               `json:"maxWallSeconds"`
 	MaxFixRounds   *int                 `json:"maxFixRounds"`
@@ -265,6 +266,7 @@ func normIssue(in *issueInput) (*model.IssueRef, error) {
 
 func normBudget(in *budgetInput) (*model.Budget, error) {
 	b := model.DefaultBudget()
+	b.Mode = "monitor"
 	if in == nil {
 		return &b, nil
 	}
@@ -273,6 +275,14 @@ func normBudget(in *budgetInput) (*model.Budget, error) {
 			return nil, invalid("budget.maxTokens must be an integer 1..10000000")
 		}
 		b.MaxTokens = *in.MaxTokens
+		// Explicit legacy maxTokens continues to select a hard task cap.
+		b.Mode = ""
+	}
+	if in.Mode != nil {
+		if *in.Mode != "monitor" && *in.Mode != "enforce" {
+			return nil, invalid("budget.mode must be monitor or enforce")
+		}
+		b.Mode = *in.Mode
 	}
 	if in.MaxWallSeconds != nil {
 		if *in.MaxWallSeconds < 1 || *in.MaxWallSeconds > 86_400 {
@@ -294,7 +304,7 @@ func normBudget(in *budgetInput) (*model.Budget, error) {
 			}
 		}
 		if r.WrapUpSeconds < 0 || r.WrapUpSeconds >= b.MaxWallSeconds ||
-			int64(2+b.MaxFixRounds)*r.ReviewTokens+int64(b.MaxFixRounds)*r.FixTokens+r.PolishTokens+r.WrapUpTokens >= b.MaxTokens {
+			b.HardTokenCap() && int64(2+b.MaxFixRounds)*r.ReviewTokens+int64(b.MaxFixRounds)*r.FixTokens+r.PolishTokens+r.WrapUpTokens >= b.MaxTokens {
 			return nil, invalid("stage reserves leave no development allowance")
 		}
 		b.StageReserves = &r

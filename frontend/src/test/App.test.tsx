@@ -9,6 +9,30 @@ const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: fal
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('shows monitor thresholds without inventing a remaining task cap', () => {
+    const s=snapshot(); s.tasks[0]!.budget={mode:'monitor',maxTokens:100,maxWallSeconds:600,maxFixRounds:1};
+    s.tasks[0]!.budgetEvidence={mode:'monitor',warning:true,authorizedTokens:100,availableTokens:null,confirmedTokens:150,reservedTokens:200,requests:2,pendingRequests:0,unknownRequests:1,overrun:false};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(true);
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({readonly:true})} />);
+    view('Tasks'); fireEvent.click(screen.getByText('Fix parser'));
+    const text=screen.getByRole('dialog').textContent!;
+    expect(text).toContain('已达到 token 提示阈值'); expect(text).toContain('结果未知 1'); expect(text).not.toContain('可申请额度');
+  });
+
+  it('saves concurrency maps including explicit clears and refuses malformed snapshots', async () => {
+    const s=snapshot(); s.settings!.projectConcurrency={p1:1}; s.settings!.providerConcurrency={prov:2};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(true);
+    const settings=vi.fn(async()=>({}));
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({settings})} />);
+    fireEvent.click(screen.getByRole('button',{name:'设置'}));
+    fireEvent.change(screen.getByLabelText(/Example/),{target:{value:''}});
+    fireEvent.change(screen.getByLabelText(/prov/),{target:{value:'1'}});
+    fireEvent.click(screen.getByRole('button',{name:/保存/}));
+    await waitFor(()=>expect(settings).toHaveBeenCalledWith(expect.objectContaining({projectConcurrency:{},providerConcurrency:{prov:1}})));
+    s.settings!.projectConcurrency={p1:0};
+    expect(validateEnvelope({ok:true,data:s,legacyActive:[],sessionToken:'host'})).toBe(false);
+  });
+
   it('separates a durable control acknowledgement from Run completion and keeps authority private', () => {
     const s = snapshot();
     s.tasks[0]!.controlReceipts = [{requestId:RUN_A,taskId:'t1',runId:RUN_A,sessionId:RUN_A,kind:'wrap_up',state:'acknowledged',disposition:'queued',reason:null,createdAt:'2025-01-01T00:00:00Z',updatedAt:'2025-01-01T00:01:00Z',runState:'running',outcome:null},

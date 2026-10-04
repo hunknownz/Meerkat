@@ -5,7 +5,7 @@ import "github.com/hunknownz/Meerkat/internal/model"
 // futureStageReserve conservatively retains every still-permitted fix and its
 // review. A reserve is released only when its stage can no longer occur.
 func futureStageReserve(t model.Task, p pipeline, s step) int64 {
-	if t.Budget == nil || t.Budget.StageReserves == nil || t.Origin == OriginDelegate {
+	if t.Budget == nil || !t.Budget.HardTokenCap() || t.Budget.StageReserves == nil || t.Origin == OriginDelegate {
 		return 0
 	}
 	r := t.Budget.StageReserves

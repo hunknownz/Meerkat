@@ -43,7 +43,7 @@ func (s *Store) ExecutionEvidence(taskID string) ([]model.SessionSummary, *model
 		return nil, nil, err
 	}
 	p.TaskTokens = v.AuthorizedTokens // A closed older Run does not cap a later authorized addition.
-	b := &model.BudgetEvidence{AuthorizedTokens: p.TaskTokens}
+	b := &model.BudgetEvidence{Mode: p.TokenMode, AuthorizedTokens: p.TaskTokens}
 	for _, r := range rs {
 		if r.State == budget.Canceled {
 			continue
@@ -63,8 +63,9 @@ func (s *Store) ExecutionEvidence(taskID string) ([]model.SessionSummary, *model
 	}
 	left, _, _, err := budgetRemaining(st, p, ps, rs)
 	switch {
-	case err == nil:
+	case err == nil && p.TokenMode != "monitor":
 		b.AvailableTokens = &left
+	case err == nil:
 	case errors.Is(err, budget.ErrDenied):
 		zero := int64(0)
 		b.AvailableTokens = &zero
@@ -73,5 +74,6 @@ func (s *Store) ExecutionEvidence(taskID string) ([]model.SessionSummary, *model
 	default:
 		return nil, nil, err
 	}
+	b.Warning = p.TokenMode == "monitor" && b.ConfirmedTokens >= p.TaskTokens
 	return out, b, nil
 }

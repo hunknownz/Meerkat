@@ -88,6 +88,7 @@ export interface ContextSource {
  * via the `definition` "Task".
  */
 export interface Task {
+  progress?: TaskProgress;
   id: Id;
   projectId: Id;
   title: string;
@@ -124,6 +125,15 @@ export interface Task {
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
+ * via the `definition` "TaskProgress".
+ */
+export interface TaskProgress {
+  execution: 'ready' | 'queued' | 'running' | 'wrapping_up' | 'paused' | 'ended' | 'failed' | 'blocked' | 'unknown';
+  phase: 'none' | 'development' | 'review' | 'fix' | 'polish' | 'recheck' | 'complete';
+  delivery: 'none' | 'candidate' | 'reviewed' | 'local_delivery';
+}
+/**
+ * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
  * via the `definition` "ContextRef".
  */
 export interface ContextRef {
@@ -146,6 +156,7 @@ export interface Budget {
     wrapUpTokens: number;
     wrapUpSeconds: number;
   };
+  mode?: 'monitor' | 'enforce';
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
@@ -230,6 +241,8 @@ export interface BudgetEvidence {
   pendingRequests: number;
   unknownRequests: number;
   overrun: boolean;
+  mode?: 'monitor' | 'enforce';
+  warning?: boolean;
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
@@ -430,6 +443,12 @@ export interface Settings {
     };
   };
   updatedAt?: string;
+  projectConcurrency?: {
+    [k: string]: number;
+  };
+  providerConcurrency?: {
+    [k: string]: number;
+  };
 }
 /**
  * This interface was referenced by `WorkflowEnvelope`'s JSON-Schema
@@ -453,5 +472,11 @@ export interface SettingsInput {
     [k: string]: {
       [k: string]: string;
     };
+  };
+  projectConcurrency?: {
+    [k: string]: number;
+  };
+  providerConcurrency?: {
+    [k: string]: number;
   };
 }
