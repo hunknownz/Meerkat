@@ -63,8 +63,9 @@ contracts again before sending.
 
 ## Upgrade and verification
 
-Beta.9 migrates SQLite schema 9 to 10, preserving historical wrap-up payloads
-and digests. Stop the old owner first and retain a consistent backup. An old
+Beta.13 uses SQLite schema 12, preserving historical controls, sessions,
+checkpoints, budgets and request decisions. Stop the old owner first and retain
+a consistent backup. An old
 runtime cannot open the upgraded database. If investigating rollback, restore
 the old backup to a separate private directory; preserve new records.
 
@@ -80,3 +81,9 @@ stopping and retained Task receipts passed inside the real Codex MCP App using
 local protocol fixtures. See [native controls](verification/native-controls-20261004.md).
 This verifies the host transport without provider requests; a real Pi/model task
 controlled through the native panel still needs the combined end-to-end check.
+
+Beta.13 real Pi/model verification passed independent pause, checkpoint resume
+in the original Session and queued follow-up delivery through the CLI. Pending
+input deferred final reporting, and querying its receipt did not resend it.
+These checks do not replace the native button scenario. See
+[the real-run record](verification/real-controls-20261005.md).

@@ -40,7 +40,7 @@ and parse as JSON for each supported role.
 ### Reviewer (verdict `pass` | `changes_requested`)
 
 ```json
-{"candidateSha":"0c9a1f2b3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e9","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","verdict":"pass","summary":"<summarize the actual review>","findings":[],"checks":[],"knownGaps":[]}
+{"candidateSha":"0123456789abcdef0123456789abcdef01234567","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","verdict":"pass","summary":"<summarize the actual review>","findings":[],"checks":[],"knownGaps":[]}
 ```
 
 The reviewer example carries the exact reviewed SHA; in a real run that value is

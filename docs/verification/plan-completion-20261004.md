@@ -1,9 +1,12 @@
-# Plan status and verification — 2026-10-04
+# Plan status and verification — updated 2026-10-05
 
-Candidate: `0.4.0-beta.10`. Original design remains in
+Candidate: `0.4.0-beta.13`. Original design remains in
 [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
-The full plan is **not complete**. This candidate finishes project/Provider task
-caps, optional hard task token caps and independent progress projections.
+The full plan is **not complete**. Real Pi/model pause, checkpoint continuation,
+queued follow-up, structured reporting and multi-role delivery passed. Fresh
+native Codex control acceptance is still pending. Reliable monetary ceilings
+and unmeasured timing/cost breakdowns remain unavailable; they are not zero.
+See [the current real-run evidence](real-controls-20261005.md).
 
 ## Current capabilities
 
@@ -13,16 +16,16 @@ caps, optional hard task token caps and independent progress projections.
 | 02–04 | Executor capabilities, private Pi RPC, persistent developer/fix sessions and independent reviews. | Unsupported executor adapters remain unavailable. |
 | 05–06 | Request reservations, one-time permits, raw usage, optional task token enforcement, per-Run/time/request bounds and explicit additions. | Reliable monetary ceilings; missing prices/fees remain unknown. |
 | 07–09 | Early wrap-up, verified checkpoints, owned process lease, restart reconciliation and completed-step recovery. | Unknown processes/requests without evidence require investigation; no replay. |
-| 10 | Durable bounded human directions, wrap-up and stop receipts; same-session Pi/browser interaction already verified in beta.9. | Independent pause and queued follow-up input; fresh Codex button clicks. |
-| 11 | Dependencies, Worktree exclusion, global/project/Provider task caps; fairness and dynamic-cap tests. | HTTP rate-limit waiting/retry scheduling; current uncertain requests never retry. |
+| 10 | Durable directions, wrap-up, independent pause, queued follow-up, stop and UUID receipts. Go seals new directions before final reporting; Pi drains pending input. Real pause/resume and follow-up delivery passed. | Fresh real Pi/model Codex button scenario. |
+| 11 | Dependencies, Worktree exclusion, global/project/Provider task caps; fairness and dynamic-cap tests. Bounded retry requires an attested pre-generation 429 rejection and a new permit. | The configured gateway has not been verified to supply that proof. Ordinary 429, 5xx, disconnects and unknown settlements do not retry. |
 | 12 | Development, exact-SHA review, bounded fixes, polish and re-review. | No claim of independent QA or customer acceptance. |
-| 13–14 | SQLite V10, generated TS/runtime validation, snapshots and SSE recovery. | Snapshot fields added here require a matching plugin/runtime and reopened panel. |
-| 15 | Agents/Tasks/Usage, current-session directions, stop receipts, budget warnings and separate progress meanings. | Fresh Codex interaction evidence. |
+| 13–14 | SQLite V12, generated TS/runtime validation, snapshots and SSE recovery. V10→V12 migration and V12 backup/restore parity passed. | Matching plugin/runtime and a reopened panel are required after a host surface change. |
+| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Fresh native pause/follow-up interaction evidence. |
 | 16 | Issue source, drafts, delivery summaries and receipt deduplication. | External sends require the user's corresponding authorization. |
 | 17 | Updated workflow/delegate skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
-| 18 | Historical import, consistent backup/restore, controls, checkpoints and budget history. | Live uncertain records retained as evidence. |
+| 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
 | 19 | Read-only doctor, pinned Pi protocol/version probes. | Static checks do not certify balance or provider availability. |
-| 20 | Repository marketplace, versioned binary builder/installer, CLI/HTTP/MCP and standard panel. | New host controls; public tag/release and directory submission are separate actions. |
+| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.13 backend runs the real workflows below. | New native control scenario; public tag/release and directory submission are separate actions. |
 
 ## Changed behavior
 
@@ -40,7 +43,36 @@ caps, optional hard task token caps and independent progress projections.
 - Progress is projected from SQLite task/Run/exact-SHA review evidence. It does
   not introduce another writable state machine or imply deployment.
 
-## Checks
+## Latest verification
+
+- Installed Pi 0.99.1 exercised the structured report tool for all three roles
+  against a local fake model, including exact SHA/Context bindings and settled
+  requests. The executor suite passed separately (47.128 s); budget and RPC
+  packages also passed.
+- Focused Go race checks passed for report writing, control draining and the
+  private bridge. All 15 bridge Node tests passed. CLI race checks passed
+  (7.603 s), including bounded plaintext file/stdin follow-ups. Executor vet
+  passed. These local checks made no paid requests.
+- Frontend build and 33 React/transport tests, 66 Node distribution checks and
+  both skill validators passed for beta.13 before the reporting/CLI fixes. Those
+  fixes did not change the frontend contract or embedded assets.
+- Three real Pi tasks completed development, independent review, polish and
+  re-review. One resumed a verified checkpoint in the original Session; one
+  consumed a queued follow-up before reporting. The useful documentation
+  candidate `8200679ed4f9fd8ff335bde055da08f2b1611754` was reviewed and integrated
+  into the development branch. Exercise-only candidates stayed in their
+  isolated worktree.
+- Receipt reads kept the same control UUID and did not change private Session
+  history. Two historical unknown Runs remain untouched. There were zero
+  running or queued Runs at the post-verification snapshot.
+
+The expanded MCP App tab inventory was empty on 2026-10-05. The monitor tool
+opened inline, which does not establish native button acceptance. The user has
+been asked to expand it; no Codex main-window automation or CDP workaround was
+used. Real-run details, failures and measured usage are in
+[the current record](real-controls-20261005.md).
+
+## Historical beta.10 checks
 
 Frontend build and 29 React/transport tests passed. Model/core/store/MCP focused
 race checks passed, including fairness, dynamic settings, exact clears, malformed

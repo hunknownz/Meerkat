@@ -38,4 +38,9 @@ acceptance remains separate. Beta.12 simplifies the shared monitor layout.
 See [host acceptance and limits](codex-ui-acceptance.md) and
 [UI simplification](../design/ui-simplification-20261004.md) for the current checks.
 
-Beta.13 adds graceful pause and same-session follow-up controls, retained retry decisions for gateways proving rejection before generation, and richer nullable metrics export. New host buttons and the real pause/continuation scenario require their own evidence; earlier panel acceptance is not substituted.
+Beta.13 adds graceful pause and same-session follow-up controls, retained retry
+decisions for gateways proving rejection before generation, and richer nullable
+metrics export. Real Pi/model pause, continuation and follow-up passed through
+the CLI; see [the current evidence](verification/real-controls-20261005.md).
+The combined real-executor native button scenario still needs its own evidence;
+earlier panel acceptance is not substituted.
