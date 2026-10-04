@@ -14,7 +14,7 @@ test('role report tool registers before session start and forwards only conclusi
     const calls = [];
     const receipt = { candidateSha: 'a'.repeat(40), contextDigest: 'sha256:fixture', reportDigest: 'b'.repeat(64) };
     await installBridge({ registerTool: value => tool = value, on: (_event, fn) => start = fn }, '0.99.1', { ...config, reportRole }, async (_cfg, path, draft) => {
-      calls.push({ path, draft }); return receipt;
+      calls.push({ path, draft }); return path === '/report-ready' ? { ready: true } : receipt;
     });
     assert.equal(typeof start, 'function');
     assert.equal(tool.name, 'meerkat_report');
@@ -24,8 +24,8 @@ test('role report tool registers before session start and forwards only conclusi
     assert.deepEqual(tool.parameters.properties.checks.items.required, ['command', 'result']);
     const draft = { summary: 'Observed', checks: [], knownGaps: [], ...(reportRole === 'reviewer' ? { verdict: 'pass', findings: [] } : { decision: 'no_change' }) };
     assert.deepEqual(Object.keys(draft).sort(), tool.parameters.required.toSorted());
-    const result = await tool.execute('call-1', draft);
-    assert.deepEqual(calls, [{ path: '/report', draft }]);
+    const result = await tool.execute('call-1', draft, undefined, undefined, { hasPendingMessages: () => false });
+    assert.deepEqual(calls, [{ path: '/report-ready', draft: {} }, { path: '/report', draft }]);
     assert.deepEqual(result.details, receipt);
     assert.deepEqual(JSON.parse(result.content[0].text), receipt);
   }
@@ -34,8 +34,22 @@ test('role report tool registers before session start and forwards only conclusi
 test('failed report submission is never silently retried', async () => {
   let tool, calls = 0;
   await installBridge({ registerTool: value => tool = value, on: () => {} }, '0.99.1', { ...config, reportRole: 'developer' }, async () => { calls++; throw Error('report_invalid'); });
-  await assert.rejects(tool.execute('call-1', { summary: 'Observed', checks: [], knownGaps: [], decision: 'no_change' }));
+  await assert.rejects(tool.execute('call-1', { summary: 'Observed', checks: [], knownGaps: [], decision: 'no_change' }, undefined, undefined, { hasPendingMessages: () => false }));
   assert.equal(calls, 1);
+});
+
+test('queued directions defer reporting before and after the Go admission seal', async () => {
+  for (const mode of ['before', 'after', 'sending']) {
+    let tool, reads = 0;
+    const calls = [];
+    await installBridge({ registerTool: value => tool = value, on: () => {} }, '0.99.1', { ...config, reportRole: 'developer' }, async (_cfg, path) => {
+      calls.push(path); assert.equal(path, '/report-ready'); return { ready: mode !== 'sending' };
+    });
+    const ctx = { hasPendingMessages: () => { reads++; return mode === 'before' || mode === 'after' && reads === 2; } };
+    const result = await tool.execute('call-1', {}, undefined, undefined, ctx);
+    assert.equal(result.isError, true);
+    assert.deepEqual(calls, mode === 'before' ? [] : ['/report-ready']);
+  }
 });
 function authority(events, mutate = () => {}) {
   return async (_config, path, value) => {

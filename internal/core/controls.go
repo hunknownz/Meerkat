@@ -197,7 +197,7 @@ func (a *controlAuthority) Finish(id, state, disposition, reason string) error {
 }
 
 // Quiesce atomically seals input only after all accepted controls were sent.
-// The adapter must independently verify its protocol queue is empty first.
+// The adapter must independently verify its protocol queue before and after.
 func (a *controlAuthority) Quiesce() (bool, error) {
 	c := a.c
 	c.wmu.Lock()

@@ -17,14 +17,24 @@ import (
 
 // Uses the installed Pi SDK and its actual tool schema validation. All model
 // responses are local fixtures; no user credential or remote endpoint is used.
+type reportControlProbe struct{ fixtureControlAuthority }
+
+func (*reportControlProbe) Quiesce() (bool, error) { return true, nil }
+
 func TestInstalledPiStructuredReportTool(t *testing.T) {
 	binary := os.Getenv("MEERKAT_TEST_PI_RPC_BINARY")
 	if binary == "" {
 		t.Skip("installed Pi loopback probe opt in")
 	}
-	for _, role := range []string{"developer", "polisher", "reviewer"} {
-		t.Run(role, func(t *testing.T) {
+	for _, scenario := range []string{"developer", "polisher", "reviewer", "developer-follow-up"} {
+		t.Run(scenario, func(t *testing.T) {
+			role := scenario
+			followUp := scenario == "developer-follow-up"
+			if followUp {
+				role = "developer"
+			}
 			e := setup(t)
+			controls := make(chan RunControl, 1)
 			var mu sync.Mutex
 			hits, toolVisible := 0, false
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,8 +64,19 @@ func TestInstalledPiStructuredReportTool(t *testing.T) {
 				if role == "developer" && n == 1 {
 					delta = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"index": 0, "id": "fixture-commit", "type": "function", "function": map[string]any{"name": "bash", "arguments": `{"command":"printf 'fixture change\\n' >> a.txt && git commit -qam fixture"}`}}}}
 					finish = "tool_calls"
+					if followUp {
+						controls <- RunControl{ID: "fixture-follow-up", Kind: "follow_up", Message: "Follow-up fixture direction"}
+						delta = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"index": 0, "id": "fixture-draft", "type": "function", "function": map[string]any{"name": "bash", "arguments": `{"command":"printf 'fixture change\\n' >> a.txt && sleep 1"}`}}}}
+					}
 				}
-				if n == reportAt {
+				if followUp && n == 4 {
+					if _, err := os.Stat(e.report); !os.IsNotExist(err) {
+						t.Error("report saved before queued follow-up consumed")
+					}
+					delta = map[string]any{"role": "assistant", "tool_calls": []any{map[string]any{"index": 0, "id": "fixture-final-commit", "type": "function", "function": map[string]any{"name": "bash", "arguments": `{"command":"git commit -qam fixture"}`}}}}
+					finish = "tool_calls"
+				}
+				if n == reportAt || followUp && n == 5 {
 					draft := map[string]any{"summary": "Observed fixture", "checks": []any{}, "knownGaps": []any{}}
 					if role == "reviewer" {
 						draft["verdict"], draft["findings"] = "pass", []any{}
@@ -91,8 +112,11 @@ func TestInstalledPiStructuredReportTool(t *testing.T) {
 				t.Fatal(err)
 			}
 			binding.ProviderID, binding.Digest = snap.ProviderID, snap.Digest
-			a := &probeBudget{denyAfter: 4}
+			a := &probeBudget{denyAfter: 8}
 			req.Session, req.Budget = &binding, a
+			if followUp {
+				req.Controls = &ControlBinding{Messages: controls, Authority: &reportControlProbe{fixtureControlAuthority: fixtureControlAuthority{path: filepath.Join(e.dir, "control-accepted")}}}
+			}
 			result, err := p.Execute(context.Background(), req, nil, nil)
 			if err != nil || result.Report == nil || result.Report.CandidateSHA != run(t, e.wt, "rev-parse", "HEAD") || result.Report.ContextDigest == nil || *result.Report.ContextDigest != req.ContextDigest {
 				if raw, e := os.ReadFile(binding.File); e == nil {
@@ -117,6 +141,13 @@ func TestInstalledPiStructuredReportTool(t *testing.T) {
 			want := 2
 			if role == "developer" {
 				want = 3
+			}
+			if followUp {
+				want = 6
+				raw, err := os.ReadFile(binding.File)
+				if err != nil || !bytes.Contains(raw, []byte("Follow-up fixture direction")) {
+					t.Fatal("follow-up missing from same history")
+				}
 			}
 			if !toolVisible || hits != want || len(a.settlements) != want {
 				t.Fatal("tool/settlement count", toolVisible, hits, len(a.settlements))

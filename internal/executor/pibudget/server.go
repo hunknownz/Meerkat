@@ -52,8 +52,9 @@ type Server struct {
 
 type ReportWriter func(context.Context, json.RawMessage) (any, error)
 type ReportOption struct {
-	Role  string
-	Write ReportWriter
+	Role    string
+	Write   ReportWriter
+	Prepare func() (bool, error)
 }
 
 func Start(provider, model string, a budget.Authority, report ...ReportOption) (*Server, error) {
@@ -84,8 +85,10 @@ func Start(provider, model string, a budget.Authority, report ...ReportOption) (
 	}
 	cfg := Config{Socket: filepath.Join(dir, "gate.sock"), Token: hex.EncodeToString(raw[:]), Provider: provider, Model: model, Version: Version}
 	var writer ReportWriter
+	var prepareReport func() (bool, error)
 	if len(report) == 1 {
 		cfg.ReportRole, writer = report[0].Role, report[0].Write
+		prepareReport = report[0].Prepare
 	}
 	ln, err := net.Listen("unix", cfg.Socket)
 	if err != nil {
@@ -97,6 +100,7 @@ func Start(provider, model string, a budget.Authority, report ...ReportOption) (
 	}
 	b, _ := json.Marshal(cfg)
 	s := &Server{dir: dir, extension: path, env: EnvName + "=" + string(b), ready: make(chan bool, 1), halt: make(chan struct{}, 1)}
+	reportReady := false
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+cfg.Token)) != 1 {
 			w.WriteHeader(http.StatusForbidden)
@@ -134,10 +138,29 @@ func Start(provider, model string, a budget.Authority, report ...ReportOption) (
 			return
 		}
 		switch r.URL.Path {
+		case "/report-ready":
+			var empty struct{}
+			err = decode(&empty)
+			ready := err == nil && writer != nil
+			if ready && prepareReport != nil {
+				ready, err = prepareReport()
+			}
+			if err != nil || writer == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "report_unavailable"})
+				return
+			}
+			s.mu.Lock()
+			reportReady = reportReady || ready
+			s.mu.Unlock()
+			value = map[string]bool{"ready": ready}
 		case "/report":
 			var draft json.RawMessage
 			err = decode(&draft)
-			if err == nil && writer != nil {
+			s.mu.Lock()
+			sealed := reportReady
+			s.mu.Unlock()
+			if err == nil && writer != nil && sealed {
 				value, err = writer(r.Context(), draft)
 			} else {
 				err = budget.ErrConflict

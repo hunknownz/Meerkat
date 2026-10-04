@@ -16,5 +16,6 @@ type ControlBinding struct {
 
 var ErrControlRejected = errors.New("control definitely rejected before send")
 
-// ControlDrainAuthority seals admission at verified protocol idle.
+// ControlDrainAuthority seals admission after accepted sends have drained.
+// The adapter verifies its protocol queue before and after this handshake.
 type ControlDrainAuthority interface{ Quiesce() (bool, error) }

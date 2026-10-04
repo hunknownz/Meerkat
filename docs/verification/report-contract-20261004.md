@@ -88,9 +88,18 @@ schemas were exercised by installed Pi 0.99.1 against an isolated loopback
 model: real tool execution, exact bindings, private report output and settled
 requests passed. No paid request was made in these checks.
 
-Focused Go race checks passed. The bridge's 14 Node tests passed, including
+Focused Go race checks passed. The bridge's 15 Node tests passed, including
 report registration before session start and no silent retry of failed report
 submission. Invalid drafts do not turn model settlement into unknown usage.
 Changed duplicate reports and symlinks are rejected; identical reports return
 the same receipt without a model call. Model-provided SHA/Context overrides,
 wrong role fields and unknown nested check fields are rejected.
+
+
+Final submission also seals new control admission in Go after all accepted and
+sending controls drain. Pi checks its pending messages before and after that
+handshake. Pending follow-ups defer the report until consumed; an earlier
+report cannot bind a later follow-up commit. Installed-Pi loopback verification
+exercised a real queued follow-up, deferred first report, same-session next
+turn, final commit and successful report. The fixture's six model requests
+were local only. Stop remains independently available.

@@ -11,3 +11,8 @@ The existing SHA/context/scope verifier remains authoritative. Reject wrong
 role fields, credentials, changed duplicate bodies and report path substitution.
 Identical reports may read the same private result; no automatic retry or model
 call. The task state machine and frozen budget do not change.
+
+Before saving, Go seals new Run controls after accepted/sending controls drain.
+Pi checks its pending messages both before and after that handshake. A queued
+follow-up defers the report until it is consumed, preventing an earlier report
+from binding a later commit. No direction is dropped or silently resent.

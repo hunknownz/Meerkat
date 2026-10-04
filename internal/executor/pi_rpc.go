@@ -65,7 +65,17 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	var bridge *pibudget.Server
 	if req.Budget != nil {
 		var err error
-		bridge, err = pibudget.Start(req.Profile.Provider, req.Profile.Model, req.Budget, pibudget.ReportOption{Role: req.Role, Write: reportWriter(req, pp)})
+		prepareReport := func() (bool, error) {
+			if req.Controls == nil {
+				return true, nil
+			}
+			drain, ok := req.Controls.Authority.(ControlDrainAuthority)
+			if !ok {
+				return false, invalid("report control drain unavailable")
+			}
+			return drain.Quiesce()
+		}
+		bridge, err = pibudget.Start(req.Profile.Provider, req.Profile.Model, req.Budget, pibudget.ReportOption{Role: req.Role, Write: reportWriter(req, pp), Prepare: prepareReport})
 		if err != nil {
 			o.stop = CatBudgetGate
 			return o

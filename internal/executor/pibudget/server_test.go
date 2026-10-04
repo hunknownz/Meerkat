@@ -135,6 +135,12 @@ func TestPrivateReportRequiresHandshakeAndDoesNotPoisonBudgetOnInvalidDraft(t *t
 	if status, _ := post("/ready", cfg.Token, `{"version":"pi-http-v1","piVersion":"0.99.1","provider":"fixture","model":"text-model","api":"openai-completions","installed":true}`); status != http.StatusOK {
 		t.Fatal("handshake rejected")
 	}
+	if status, _ := post("/report", cfg.Token, `{"summary":"observed"}`); status != http.StatusBadRequest || called != 0 {
+		t.Fatal("report saved before input sealed")
+	}
+	if status, out := post("/report-ready", cfg.Token, `{}`); status != http.StatusOK || !strings.Contains(out, `"ready":true`) {
+		t.Fatal("report admission rejected", status, out)
+	}
 	for _, body := range []string{`{}`, `{} {}`, strings.Repeat("x", 65537)} {
 		if status, out := post("/report", cfg.Token, body); status != http.StatusBadRequest || strings.Contains(out, "private") {
 			t.Fatal(status, out)

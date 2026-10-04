@@ -175,7 +175,14 @@ export async function installBridge(pi, piVersion, config, communicate = channel
       description: 'Save your final role report. Supply only actual conclusions and observed check results. Go derives the exact Git SHA and frozen Context. Do not write the report file manually.',
       promptSnippet: 'Submit the final role report with exact observed checks; Go supplies SHA and Context.',
       parameters: { type: 'object', additionalProperties: false, required: Object.keys(properties), properties },
-      async execute(_id, draft) {
+      async execute(_id, draft, _signal, _update, ctx) {
+        if (typeof ctx?.hasPendingMessages !== 'function') throw failure();
+        const deferred = () => ({ isError: true, content: [{ type: 'text', text: 'Final report deferred. Process all pending directions in this Session, then submit the final report. End this turn if a follow-up is waiting.' }] });
+        if (ctx.hasPendingMessages()) return deferred();
+        const admission = await communicate(config, '/report-ready', {});
+        // Go sealed new input only after durable accepted/sending directions
+        // drained. Recheck Pi's queue after that acknowledgement to close the race.
+        if (admission?.ready !== true || ctx.hasPendingMessages()) return deferred();
         const result = await communicate(config, '/report', draft);
         return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
       },
