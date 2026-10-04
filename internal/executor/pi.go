@@ -1,9 +1,11 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -252,19 +254,62 @@ func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 	for _, in := range instr {
 		parts = append(parts, "", "## Project instructions: "+in[0], in[1])
 	}
-	digest, shaHint := "(none; use null)", "the final HEAD after your work (`git rev-parse HEAD`)"
+	digest, shaHint := "null (write null when there is no frozen context)", "the final HEAD after your work (`git rev-parse HEAD`)"
 	if req.ContextDigest != "" {
 		digest = req.ContextDigest
 	}
-	shape := `{"candidateSha","contextDigest","summary","checks":[{"command","result"}],"knownGaps":[string],"decision":"changed"|"no_change"}`
 	if req.Role == "reviewer" {
 		shaHint = "the reviewed HEAD (" + req.ExpectedSHA + ")"
-		shape = `{"candidateSha","contextDigest","verdict":"pass"|"changes_requested","summary","findings":[{"id","summary","path"?,"line"?}],"checks":[{"command","result"}],"knownGaps":[string]}`
 	}
 	parts = append(parts, "", "## Role report", "Report file: "+report, "Context digest: "+digest,
 		"When finished, write one JSON object (max 65536 bytes) to the report file above (outside the worktree; create it as a new regular file, never a symlink).",
-		"Set candidateSha to "+shaHint+" and contextDigest to the context digest above. Shape: "+shape)
+		"Set candidateSha to "+shaHint+" and contextDigest to the literal context digest above: copy it byte-for-byte including any sha256: prefix; never normalize, truncate, or re-derive it; write the JSON null value when the digest is null.",
+		"The report must be valid JSON matching this exact shape:", "", "```json", reportExample(req.Role, req.ContextDigest, req.ExpectedSHA), "```")
 	return strings.Join(parts, "\n")
+}
+
+// reportExample renders a deterministic, valid JSON role report example. The
+// reviewer example pins candidateSha to the exact ExpectedSHA; developer and
+// polisher examples carry a placeholder the model must substitute with the
+// final HEAD. contextDigest is embedded literally, or null when absent.
+func reportExample(role, contextDigest, expectedSHA string) string {
+	checks := []map[string]string{{"command": "go test ./internal/executor -count=1", "result": "pass"}}
+	digest := any(nil)
+	if contextDigest != "" {
+		digest = contextDigest
+	}
+	sha := "<final HEAD from git rev-parse HEAD>"
+	if role == "reviewer" {
+		sha = expectedSHA
+	}
+	var ex any
+	if role == "reviewer" {
+		ex = struct {
+			CandidateSHA  string              `json:"candidateSha"`
+			ContextDigest any                 `json:"contextDigest"`
+			Verdict       string              `json:"verdict"`
+			Summary       string              `json:"summary"`
+			Findings      []map[string]string `json:"findings"`
+			Checks        []map[string]string `json:"checks"`
+			KnownGaps     []string            `json:"knownGaps"`
+		}{CandidateSHA: sha, ContextDigest: digest, Verdict: "pass", Summary: "Reviewed the candidate against the task; all local checks pass.", Findings: []map[string]string{}, Checks: checks, KnownGaps: []string{}}
+	} else {
+		ex = struct {
+			CandidateSHA  string              `json:"candidateSha"`
+			ContextDigest any                 `json:"contextDigest"`
+			Summary       string              `json:"summary"`
+			Checks        []map[string]string `json:"checks"`
+			KnownGaps     []string            `json:"knownGaps"`
+			Decision      string              `json:"decision"`
+		}{CandidateSHA: sha, ContextDigest: digest, Summary: "Implemented the task; all local checks pass.", Checks: checks, KnownGaps: []string{}, Decision: "changed"}
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // keep <final HEAD ...> and Unicode readable in the example
+	if err := enc.Encode(ex); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(buf.String())
 }
 
 func newRunID() string {
