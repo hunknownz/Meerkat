@@ -90,8 +90,8 @@ after accepted/sending directions drain, and Pi checks its pending messages
 before and after that seal. A pending follow-up defers the final report until it
 is processed. Submitting a final report closes new directions for that Run.
 Stop remains available. The report binds the final HEAD and the frozen Context,
-and its reply is not final delivery: local delivery, QA, human check and
-repository integration remain separate states.
+and the report reply is not final delivery: local delivery, QA, human check,
+repository integration and deployment remain separate states.
 
 ## History and display
 
