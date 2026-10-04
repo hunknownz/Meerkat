@@ -26,7 +26,7 @@ See [the current real-run evidence](real-controls-20261005.md).
 | 17 | Updated workflow/delegate skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
 | 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
 | 19 | Read-only doctor, pinned Pi protocol/version probes. | Static checks do not certify balance or provider availability. |
-| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.13 backend runs the real workflows below. | New native control scenario; public tag/release and directory submission are separate actions. |
+| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.14 backend retains the real beta.13 workflow history below. | New native control scenario; public tag/release and directory submission are separate actions. |
 
 ## Changed behavior
 
@@ -60,7 +60,7 @@ See [the current real-run evidence](real-controls-20261005.md).
 - Beta.14 assigns the reviewed fixes a distinct install version. Manifest,
   server, MCP App, frontend lockfile and installation commands match. Assets were
   rebuilt before Go packaging; all 33 frontend tests and 66 Node distribution
-  checks passed again for this candidate.
+  checks passed again for this candidate. Server and MCP race checks passed.
 - Three real Pi tasks completed development, independent review, polish and
   re-review. One resumed a verified checkpoint in the original Session; one
   consumed a queued follow-up before reporting. The useful documentation
@@ -70,6 +70,21 @@ See [the current real-run evidence](real-controls-20261005.md).
 - Receipt reads kept the same control UUID and did not change private Session
   history. Two historical unknown Runs remain untouched. There were zero
   running or queued Runs at the post-verification snapshot.
+
+Beta.14 cross-builds passed for macOS/Linux on arm64/amd64; only macOS arm64 was
+installed and executed here. The verified installer checked the binary version,
+checksum and source SHA. An idle-owner cutover retained a consistent backup and
+all 27 non-lease authority tables unchanged (34 Tasks, 56 Runs). The controller
+lease changed to the new owner as expected. Service health, SQLite schema 12,
+integrity and foreign-key checks passed. Doctor still blocks the two historical
+unknown Runs/requests; this is retained uncertainty, not an installation pass
+for those tasks. No affected task was replayed.
+
+Offline JSON and CSV exports reconciled the useful documentation Task's four
+Runs and 306,781 confirmed tokens. Agent/Session/request linkage, one first-review
+result and the pause exercise's checkpoint linkage were present. Fees remained
+null in JSON and empty in CSV. The [metrics meanings](../metrics.md) distinguish
+wall time from summed Agent time and leave unmeasured breakdowns unknown.
 
 The expanded MCP App tab inventory was empty on 2026-10-05. The monitor tool
 opened inline, which does not establish native button acceptance. The user has
