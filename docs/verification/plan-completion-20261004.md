@@ -89,3 +89,11 @@ unknown Run was not replayed. Automation timed out while inspecting its controls
 so that inspection has no passing evidence. Fresh global sidebar entry visibility
 also remains unverified. These remaining checks prevent a claim of complete
 native control acceptance.
+
+The subsequent user screenshot accepted global Meerkat entry visibility and
+full-page rendering. Native host instruction, receipt lookup, same-session
+fixture delivery and stop controls then passed with deterministic local protocol
+children; unknown Run controls were disabled. See
+[the follow-up record](native-controls-20261004.md). No provider request was made.
+This closes the host transport checks, while the combined real Pi/model native
+control scenario remains pending. The original unknown paid Run stays untouched.

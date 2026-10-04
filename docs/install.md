@@ -103,8 +103,9 @@ Start a new Codex chat (or restart Codex) after installing, then ask: `打开 Me
 This calls the MCP Apps tool `open_monitor` (global or per-thread entrypoint); the local stdio monitor
 supports bounded human instructions and stopping through app-only host tools; settings stay read-only.
 The beta.11 panel, live snapshots, task details, usage and read-only settings
-were verified inside Codex on 2026-10-04. Native instruction and stop delivery
-against an active Run, and fresh global sidebar entry visibility, remain pending.
+were verified inside Codex on 2026-10-04. The global entry and native instruction,
+receipt and stop transport also passed with local protocol fixtures. A real
+Pi/model task using these native controls still needs end-to-end acceptance.
 See [human intervention](ui-intervention.md) and [host acceptance](codex-ui-acceptance.md).
 Hosts without MCP Apps support should use `node scripts/launch.mjs snapshot`; a browser page is not the
 native panel. The legacy CDP adapter is optional, see [desktop adapter](../desktop/README.md).

@@ -82,3 +82,8 @@ as does fresh global sidebar entry visibility. Inspecting the unknown Run's
 controls and later screenshot access timed out in the automation backend;
 those operations have no passing evidence. The panel was not closed, no
 control was submitted and no new model request was made.
+
+The later user screenshot and local protocol-fixture run closed global entry
+visibility and native control transport checks. See
+[the follow-up evidence](native-controls-20261004.md). A real Pi/model task with
+native controls remains separate pending acceptance.

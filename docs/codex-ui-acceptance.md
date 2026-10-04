@@ -187,7 +187,7 @@ remain in private maintainer evidence storage, outside Git:
 | Usage | `2993c5a6cb1d2460dc73e73b689fe92ea34da434f9e115b1be3836c9de5b822e` |
 | Read-only settings | `5273af2cd865ac447a701571d194615d35dad67f88d16a8dc0fe067c7a7396b0` |
 
-### Remaining host checks
+### Checks pending at the initial beta.11 inspection
 
 Human instruction delivery and stopping an active Run still need native host
 acceptance. There was no active Run during this check. An attempt to inspect the
@@ -199,3 +199,22 @@ unknown and has not been replayed. The expanded panel was not closed.
 Visibility of a fresh global sidebar entry also remains unverified. This check
 accepts the expanded tool panel on the observed Codex installation, not every
 host entrypoint or the entire delivery plan.
+
+## Beta.11 global entry and native controls follow-up (2026-10-04)
+
+The user's later screenshot shows the selected global Meerkat sidebar entry,
+full-page Agents view and connected state. Global entry visibility and rendering
+are now accepted on this Codex installation. Screenshot SHA-256:
+`58677f79249a358cd9960ba84a9caf3924335b0ccfdca2ceeadee0f8a49f2b28`.
+
+The expanded MCP App's DOM became reachable again. Its unknown Run's input,
+send and stop controls were disabled. Two frozen local protocol fixtures then
+passed native instruction submission, receipt lookup without resend, same-session
+proof delivery, native stopping, retained Task receipts and confirmed child exit.
+Three native screenshots and exact IDs are in
+[the control verification record](verification/native-controls-20261004.md).
+
+The fixture used no model or gateway request. It accepts the native control
+transport; real Pi/model execution controlled through the native panel still
+needs an end-to-end check. Prior real Pi/browser interaction is separate evidence.
+The original unknown paid Run remains untouched and the panel remains open.

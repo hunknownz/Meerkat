@@ -64,7 +64,12 @@ the old backup to a separate private directory; preserve new records.
 Automated checks cover queue advancement, UUID conflicts, private text,
 restart uncertainty, Unicode bounds, owner checks, Pi RPC forwarding and
 automatic wrap-up, UI connection changes and lost-reply reads. The beta.8
-Codex display screenshot verifies the older display only. Beta.9 interactive
-host acceptance must be checked with a fresh plugin resource and active Run.
+Codex display screenshot verifies the older display only.
 A real loopback-panel instruction reached Pi in the same Session and appeared
 in the reviewed local candidate; see the [verification record](verification/ui-intervention-20261004.md).
+
+Beta.11 native control submission, receipt lookup, same-session fixture delivery,
+stopping and retained Task receipts passed inside the real Codex MCP App using
+local protocol fixtures. See [native controls](verification/native-controls-20261004.md).
+This verifies the host transport without provider requests; a real Pi/model task
+controlled through the native panel still needs the combined end-to-end check.
