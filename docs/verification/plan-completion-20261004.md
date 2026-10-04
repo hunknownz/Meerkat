@@ -1,6 +1,7 @@
 # Plan status and verification — updated 2026-10-05
 
-Candidate: `0.4.0-beta.13`. Original design remains in
+Candidate: `0.4.0-beta.14`. Real-run evidence below was captured with beta.13;
+beta.14 packages the same verified behavior. Original design remains in
 [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
 The full plan is **not complete**. Real Pi/model pause, checkpoint continuation,
 queued follow-up, structured reporting and multi-role delivery passed. Fresh
@@ -56,6 +57,10 @@ See [the current real-run evidence](real-controls-20261005.md).
 - Frontend build and 33 React/transport tests, 66 Node distribution checks and
   both skill validators passed for beta.13 before the reporting/CLI fixes. Those
   fixes did not change the frontend contract or embedded assets.
+- Beta.14 assigns the reviewed fixes a distinct install version. Manifest,
+  server, MCP App, frontend lockfile and installation commands match. Assets were
+  rebuilt before Go packaging; all 33 frontend tests and 66 Node distribution
+  checks passed again for this candidate.
 - Three real Pi tasks completed development, independent review, polish and
   re-review. One resumed a verified checkpoint in the original Session; one
   consumed a queued follow-up before reporting. The useful documentation

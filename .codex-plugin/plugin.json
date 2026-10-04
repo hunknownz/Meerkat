@@ -1,6 +1,6 @@
 {
   "name": "meerkat",
-  "version": "0.4.0-beta.13",
+  "version": "0.4.0-beta.14",
   "description": "Meerkat coordinates bounded local task delivery: Codex prepares worktrees and frozen context, a configured execution adapter runs developer, reviewer and polisher roles, and a standard MCP Apps monitor shows local agent runs.",
   "author": {
     "name": "hunknownz"

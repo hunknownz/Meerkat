@@ -63,7 +63,7 @@ contracts again before sending.
 
 ## Upgrade and verification
 
-Beta.13 uses SQLite schema 12, preserving historical controls, sessions,
+Beta.14 uses SQLite schema 12, preserving historical controls, sessions,
 checkpoints, budgets and request decisions. Stop the old owner first and retain
 a consistent backup. An old
 runtime cannot open the upgraded database. If investigating rollback, restore
