@@ -1,6 +1,6 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.11`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.12`.
 
 ## GitHub repository (current)
 
@@ -12,7 +12,7 @@ Meerkat has two independent distribution paths. Only the first is used for `0.4.
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.11` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.12` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
   Until then, use the documented source build in [install](install.md); no
   nonexistent release download is required for the repository installation.
 
@@ -30,8 +30,10 @@ We skip the directory beta for now. Directory review is a separate decision and 
 
 ## Status
 
-The standard MCP Apps panel was verified inside the real Codex app on 2026-10-03:
-Agents / Tasks / Usage, host-mediated live snapshots and disabled writes in beta.8.
-Beta.9 adds bounded human instructions and stop controls. Their real-host interaction acceptance is pending; the previous screenshot does not verify these actions.
-See [acceptance evidence and limits](codex-ui-acceptance.md). This verifies the
-standard side panel, not a permanent custom sidebar item or the legacy CDP adapter.
+The standard MCP Apps panel and its live snapshots were verified inside Codex on
+2026-10-03. On 2026-10-04, the user supplied global-entry evidence and the native
+panel's instruction, receipt and stop controls passed local protocol fixtures.
+Those fixtures made no model request; combined native-panel and paid-executor
+acceptance remains separate. Beta.12 simplifies the shared monitor layout.
+See [host acceptance and limits](codex-ui-acceptance.md) and
+[UI simplification](../design/ui-simplification-20261004.md) for the current checks.

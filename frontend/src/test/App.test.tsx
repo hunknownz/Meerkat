@@ -98,6 +98,7 @@ describe('App', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain('Agent-07 · 开发');
     expect(rows[0]!.textContent).toContain('ran tests');
+    fireEvent.click(rows[0]!.querySelector('.row-btn')!);
     expect(rows[0]!.textContent).toContain('阶段 edit');
     expect(screen.getAllByTestId('independent-row')).toHaveLength(1);
     expect(screen.queryByText('dup')).toBeNull();
@@ -130,11 +131,14 @@ describe('App', () => {
     render(<App snapshot={snapshot()} legacyActive={[]} connected stale={null} actions={actions()} now={() => Date.parse('2025-01-01T00:10:00Z')} />);
     view('Usage');
     const stats = screen.getByTestId('usage-stats').textContent!;
-    expect(stats).toContain('≥ 100'); // input known for one of two runs
-    expect(stats).toContain('未知输出');
+    expect(stats).toContain('未知总 token'); // no Run reported a total, despite a known input
     expect(stats).toContain('未知费用');
-    expect(stats).toContain('10分墙钟时间');
-    expect(stats).toContain('Agent 耗时合计 15分');
+    expect(stats).toContain('15分Agent 耗时');
+    const detail = screen.getByText('分类用量与统计口径').closest('details')!;
+    expect(detail.open).toBe(false);
+    expect(detail.textContent).toContain('输入≥ 100');
+    expect(detail.textContent).toContain('输出未知');
+    expect(detail.textContent).toContain('墙钟时间10分');
   });
 
   it('task details show exact SHA, context digest, checks and gaps; unsafe links are not rendered', () => {
@@ -150,6 +154,48 @@ describe('App', () => {
     expect(dlg.querySelector('a')).toBeNull();
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     return waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('keeps full versions and budget evidence accessible while foregrounding the candidate', () => {
+    const s = snapshot();
+    s.tasks[0]!.budget = {maxTokens:1000,maxWallSeconds:600,maxFixRounds:1};
+    s.tasks[0]!.budgetEvidence = {authorizedTokens:1000,availableTokens:null,confirmedTokens:0,reservedTokens:500,requests:1,pendingRequests:0,unknownRequests:1,overrun:false};
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions()} />);
+    view('Tasks'); fireEvent.click(screen.getByText('Fix parser'));
+    const d = screen.getByRole('dialog');
+    const versions = screen.getByText('版本与上下文').closest('details')!;
+    const budget = screen.getByText('任务预算与账本').closest('details')!;
+    expect(versions.open).toBe(false); expect(budget.open).toBe(false);
+    expect(versions.textContent).toContain('a'.repeat(40)); expect(versions.textContent).toContain('sha256:ctx');
+    expect(budget.textContent).toContain('未知（预留口径）');
+    expect(screen.getByText(/请求结果未知 1 次/).closest('details')).toBeNull();
+    expect((d.querySelector('[data-check]')!.closest('details') as HTMLDetailsElement).open).toBe(false);
+    expect(screen.getByText('历史检查 1 项').closest('details')).toBeNull();
+    expect(d.textContent!.indexOf('no e2e')).toBeLessThan(d.textContent!.indexOf('任务预算与账本'));
+  });
+
+  it('does not present a review of an older SHA as the current candidate review', () => {
+    const s = snapshot(); s.reviews[0]!.candidateSha = 'c'.repeat(40);
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions()} />);
+    view('Tasks'); fireEvent.click(screen.getByText('Fix parser'));
+    expect(screen.getByText('当前候选尚无匹配的审查记录')).toBeTruthy();
+    const older = screen.getByText('其他交付与审查记录').closest('details')!;
+    expect(older.open).toBe(false); expect(older.textContent).toContain('c'.repeat(40)); expect(older.textContent).toContain('pass');
+  });
+
+  it('uses the selected project for Run counts and queued Task counts', () => {
+    const s = snapshot(); s.projects.push({id:'p2',name:'Other'});
+    s.tasks.push({id:'t2',projectId:'p2',title:'Other queued task',state:'queued'});
+    s.runs.push({...s.runs[0]!,id:'other-run',taskId:'t2',state:'unknown'});
+    s.counts = {running:1,queued:1,unknown:1};
+    const v = render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions()} />);
+    fireEvent.change(screen.getByLabelText('项目筛选'),{target:{value:'p1'}});
+    expect(v.container.querySelector('.state-sum')!.textContent).toBe('运行中 1 · 排队 0 · 未知 0');
+    fireEvent.change(screen.getByLabelText('项目筛选'),{target:{value:'p2'}});
+    expect(v.container.querySelector('.state-sum')!.textContent).toBe('运行中 0 · 排队 1 · 未知 1');
+    expect(screen.getAllByTestId('agent-row')).toHaveLength(1);
+    v.rerender(<App snapshot={{...s,counts:{running:null,queued:null,unknown:null}}} legacyActive={[]} connected stale={null} actions={actions()} />);
+    expect(v.container.querySelector('.state-sum')!.textContent).toBe('运行中 未知 · 排队 未知 · 未知 未知');
   });
 
   it('renders named harness checks, Agent-reported evidence, unknown values and legacy checks', () => {

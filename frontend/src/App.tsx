@@ -50,6 +50,12 @@ function IssueLink({ task }: { task: Task }) {
   return url ? <a className="link" href={url} target="_blank" rel="noopener noreferrer">{label}</a> : <span>{label}</span>;
 }
 
+function Disclosure({ title, children }: { title: string; children: ReactNode }) {
+  return <details className="disclosure"><summary>{title}</summary><div className="disclosure-body">{children}</div></details>;
+}
+
+const briefModel = (r: Run) => r.modelSnapshot?.model?.split('/').filter(Boolean).at(-1) || '模型未记录';
+
 export function App({ snapshot, legacyActive, connected, stale, actions, initialTheme, now = Date.now }: AppProps) {
   const [view, setView] = useState<View>('agents');
   const [project, setProject] = useState('all');
@@ -104,7 +110,13 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
 
   const runs = snapshot?.runs ?? [];
   const activeRuns = runs.filter((r) => isActiveRun(r) && inProject(taskOf(r)?.projectId));
-  const counts = snapshot?.counts;
+  // Match the service: running/unknown count Runs; queued counts Tasks.
+  // An absent or unknown server count remains unknown, even in a filtered view.
+  const counts = project === 'all' ? snapshot?.counts : snapshot?.counts && {
+    running: snapshot.counts.running == null ? null : runs.filter(r => r.state === 'running' && inProject(taskOf(r)?.projectId)).length,
+    queued: snapshot.counts.queued == null ? null : snapshot.tasks.filter(t => t.state === 'queued' && inProject(t.projectId)).length,
+    unknown: snapshot.counts.unknown == null ? null : runs.filter(r => r.state === 'unknown' && inProject(taskOf(r)?.projectId)).length,
+  };
   const countText = (v: number | null | undefined) => (stale || v === null || v === undefined ? '未知' : String(v));
 
   const banner = stale ? (
@@ -132,7 +144,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
 
   function agentRow(r: Run) {
     const t = taskOf(r);
-    const ev = lastEvent(r);
+    const ev = [...(r.events ?? [])].reverse().find(e => e.type !== 'state') ?? lastEvent(r);
     const a = agentLabel(r.agentId);
     const open = expanded === r.id;
     const dot = stale || r.state === 'unknown' ? 'stale' : r.state === 'running' ? 'running' : /block|fail/.test(r.state) ? 'blocked' : 'waiting';
@@ -141,20 +153,22 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
         <button type="button" className="row-btn" aria-expanded={open} aria-controls={`mk-more-${r.id}`} onClick={() => setExpanded(open ? null : r.id)}>
           <span className={`dot ${dot}`} title={stale ? '快照（已过期）' : runLabel(r.state)} />
           <span className="who">
-            <span className="line1"><span className="role">{a.label || '—'} · {roleLabel(r.role)}</span><span className="task">{t?.title || '未知任务'}</span></span>
+            <span className="task">{t?.title || '未知任务'}</span>
+            <span className="identity">{a.label || '—'} · {roleLabel(r.role)} · {briefModel(r)}</span>
             <span className="sub">
-              {r.executor || '执行器未记录'}{r.stage ? ` · 阶段 ${r.stage}` : ''}
-              {ev ? <> · <span className="act">{eventLabel(ev)}</span> · {formatTime(ev.observedAt)}</> : ' · 尚无事件'}
+              {ev ? <><span className="act">{eventLabel(ev)}</span> · {formatTime(ev.observedAt)}</> : '尚无事件'}
               {stale ? ' · 快照' : ''}
             </span>
           </span>
-          <span className="fields">
-            <span className="field"><span className="v">{modelLabel(r)}</span></span>
-            <span className="field"><span className="v">{isWrappingUp(r) ? '收尾中' : runLabel(r.state)}</span></span>
-            <span className="field"><span className="k">开始</span><span className="v">{formatTime(r.startedAt)}</span></span>
-          </span>
+          <span className={`run-state${/unknown|block|fail/.test(r.state) ? ' attention' : ''}`}>{isWrappingUp(r) ? '收尾中' : runLabel(r.state)}</span>
         </button>
-        <div className="agent-more" id={`mk-more-${r.id}`} hidden={!open}>
+        <div id={`mk-more-${r.id}`} hidden={!open}>
+          <div className="agent-tools">
+            {t ? <button type="button" className="btn" onClick={() => setOpenTask(t.id)}>打开任务</button> : null}
+            {!actions.intervention ? stopControl(r) : null}
+          </div>
+          {actions.intervention && open ? <Intervention run={r} sessionId={t?.sessions?.find(s => s.activeRunId === r.id && s.state === 'running')?.id} actions={actions.intervention} disabled={!!stale || !connected || r.state === 'unknown'} receipts={t?.controlReceipts ?? []} /> : null}
+          <details className="run-detail"><summary>运行详情与最近事件</summary><div className="agent-more">
           <div>
             <h4>最近事件{stale ? '（快照）' : ''}</h4>
             {r.events?.length ? (
@@ -165,30 +179,27 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
           <div>
             <h4>运行</h4>
             <dl className="kv">
+              <dt>模型</dt><dd>{modelLabel(r)}</dd>
+              <dt>执行器</dt><dd>{r.executor || '未记录'}{r.stage ? ` · 阶段 ${r.stage}` : ''}</dd>
+              <dt>开始</dt><dd>{formatTime(r.startedAt)}</dd>
               {a.legacy ? <><dt>历史 ID</dt><dd><code>{a.legacy}</code></dd></> : null}
               <dt>运行 ID</dt><dd><code>{r.id}</code></dd>
               <dt>上下文</dt><dd><code>{short((r.contextRef ?? t?.contextRef)?.digest, 12) || '—'}</code></dd>
             </dl>
-            <div className="inline-actions">
-              {t ? <button type="button" className="btn" onClick={() => setOpenTask(t.id)}>打开任务</button> : null}
-              {!actions.intervention ? stopControl(r) : null}
-            </div>
           </div>
+          </div></details>
         </div>
-        {actions.intervention && open ? <Intervention run={r} sessionId={t?.sessions?.find(s => s.activeRunId === r.id && s.state === 'running')?.id} actions={actions.intervention} disabled={!!stale || !connected || r.state === 'unknown'} receipts={t?.controlReceipts ?? []} /> : null}
       </div>
     );
   }
 
   function AgentsView() {
     if (!snapshot) return <>{banner}<div className="list"><div className="empty">{stale ? '无法读取工作流状态。' : '正在读取工作流状态…'}</div></div></>;
-    const ctl = { running: '运行中', idle: '空闲', unknown: '未知' }[snapshot.controller?.state ?? 'unknown'];
     const dl = snapshot.deliveries.filter((d) => inProject(idx.task.get(d.taskId)?.projectId)).slice(-5).reverse();
     return (
       <>
         {banner}
-        <div className="host"><span className="badge">宿主</span><span><b>Codex · 协调者</b> — 本地调度器：{ctl}{snapshot.controller?.heartbeatAt ? `（心跳 ${formatTime(snapshot.controller.heartbeatAt)}）` : ''}</span></div>
-        <div className="sec-h"><b>工作流运行</b><span>运行中 {countText(counts?.running)} · 排队 {countText(counts?.queued)} · 未知 {countText(counts?.unknown)}</span><span className="end">{stale ? '快照' : '更新于'} {formatTime(snapshot.observedAt)}</span></div>
+        <div className="sec-h"><b>Agents</b><span>当前任务与最近动作</span></div>
         <div className="list">{activeRuns.length ? activeRuns.map(agentRow) : <div className="empty">当前没有工作流运行。</div>}</div>
         {independent.length ? (
           <>
@@ -224,8 +235,8 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
         const last = runs.filter((r) => r.taskId === t.id).slice(-1)[0];
         return (
           <button type="button" className="row task-row" key={t.id} onClick={() => setOpenTask(t.id)}>
-            <span className="who"><span className="name">{t.title || '未命名任务'}</span><span className="sub"><code>{short(t.id)}</code> · {idx.proj.get(t.projectId)?.name ?? t.projectId} · 更新 {formatTime(t.updatedAt)}</span></span>
-            <span className="meta"><span className={`badge${cat === 'attention' ? ' red' : ''}`}>{taskLabel(t.state)}</span>{last ? <span className="badge">{roleLabel(last.role)} · {runLabel(last.state)}</span> : null}</span>
+            <span className="who"><span className="name">{t.title || '未命名任务'}</span><span className="sub">{idx.proj.get(t.projectId)?.name ?? t.projectId}{last ? ` · ${roleLabel(last.role)} · ${runLabel(last.state)}` : ''} · 更新 {formatTime(t.updatedAt)}</span></span>
+            <span className={`run-state${cat === 'attention' ? ' attention' : ''}`}>{taskLabel(t.state)}</span>
           </button>
         );
       }) : <div className="empty">还没有工作流任务。</div>}</div></>
@@ -243,24 +254,32 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
       <>
         {banner}
         <div className="stats" data-testid="usage-stats">
-          <div className="kpi"><b>{cell('input')}</b><span>输入</span></div>
-          <div className="kpi"><b>{cell('output')}</b><span>输出</span></div>
-          <div className="kpi"><b>{cell('cacheRead')} / {cell('cacheWrite')}</b><span>缓存 读 / 写</span></div>
-          <div className="kpi"><b>{s.costRuns ? `≥ US$${s.costUsd.toFixed(4)}` : '未知'}</b><span>费用</span><small>{s.costRuns}/{s.runs} 次返回费用</small></div>
-          <div className="kpi"><b>{formatDuration(s.wallSeconds)}</b><span>墙钟时间</span><small>Agent 耗时合计 {formatDuration(s.agentSeconds)}</small></div>
+          <div className="kpi"><b>{cell('total')}</b><span>总 token</span><small>{s.runs - s.missing.total}/{s.runs} 次返回总量</small></div>
+          <div className="kpi"><b>{s.costRuns ? `${s.costRuns < s.runs ? '≥ ' : ''}US$${s.costUsd.toFixed(4)}` : '未知'}</b><span>费用</span><small>{s.costRuns}/{s.runs} 次返回费用</small></div>
+          <div className="kpi"><b>{s.agentTimeUnknown === s.runs ? '未知' : `${s.agentTimeUnknown ? '≥ ' : ''}${formatDuration(s.agentSeconds)}`}</b><span>Agent 耗时</span><small>各运行耗时合计{s.agentTimeUnknown ? ` · ${s.agentTimeUnknown} 次未知` : ''}</small></div>
         </div>
-        <p className="k small mt">仅汇总已上报的类别；未返回的计数显示为未知，不按 0 计。墙钟时间为首次开始到最后结束，Agent 耗时为各运行时长之和。</p>
+        <Disclosure title="分类用量与统计口径">
+          <dl className="concl"><dt>输入</dt><dd>{cell('input')}</dd><dt>输出</dt><dd>{cell('output')}</dd>
+            <dt>缓存读</dt><dd>{cell('cacheRead')}</dd><dt>缓存写</dt><dd>{cell('cacheWrite')}</dd>
+            <dt>墙钟时间</dt><dd>{formatDuration(s.wallSeconds)}</dd></dl>
+          <p className="boundary">仅汇总已上报的类别；≥ 表示已知下限，未知不按 0 计。墙钟时间为首次开始到最后结束，Agent 耗时为各运行时长之和。</p>
+        </Disclosure>
         <div className="sec-h"><b>运行明细</b><span>{started.length} 次运行</span></div>
         <div className="list">{started.map((r) => {
           const t = runTokens(r);
           const v = (x: number | null) => (x === null ? '未知' : num(x));
           const c = r.usage?.estimatedCostUsd;
           return (
-            <div className="row stat-row" key={r.id}>
-              <span className="who"><span className="name">{agentLabel(r.agentId).label || '—'} · {roleLabel(r.role)} · {modelLabel(r)}</span>
-                <span className="sub">入 {v(t.input)} · 出 {v(t.output)} · 缓存读 {v(t.cacheRead)} · 缓存写 {v(t.cacheWrite)} · 合计 {v(t.total)}</span></span>
-              <span className="num"><b>{typeof c === 'number' ? `US$${c.toFixed(4)}` : '未知'}</b><small>费用</small></span>
-            </div>
+            <details className="usage-run" key={r.id}>
+              <summary className="row stat-row">
+                <span className="who"><span className="name">{taskOf(r)?.title || '未知任务'}</span>
+                  <span className="sub">{agentLabel(r.agentId).label || '—'} · {roleLabel(r.role)} · {briefModel(r)}</span></span>
+                <span className="num"><b>{v(t.total)}</b><small>token</small></span>
+                <span className="num"><b>{typeof c === 'number' ? `US$${c.toFixed(4)}` : '未知'}</b><small>费用</small></span>
+              </summary>
+              <dl className="kv usage-breakdown"><dt>输入 / 输出</dt><dd>{v(t.input)} / {v(t.output)}</dd><dt>缓存读 / 写</dt><dd>{v(t.cacheRead)} / {v(t.cacheWrite)}</dd>
+                <dt>模型</dt><dd>{modelLabel(r)}</dd><dt>运行 ID</dt><dd><code>{r.id}</code></dd></dl>
+            </details>
           );
         })}</div>
       </>
@@ -271,33 +290,58 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
     const tRuns = runs.filter((r) => r.taskId === task.id);
     const deliveries = snapshot?.deliveries.filter((d) => d.taskId === task.id) ?? [];
     const reviews = snapshot?.reviews.filter((d) => d.taskId === task.id) ?? [];
+    const currentDelivery = [...deliveries].reverse().find(d => d.candidateSha === task.candidateSha);
+    const currentReviews = currentDelivery && task.contextRef ? reviews.filter(r => r.candidateSha === task.candidateSha && r.contextDigest === task.contextRef?.digest) : [];
+    const olderDeliveries = deliveries.filter(d => d.id !== currentDelivery?.id);
+    const olderReviews = reviews.filter(r => !currentReviews.includes(r));
     const checksOf = (c: unknown) => (Array.isArray(c) ? c : c && typeof c === 'object' ? [c] : []).filter((x): x is CheckEntry => !!x && typeof x === 'object').map(checkView);
+    const currentChecks = checksOf(currentDelivery?.checks);
+    const harnessChecks = currentChecks.filter(c => c.kind === 'harness');
+    const checkSummary = [
+      harnessChecks.length ? `本地核对 ${harnessChecks.filter(c => c.outcome === '通过').length}/${harnessChecks.length} 项通过` : '',
+      currentChecks.some(c => c.kind === 'reported') ? `Agent 报告 ${currentChecks.filter(c => c.kind === 'reported').length} 项` : '',
+      currentChecks.some(c => c.kind === 'legacy') ? `历史检查 ${currentChecks.filter(c => c.kind === 'legacy').length} 项` : '',
+    ].filter(Boolean).join(' · ') || '未记录';
     return (
       <div className="scrim" onClick={(e) => { if (e.target === e.currentTarget) setOpenTask(null); }}>
         <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="mk-drawer-title" tabIndex={-1} ref={(el) => el?.focus()}>
-          <div className="dlg-h"><div><h2 id="mk-drawer-title">{task.title || '未命名任务'}</h2><div className="sub"><code>{task.id}</code><span>{taskLabel(task.state)}</span><IssueLink task={task} /></div></div>
+          <div className="dlg-h"><div><h2 id="mk-drawer-title">{task.title || '未命名任务'}</h2><div className="sub"><span>{taskLabel(task.state)}</span><IssueLink task={task} /></div></div>
             <button type="button" className="icon" aria-label="关闭" onClick={() => setOpenTask(null)}><Close /></button></div>
           <div className="dlg-b">
-            <div className="card"><h3>概览</h3><dl className="concl">
+            <section className="detail-section"><h3>当前进度</h3><dl className="concl">
               {task.progress ? <>
                 <dt>执行</dt><dd>{({ready:'待开始',queued:'排队中',running:'运行中',wrapping_up:'收尾中',paused:'已暂停',ended:'已结束',failed:'失败',blocked:'被阻塞',unknown:'未知'})[task.progress.execution]}</dd>
                 <dt>阶段</dt><dd>{({none:'尚未开始',development:'开发',review:'审查',fix:'修复',polish:'精修',recheck:'复审',complete:'流程完成'})[task.progress.phase]}</dd>
                 <dt>交付</dt><dd>{({none:'尚无候选',candidate:'候选待检查',reviewed:'当前候选已通过审查',local_delivery:'最终本地交付'})[task.progress.delivery]}</dd>
               </> : null}
               {task.state === 'queued' ? <><dt>等待原因</dt><dd>{({project_concurrency:'项目并发已满',provider_concurrency:'模型服务并发已满',concurrency:'本地并发已满',worktree:'工作目录正在使用',dependencies:'等待依赖任务',dispatch_queue:'等待调度'} as Record<string,string>)[task.stateReason ?? ''] ?? '等待调度核对'}</dd></> : null}
+              {task.stateReason && task.state !== 'queued' ? <><dt>当前限制</dt><dd>{({request_budget_unverifiable:'请求用量无法核实',dispatch_unknown:'执行结果无法核实',budget_exhausted:'预算已耗尽'} as Record<string,string>)[task.stateReason] ?? task.stateReason}</dd></> : null}
               <dt>目标</dt><dd>{task.goal || '—'}</dd>
-              <dt>基线 SHA</dt><dd><code>{task.baselineSha ?? '—'}</code></dd>
               <dt>候选 SHA</dt><dd><code>{task.candidateSha ?? '—'}</code></dd>
-              <dt>上下文</dt><dd><code>{task.contextRef ? `v${task.contextRef.version} · ${task.contextRef.digest}` : '—'}</code></dd>
-            </dl><p className="boundary">交付仅表示本地代码提交（候选 SHA）；发布、独立 QA 与客户验收是独立环节，此处不代表已完成。</p></div>
-            <div className="card"><h3>角色流程</h3><ol className="phases" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+            </dl><p className="boundary">仅本地代码交付；发布、独立 QA 与客户验收需另行确认。</p></section>
+            <section className="detail-section"><h3>角色流程</h3><ol className="phases" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
               {ROLES.map((role) => {
                 const rs = tRuns.filter((r) => r.role === role);
                 const last = rs[rs.length - 1];
                 return <li key={role} className={last ? (isActiveRun(last) ? 'cur' : 'done') : ''}>{ROLE_LABEL[role]}<br />{last ? runLabel(last.state) : '未开始'}</li>;
               })}
-            </ol></div>
-            {task.budget ? <div className="card"><h3>任务预算</h3><dl className="concl">
+            </ol></section>
+            {currentDelivery ? <section className="detail-section"><h3>{DELIVERY_LABEL[currentDelivery.state] ?? currentDelivery.state}</h3><dl className="concl">
+              <dt>检查</dt><dd>{checkSummary}{harnessChecks.filter(c => c.outcome !== '通过').map((c, i) => <p className="detail-alert" key={i}>{c.label} → {c.outcome}</p>)}</dd>
+              <dt>审查</dt><dd>{currentReviews.length ? currentReviews.map(r => <div key={r.id}>{r.verdict}</div>) : '当前候选尚无匹配的审查记录'}</dd>
+              <dt>已知缺口</dt><dd>{currentDelivery.knownGaps?.length ? <ul>{currentDelivery.knownGaps.map((g, i) => <li key={i}>{g}</li>)}</ul> : '无'}</dd>
+            </dl>{currentChecks.length ? <Disclosure title="检查明细">{currentChecks.map((c, i) => <div key={i} data-check={c.kind}>{c.kind === 'harness' ? <>{c.label} → {c.outcome}</> : <>{c.kind === 'reported' ? 'Agent 报告: ' : ''}<code>{c.label}</code> → {c.outcome}</>}</div>)}</Disclosure> : null}</section> : null}
+            {task.budgetEvidence?.warning || task.budgetEvidence?.overrun || task.budgetEvidence?.unknownRequests ? <p className="detail-alert" role="status">{[
+              task.budgetEvidence.warning ? '已达到 token 提示阈值' : '', task.budgetEvidence.overrun ? '已确认超额' : '',
+              task.budgetEvidence.unknownRequests ? `请求结果未知 ${task.budgetEvidence.unknownRequests} 次；预留占用 ${num(task.budgetEvidence.reservedTokens)} token` : '',
+            ].filter(Boolean).join(' · ')}</p> : null}
+            <Disclosure title="版本与上下文"><dl className="concl">
+              <dt>任务 ID</dt><dd><code>{task.id}</code></dd><dt>基线 SHA</dt><dd><code>{task.baselineSha ?? '—'}</code></dd>
+              <dt>上下文</dt><dd><code>{task.contextRef ? `v${task.contextRef.version} · ${task.contextRef.digest}` : '—'}</code></dd>
+              {currentDelivery ? <><dt>交付上下文</dt><dd><code>{currentDelivery.contextRef?.digest ?? '—'}</code></dd></> : null}
+              {currentReviews.map(r => <div className="review-version" key={r.id}><dt>审查版本</dt><dd><code>{r.candidateSha ?? '—'}</code></dd><dt>审查上下文</dt><dd><code>{r.contextDigest ?? '—'}</code></dd></div>)}
+            </dl></Disclosure>
+            {task.budget ? <Disclosure title="任务预算与账本"><dl className="concl">
               <dt>{task.budget.mode === 'monitor' ? 'token 提示阈值' : '原始预算'}</dt><dd>{num(task.budget.maxTokens)} token · {formatDuration(task.budget.maxWallSeconds)} · 最多 {task.budget.maxFixRounds} 轮修复{task.budget.mode === 'monitor' ? '；任务累计 token 仅监测，不因达到阈值停止' : ''}</dd>
               {task.budgetAuthorization ? <>
                 <dt>当前已授权</dt><dd>{task.budget.mode === 'monitor' ? '无任务 token 硬上限 · ' : `${num(task.budgetAuthorization.authorizedTokens)} token · `}{formatDuration(task.budgetAuthorization.authorizedWallSeconds)}</dd>
@@ -316,49 +360,51 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             </dl>{task.budgetAuthorization?.decisions.map(d=><div className="run" key={d.requestId}>
               <span className="rt">修订 {d.revision} · +{num(d.addTokens)} token · +{formatDuration(d.addWallSeconds)}</span>
               <span className="rm">{d.reason} · {formatTime(d.createdAt)} · <code>{short(d.requestId)}</code></span>
-            </div>)}{task.budgetAuthorization ? <p className="k small">追加额度保留已用 token 和耗时；任务仍需显式续跑。此面板仅展示预算决策。</p> : null}</div> : null}
-            {task.state === 'unknown' || task.recoveryEvidence?.some(r => r.state !== 'settled') ? <div className="card"><h3>中断恢复</h3>
+            </div>)}{task.budgetAuthorization ? <p className="k small">追加额度保留已用 token 和耗时；任务仍需显式续跑。此面板仅展示预算决策。</p> : null}</Disclosure> : null}
+            {task.state === 'unknown' || task.recoveryEvidence?.some(r => r.state !== 'settled') ? <section className="detail-section"><h3>中断恢复</h3>
               {task.recoveryEvidence?.filter(r => r.state !== 'settled').map(r => <div className="run" key={r.runId}>
                 <span className="rt">{roleLabel(r.role)} · {r.state === 'pending' ? '完成证据已保存，待核对' : '已恢复已完成步骤'}</span>
                 <span className="rm">Run <code>{short(r.runId)}</code> · SHA <code>{short(r.candidateSha)}</code> · {formatTime(r.recoveredAt ?? r.recordedAt)}</span>
               </div>)}
               <p className="k small">{task.recoveryEvidence?.some(r => r.state === 'pending') ? '需核对进程、会话、代码和用量后显式恢复；保存证据不会自动续跑。' : task.state === 'unknown' ? '缺少可恢复的完成证据。保留未知状态和已有修改，由协调者继续核对。' : '恢复保留原来的用量和交付版本；后续工作单独续跑。'}</p>
               <p className="k small">此面板只显示恢复记录。</p>
-            </div> : null}
-            {task.controlReceipts?.length ? <div className="card"><h3>控制回执</h3><div className="run-table">{task.controlReceipts.map(c => (
+            </section> : null}
+            {task.controlReceipts?.some(c => c.state === 'unknown' || c.runState === 'unknown') ? <p className="detail-alert" role="status">控制回执或运行结果未知，需核对原请求。</p> : null}
+            {task.controlReceipts?.length ? <Disclosure title="控制回执"><div className="run-table">{task.controlReceipts.map(c => (
               <div className="run" key={c.requestId}>
                 <span className="rt">{c.kind === 'wrap_up' ? '收尾' : c.kind === 'instruction' ? '指令' : '停止'} · {{accepted:'已保存',sending:'发送中',acknowledged:'执行器已接收',rejected:'已拒绝',unknown:'结果未知',processed:'已处理'}[c.state]}</span>
                 <span className="rm">请求 <code>{short(c.requestId)}</code> · Run <code>{short(c.runId)}</code>{c.sessionId ? <> · Session <code>{short(c.sessionId)}</code></> : null} · {formatTime(c.updatedAt)}</span>
                 <span className="rm">{c.disposition ? `协议回执：${c.disposition === 'queued' ? '已入队' : '已处理'} · ` : ''}实际运行：{runLabel(c.runState)}{c.outcome ? ` · 结束结果：${runLabel(c.outcome)}` : ' · 结束结果尚未确认'}</span>
                 {c.reason ? <span className="rm">{{run_ended_before_send:'运行已结束，指令未发送',run_interrupted:'运行中断',contract_changed:'冻结任务或配置已变更',executor_refused:'执行器拒绝指令',wrap_up_already_requested:'本轮已请求收尾，未重复发送',protocol_reply_unknown:'协议回执未确认',controller_interrupted:'服务中断，保留未知且不重发',unsupported_control:'执行器不支持此指令'}[c.reason]}</span> : null}
               </div>
-            ))}</div><p className="k small">已保存表示指令已记录；执行器已接收表示入队或处理。任务交付和进程退出需独立核实。面板只显示回执。</p></div> : null}
-            {task.sessions?.length ? <div className="card"><h3>执行会话</h3><div className="run-table">{task.sessions.map((s) => (
+            ))}</div><p className="k small">已保存表示指令已记录；执行器已接收表示入队或处理。任务交付和进程退出需独立核实。面板只显示回执。</p></Disclosure> : null}
+            {task.sessions?.some(s => s.state === 'unknown') ? <p className="detail-alert" role="status">执行会话身份未知。</p> : null}
+            {task.sessions?.length ? <Disclosure title="执行会话"><div className="run-table">{task.sessions.map((s) => (
               <div className="run" key={s.id}><span className="rt">{roleLabel(s.role)} · {s.executor}</span><span className="rr">{s.state === 'idle' ? '已核实空闲' : s.state === 'running' ? '执行中' : '身份未知'}</span>
                 <span className="rm"><code>{short(s.id)}</code> · HEAD <code>{short(s.lastSha)}</code>{s.activeRunId ? <> · Run <code>{short(s.activeRunId)}</code></> : null}</span></div>
-            ))}</div><p className="k small">会话空闲不代表任务已完成。</p></div> : null}
-            {task.checkpoints?.length ? <div className="card"><h3>保存的进度</h3><div className="run-table">{task.checkpoints.map((cp)=>(
+            ))}</div><p className="k small">会话空闲不代表任务已完成。</p></Disclosure> : null}
+            {task.checkpoints?.length ? <Disclosure title="保存的进度"><div className="run-table">{task.checkpoints.map((cp)=>(
               <div className="run" key={cp.id}><span className="rt">{roleLabel(cp.role)} · {cp.fileCount} 个文件变更</span>
                 <span className="rr">{cp.state==='saved'?'检查点已保存':'已用于续跑'}</span>
                 <span className="rm"><code>{short(cp.id)}</code> · HEAD <code>{short(cp.headSha)}</code> · {formatTime(cp.createdAt)}{cp.resumedRunId?<> · Run <code>{short(cp.resumedRunId)}</code></>:null}</span></div>
-            ))}</div><p className="k small">保存进度不代表交付。显式恢复前会核对文件、暂存区、会话和剩余额度；面板保持只读。</p></div>:null}
-            {deliveries.map((d) => (
-              <div className="card" key={d.id}><h3>{DELIVERY_LABEL[d.state] ?? d.state}</h3><dl className="concl">
+            ))}</div><p className="k small">保存进度不代表交付。显式恢复前会核对文件、暂存区、会话和剩余额度；面板保持只读。</p></Disclosure>:null}
+            {olderDeliveries.length || olderReviews.length ? <Disclosure title="其他交付与审查记录">{olderDeliveries.map((d) => (
+              <section className="detail-section" key={d.id}><h3>{DELIVERY_LABEL[d.state] ?? d.state}</h3><dl className="concl">
                 <dt>候选 SHA</dt><dd><code>{d.candidateSha}</code></dd>
                 <dt>上下文</dt><dd><code>{d.contextRef?.digest ?? '—'}</code></dd>
                 <dt>检查</dt><dd>{checksOf(d.checks).length ? checksOf(d.checks).map((c, i) => <div key={i} data-check={c.kind}>{c.kind === 'harness' ? <>{c.label} → {c.outcome}</> : <>{c.kind === 'reported' ? 'Agent 报告: ' : ''}<code>{c.label}</code> → {c.outcome}</>}</div>) : '未记录'}</dd>
                 <dt>已知缺口</dt><dd>{d.knownGaps?.length ? <ul>{d.knownGaps.map((g, i) => <li key={i}>{g}</li>)}</ul> : '无'}</dd>
-              </dl></div>
+              </dl></section>
             ))}
-            {reviews.map((r) => (
-              <div className="card" key={r.id}><h3>审查结论</h3><dl className="concl">
+            {olderReviews.map((r) => (
+              <section className="detail-section" key={r.id}><h3>审查结论</h3><dl className="concl">
                 <dt>结论</dt><dd>{r.verdict}</dd><dt>候选 SHA</dt><dd><code>{r.candidateSha ?? '—'}</code></dd><dt>上下文摘要</dt><dd><code>{r.contextDigest ?? '—'}</code></dd>
-              </dl></div>
-            ))}
-            <div className="card"><h3>历史</h3>{tRuns.length ? <div className="run-table">{tRuns.map((r) => (
+              </dl></section>
+            ))}</Disclosure> : null}
+            <Disclosure title="运行历史">{tRuns.length ? <div className="run-table">{tRuns.map((r) => (
               <div className="run" key={r.id}><span className="rt">{roleLabel(r.role)} · {agentLabel(r.agentId).label || '—'}</span><span className="rr">{runLabel(r.state)}</span>
                 <span className="rm"><span className="rid">{short(r.id)}</span> · {modelLabel(r)} · {formatTime(r.startedAt)} → {r.endedAt ? formatTime(r.endedAt) : '—'}</span></div>
-            ))}</div> : <p className="k">尚无运行。</p>}</div>
+            ))}</div> : <p className="k">尚无运行。</p>}</Disclosure>
           </div>
         </aside>
       </div>
@@ -393,9 +439,12 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             {snapshot?.projects.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
           </select>
         </label>
-        <span className="state-sum">运行中 <b>{countText(counts?.running)}</b> · 独立 <b>{stale ? '未知' : independent.length}</b></span>
         <span className={`notice${stale ? ' stale' : ''}`} role="status" aria-live="polite">{stale ? '已断连 · 快照已过期' : connected ? '已连接' : '正在连接…'}</span>
       </div>
+      <details className="health">
+        <summary><span className="state-sum">运行中 <b>{countText(counts?.running)}</b> · 排队 <b>{countText(counts?.queued)}</b> · 未知 <b>{countText(counts?.unknown)}</b>{independent.length || stale ? <> · 独立 <b>{stale ? '未知' : independent.length}</b></> : null}</span></summary>
+        <div className="health-body">Codex · 协调者 · 本地调度器：{stale ? '未知' : ({running:'运行中',idle:'空闲',unknown:'未知'})[snapshot?.controller?.state ?? 'unknown']}<br />心跳 {formatTime(snapshot?.controller?.heartbeatAt)} · {stale ? '快照' : '更新于'} {formatTime(snapshot?.observedAt)}</div>
+      </details>
       <main className="view">
         <section aria-label={view}>{view === 'agents' ? AgentsView() : view === 'tasks' ? TasksView() : UsageView()}</section>
       </main>

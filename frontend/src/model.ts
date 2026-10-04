@@ -52,6 +52,7 @@ export function dedupLegacy(snapshot: Snapshot | null, legacy: LegacyActive[]): 
 export const lastEvent = (r: Run) => (r.events && r.events.length ? r.events[r.events.length - 1] : undefined);
 
 export function eventLabel(e: { type: string; summary?: string }): string {
+	if (e.type === 'lifecycle') return ({started:'执行开始',assistant_message:'模型返回消息',settled:'执行结束',failed:'执行器返回失败'} as Record<string,string>)[e.summary ?? ''] ?? e.summary ?? e.type;
 	if(e.type==='checkpoint'&&e.summary==='saved') return '检查点已保存，等待显式恢复';
   if (e.type === 'budget' && e.summary === 'wrap_up_requested') return '预算临界，已请求收尾';
   if (e.type === 'budget' && e.summary === 'wrap_up_accepted') return '收尾请求已接受，等待执行结束';

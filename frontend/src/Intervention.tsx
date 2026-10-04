@@ -70,10 +70,8 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
     finally { if (alive.current) setQuerying(false); }
   };
   return <section className="intervention" aria-label="Agent 干预">
-    <div className="sec-h"><b>干预当前 Agent</b><span className="end">同一执行会话</span></div>
-    <p className="k small">在原任务范围内补充要求或纠正方向。指令会在当前工具调用后交给 Agent。</p>
-    <label className="lbl" htmlFor={`instruction-${run.id}`}>指令</label>
-    <textarea id={`instruction-${run.id}`} value={text} rows={3} placeholder="例如：先完成接口，暂缓样式调整。" disabled={!canSend || unresolved(entry)} onChange={e => setText(e.target.value)} />
+    <label className="instruction-label" htmlFor={`instruction-${run.id}`}>指令</label>
+    <textarea id={`instruction-${run.id}`} value={text} rows={2} placeholder="补充要求或纠正方向，例如：先完成接口。请勿填写密钥。" disabled={!canSend || unresolved(entry)} onChange={e => setText(e.target.value)} />
     <div className="inline-actions mt">
       <button className="btn primary" type="button" disabled={!canSend || unresolved(entry) || !text.trim() || tooLong} onClick={() => void send()}>发送指令</button>
       <button className="btn" type="button" disabled={disabled || !!stop || run.stopRequested || !['starting','running','queued','pending'].includes(run.state)} onClick={() => void requestStop()}>停止运行</button>
@@ -86,6 +84,9 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
       <button className="btn" type="button" disabled={querying || e.status === 'pending' && !e.receipt} onClick={() => void query(e, isStop)}>查询回执</button>
     </div> : null)}
     {note ? <p className="local-note" role="status">{note}</p> : null}
-    <p className="k small">“已排队”或“已接收”不代表已完成；任务结果仍需审查。请勿在指令中填写密钥。</p>
+    <details className="instruction-help"><summary>指令如何生效</summary>
+      <p className="k small">在原任务范围内补充要求或纠正方向。指令会在当前工具调用后交给 Agent，保持同一执行会话。</p>
+      <p className="k small">“已排队”或“已接收”不代表已完成；任务结果仍需审查。请勿在指令中填写密钥。</p>
+    </details>
   </section>;
 }
