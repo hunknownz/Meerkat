@@ -53,6 +53,13 @@ it exposes neither authorization references nor authority digests.
 Changed task/profile/session/checkpoint evidence or budget revision makes the
 proposal stale. Only settled inactive tasks are eligible; unknown process identity,
 unknown usage/requests or observed overruns are not repaired by adding allowance.
+A partial token breakdown is eligible only when the same Run has a closed request
+ledger, at least one settled request, no unresolved results or overruns, and raw
+request totals reconcile exactly with its recorded total. Missing input/cache
+fields and fees stay unknown; an authorized increase never rewrites prior usage.
+A known total without that matching ledger remains blocked. Fully complete
+historical usage keeps its existing eligibility checks.
+
 Active runs, completed tasks and user-canceled work cannot receive a decision.
 
 An identical request UUID/input returns the original receipt, even after later

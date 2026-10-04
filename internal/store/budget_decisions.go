@@ -166,6 +166,20 @@ func proposeBudget(q querier, st *model.State, in model.BudgetIncrease) (model.B
 			return model.BudgetProposal{}, budget.ErrUnknown
 		}
 	}
+	// Per-run request-budget ledger evidence. Every policy above is closed and
+	// every record settled or canceled, so settled request totals are the only
+	// reported token totals; canceled never-sent reservations consume no reported tokens.
+	runPolicy := map[string]bool{}
+	for _, p := range ps {
+		runPolicy[p.RunID] = true
+	}
+	runSettled, runTotal := map[string]int{}, map[string]int64{}
+	for _, rec := range rs {
+		if rec.State == budget.Settled {
+			runSettled[rec.RunID]++
+			runTotal[rec.RunID] += *rec.Settlement.Tokens.Total
+		}
+	}
 	ss, e := sessions(q, t.ID)
 	if e != nil {
 		return model.BudgetProposal{}, e
@@ -184,8 +198,19 @@ func proposeBudget(q querier, st *model.State, in model.BudgetIncrease) (model.B
 			return model.BudgetProposal{}, budget.ErrUnknown
 		}
 		if model.RunHadProcess(r) {
-			if r.Usage == nil || r.Usage.UsageCompleteness != model.UsageComplete || r.Usage.Tokens.Total == nil {
+			if r.Usage == nil || r.Usage.Tokens.Total == nil {
 				return model.BudgetProposal{}, budget.ErrUnknown
+			}
+			if r.Usage.UsageCompleteness != model.UsageComplete {
+				// A partial reported breakdown is evidence only when the exact
+				// run's closed ledger records at least one settled request and the
+				// raw request totals sum exactly to the reported run total. Unknown
+				// completeness, a missing ledger for this run, pending requests and
+				// mismatched totals are still unresolved.
+				if r.Usage.UsageCompleteness != model.UsagePartial || !runPolicy[r.ID] ||
+					runSettled[r.ID] < 1 || runTotal[r.ID] != *r.Usage.Tokens.Total {
+					return model.BudgetProposal{}, budget.ErrUnknown
+				}
 			}
 			a, ae := time.Parse(time.RFC3339Nano, r.StartedAt)
 			if r.EndedAt == nil {
