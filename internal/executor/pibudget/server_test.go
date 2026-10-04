@@ -88,3 +88,67 @@ func TestPrivateBudgetSocketAuthenticationReadinessAndSafeErrors(t *testing.T) {
 		t.Fatal("lost settlement not recorded")
 	}
 }
+
+func TestPrivateReportRequiresHandshakeAndDoesNotPoisonBudgetOnInvalidDraft(t *testing.T) {
+	called := 0
+	s, err := Start("fixture", "text-model", authorityFixture{}, ReportOption{Role: "developer", Write: func(_ context.Context, draft json.RawMessage) (any, error) {
+		called++
+		if string(draft) != `{"summary":"observed"}` {
+			return nil, errors.New("private report error must not escape")
+		}
+		return map[string]string{"candidateSha": strings.Repeat("a", 40)}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var cfg Config
+	json.Unmarshal([]byte(strings.TrimPrefix(s.Env(), EnvName+"=")), &cfg)
+	if cfg.ReportRole != "developer" {
+		t.Fatal("report role missing from private config")
+	}
+	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
+	}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: time.Second}
+	post := func(path, token, body string) (int, string) {
+		t.Helper()
+		r, _ := http.NewRequest("POST", "http://private"+path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+token)
+		res, err := client.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		out, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(out)
+	}
+	for _, token := range []string{"foreign", cfg.Token} {
+		if status, _ := post("/report", token, `{"summary":"observed"}`); status != http.StatusForbidden {
+			t.Fatal("report accepted before authenticated handshake")
+		}
+	}
+	if called != 0 {
+		t.Fatal("unauthorized writer invoked")
+	}
+	if status, _ := post("/ready", cfg.Token, `{"version":"pi-http-v1","piVersion":"0.99.1","provider":"fixture","model":"text-model","api":"openai-completions","installed":true}`); status != http.StatusOK {
+		t.Fatal("handshake rejected")
+	}
+	for _, body := range []string{`{}`, `{} {}`, strings.Repeat("x", 65537)} {
+		if status, out := post("/report", cfg.Token, body); status != http.StatusBadRequest || strings.Contains(out, "private") {
+			t.Fatal(status, out)
+		}
+		if denied, unknown := s.Outcome(); denied || unknown {
+			t.Fatal("invalid report poisoned model settlement")
+		}
+		select {
+		case <-s.Halt():
+			t.Fatal("invalid report halted budget")
+		default:
+		}
+	}
+	if status, out := post("/report", cfg.Token, `{"summary":"observed"}`); status != http.StatusOK || !strings.Contains(out, "candidateSha") {
+		t.Fatal(status, out)
+	}
+}

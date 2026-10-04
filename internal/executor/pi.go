@@ -176,6 +176,9 @@ func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
 	if req.Role == "reviewer" {
 		tools = "read,bash"
 	}
+	if req.Session != nil && req.Budget != nil {
+		tools += ",meerkat_report"
+	}
 	prompt := buildPrompt(req, wt, out.report, instr)
 	if req.Session != nil {
 		b := *req.Session
@@ -253,6 +256,10 @@ func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 	}
 	for _, in := range instr {
 		parts = append(parts, "", "## Project instructions: "+in[0], in[1])
+	}
+	if req.Session != nil && req.Budget != nil {
+		parts = append(parts, "", "## Role report", "After finishing your scoped work and any required commit, call meerkat_report. Supply summary, checks with exact command/result fields, knownGaps, and decision (developer/polisher) or verdict/findings (reviewer). Do not write the private report file manually. Do not supply candidateSha or contextDigest: Go derives those exact bindings. Include only checks you actually ran; use [] if none. A successful tool reply confirms the report was saved, not final delivery. End the turn after a successful report; a new commit would invalidate that report.")
+		return strings.Join(parts, "\n")
 	}
 	digest, shaHint := "null (write null when there is no frozen context)", "the final HEAD after your work (`git rev-parse HEAD`)"
 	if req.ContextDigest != "" {

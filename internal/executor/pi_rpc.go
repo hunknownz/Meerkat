@@ -65,7 +65,7 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	var bridge *pibudget.Server
 	if req.Budget != nil {
 		var err error
-		bridge, err = pibudget.Start(req.Profile.Provider, req.Profile.Model, req.Budget)
+		bridge, err = pibudget.Start(req.Profile.Provider, req.Profile.Model, req.Budget, pibudget.ReportOption{Role: req.Role, Write: reportWriter(req, pp)})
 		if err != nil {
 			o.stop = CatBudgetGate
 			return o

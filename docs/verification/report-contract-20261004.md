@@ -16,7 +16,7 @@ pseudo-JSON shape (`{"candidateSha","contextDigest",...}`) that was not valid
 JSON, so models reconstructed the report from prose and guessed at both
 the shape and the digest form.
 
-## Fix
+## Earlier prompt fix
 
 `buildPrompt` now appends a role-specific, deterministic, valid JSON example
 built with `json.Marshal` (`SetEscapeHTML(false)`) via the new `reportExample`
@@ -67,3 +67,30 @@ quotes, backslashes and Unicode. Stale SHA/context validation and all report
 schema checks remain unchanged.
 
 Coordinator review removed sample pass evidence. Examples now leave checks empty; the prompt requires actual command outcomes. The Pi developer candidate used 649,025 confirmed tokens over 13 requests and 294.116 wall seconds. Fees and missing breakdown fields remain unknown. This was one developer run, reviewed by the coordinator; it was not the complete automated workflow.
+
+
+## Structured submission
+
+A later paid continuation still produced a 39-character SHA and used
+`observed` instead of `result` in a check. It remains a failed run, with its
+commit and usage preserved. Prompt examples alone did not remove transcription
+errors.
+
+In budget-gated Pi RPC sessions, `meerkat_report` now accepts only role
+conclusions and observed checks. Go supplies the exact current HEAD and frozen
+Context, validates the complete report and writes a new private file. Reviewers
+must still be on the expected SHA. The final executor checks remain unchanged;
+a saved report is not a delivery. Non-RPC compatibility uses the earlier
+manual report contract.
+
+The tool is explicitly included in Pi's restricted tool list. All three role
+schemas were exercised by installed Pi 0.99.1 against an isolated loopback
+model: real tool execution, exact bindings, private report output and settled
+requests passed. No paid request was made in these checks.
+
+Focused Go race checks passed. The bridge's 14 Node tests passed, including
+report registration before session start and no silent retry of failed report
+submission. Invalid drafts do not turn model settlement into unknown usage.
+Changed duplicate reports and symlinks are rejected; identical reports return
+the same receipt without a model call. Model-provided SHA/Context overrides,
+wrong role fields and unknown nested check fields are rejected.

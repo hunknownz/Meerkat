@@ -7,6 +7,36 @@ const payload = () => ({ model: config.model, messages: [{ role: 'user', content
 const input = value => new Request('http://127.0.0.1/fixture', { method: 'POST', body: JSON.stringify(value), headers: { 'Content-Type': 'application/json' } });
 const data = value => `data: ${JSON.stringify(value)}\n\n`;
 const usage = { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: 30 } };
+
+test('role report tool registers before session start and forwards only conclusions once', async () => {
+  for (const reportRole of ['developer', 'polisher', 'reviewer']) {
+    let tool, start;
+    const calls = [];
+    const receipt = { candidateSha: 'a'.repeat(40), contextDigest: 'sha256:fixture', reportDigest: 'b'.repeat(64) };
+    await installBridge({ registerTool: value => tool = value, on: (_event, fn) => start = fn }, '0.99.1', { ...config, reportRole }, async (_cfg, path, draft) => {
+      calls.push({ path, draft }); return receipt;
+    });
+    assert.equal(typeof start, 'function');
+    assert.equal(tool.name, 'meerkat_report');
+    assert.equal(tool.parameters.additionalProperties, false);
+    assert.equal(tool.parameters.properties.candidateSha, undefined);
+    assert.equal(tool.parameters.properties.contextDigest, undefined);
+    assert.deepEqual(tool.parameters.properties.checks.items.required, ['command', 'result']);
+    const draft = { summary: 'Observed', checks: [], knownGaps: [], ...(reportRole === 'reviewer' ? { verdict: 'pass', findings: [] } : { decision: 'no_change' }) };
+    assert.deepEqual(Object.keys(draft).sort(), tool.parameters.required.toSorted());
+    const result = await tool.execute('call-1', draft);
+    assert.deepEqual(calls, [{ path: '/report', draft }]);
+    assert.deepEqual(result.details, receipt);
+    assert.deepEqual(JSON.parse(result.content[0].text), receipt);
+  }
+});
+
+test('failed report submission is never silently retried', async () => {
+  let tool, calls = 0;
+  await installBridge({ registerTool: value => tool = value, on: () => {} }, '0.99.1', { ...config, reportRole: 'developer' }, async () => { calls++; throw Error('report_invalid'); });
+  await assert.rejects(tool.execute('call-1', { summary: 'Observed', checks: [], knownGaps: [], decision: 'no_change' }));
+  assert.equal(calls, 1);
+});
 function authority(events, mutate = () => {}) {
   return async (_config, path, value) => {
     events.push({ path, value }); mutate(path, value);

@@ -30,11 +30,12 @@ const EnvName = "MEERKAT_PRIVATE_BUDGET"
 const Version = "pi-http-v1"
 
 type Config struct {
-	Socket   string `json:"socket"`
-	Token    string `json:"token"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	Version  string `json:"version"`
+	Socket     string `json:"socket"`
+	Token      string `json:"token"`
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	Version    string `json:"version"`
+	ReportRole string `json:"reportRole,omitempty"`
 }
 
 type Server struct {
@@ -49,7 +50,16 @@ type Server struct {
 	unknown             bool
 }
 
-func Start(provider, model string, a budget.Authority) (*Server, error) {
+type ReportWriter func(context.Context, json.RawMessage) (any, error)
+type ReportOption struct {
+	Role  string
+	Write ReportWriter
+}
+
+func Start(provider, model string, a budget.Authority, report ...ReportOption) (*Server, error) {
+	if len(report) > 1 || len(report) == 1 && (report[0].Write == nil || report[0].Role != "developer" && report[0].Role != "reviewer" && report[0].Role != "polisher") {
+		return nil, budget.ErrConflict
+	}
 	// macOS Unix socket paths have a small limit; use a short, owned 0700 directory.
 	dir, err := os.MkdirTemp("/tmp", "mkb-")
 	if err != nil {
@@ -73,6 +83,10 @@ func Start(provider, model string, a budget.Authority) (*Server, error) {
 		return nil, budget.ErrUnknown
 	}
 	cfg := Config{Socket: filepath.Join(dir, "gate.sock"), Token: hex.EncodeToString(raw[:]), Provider: provider, Model: model, Version: Version}
+	var writer ReportWriter
+	if len(report) == 1 {
+		cfg.ReportRole, writer = report[0].Role, report[0].Write
+	}
 	ln, err := net.Listen("unix", cfg.Socket)
 	if err != nil {
 		return nil, budget.ErrUnknown
@@ -88,7 +102,12 @@ func Start(provider, model string, a budget.Authority) (*Server, error) {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 8192)
+		w.Header().Set("Content-Type", "application/json")
+		bodyLimit := int64(8192)
+		if r.URL.Path == "/report" {
+			bodyLimit = 65536
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		decode := func(v any) error {
 			d := json.NewDecoder(r.Body)
 			d.DisallowUnknownFields()
@@ -115,6 +134,19 @@ func Start(provider, model string, a budget.Authority) (*Server, error) {
 			return
 		}
 		switch r.URL.Path {
+		case "/report":
+			var draft json.RawMessage
+			err = decode(&draft)
+			if err == nil && writer != nil {
+				value, err = writer(r.Context(), draft)
+			} else {
+				err = budget.ErrConflict
+			}
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "report_invalid"})
+				return
+			}
 		case "/ready":
 			var v struct {
 				Version   string `json:"version"`

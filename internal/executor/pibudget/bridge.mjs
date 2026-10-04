@@ -157,6 +157,30 @@ export function createGatedFetch(config, baseFetch = globalThis.fetch, communica
 }
 
 export async function installBridge(pi, piVersion, config, communicate = channel) {
+  if (config.reportRole) {
+    if (!['developer', 'reviewer', 'polisher'].includes(config.reportRole) || typeof pi.registerTool !== 'function') throw failure();
+    const text = maxLength => ({ type: 'string', minLength: 1, maxLength });
+    const properties = {
+      summary: text(4000),
+      checks: { type: 'array', maxItems: 50, items: { type: 'object', additionalProperties: false,
+        required: ['command', 'result'], properties: { command: text(500), result: text(1000) } } },
+      knownGaps: { type: 'array', maxItems: 50, items: text(1000) },
+    };
+    if (config.reportRole === 'reviewer') {
+      properties.verdict = { type: 'string', enum: ['pass', 'changes_requested'] };
+      properties.findings = { type: 'array', maxItems: 100, items: { type: 'object', additionalProperties: false,
+        required: ['id', 'summary'], properties: { id: text(100), summary: text(2000), path: text(500), line: { type: 'integer', minimum: 1 } } } };
+    } else properties.decision = { type: 'string', enum: ['changed', 'no_change'] };
+    pi.registerTool({ name: 'meerkat_report', label: 'Submit role report',
+      description: 'Save your final role report. Supply only actual conclusions and observed check results. Go derives the exact Git SHA and frozen Context. Do not write the report file manually.',
+      promptSnippet: 'Submit the final role report with exact observed checks; Go supplies SHA and Context.',
+      parameters: { type: 'object', additionalProperties: false, required: Object.keys(properties), properties },
+      async execute(_id, draft) {
+        const result = await communicate(config, '/report', draft);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
+      },
+    });
+  }
   let installed = false;
   pi.on('session_start', async (_event, ctx) => {
     const selected = ctx.model;
