@@ -45,3 +45,21 @@ replayed. Usage/fee remain unknown and its reservation remains in SQLite.
 
 Fresh beta.12 rendering in the real Codex panel is pending. Installation/resource
 checks and browser screenshots must not be used to mark that gate complete.
+
+## Local installation
+
+- The implementation is committed at `26ea746c11f6d96c92fb277fb743963ad44f4d8c`
+  and integrated into `main`. The Git marketplace was refreshed and installed
+  plugin metadata reports `0.4.0-beta.12`.
+- A macOS arm64 binary was built from that clean committed tree and installed
+  through `scripts/setup.mjs` with its release metadata and checksums. The live
+  service reports beta.12. This check covers this host, not a public release matrix.
+- The old idle service was stopped, an offline consistent SQLite backup was made,
+  and the new service was started. All 26 tasks, 35 runs, deliveries, reviews,
+  contexts, profiles, counts and usage matched before and after switching.
+- A fresh MCP stdio launch from the installed plugin reports beta.12 and returns
+  exactly the installed `ui://meerkat/monitor` resource. Its HTML SHA-256 is
+  `f785df4713719806a934f3f81a6a7373adb27d5adf25eca92e69619137e80e05`.
+- The already-open Codex panel still renders the old MCP process. The maintainer
+  has been asked to reopen the panel or restart Codex so the new host rendering
+  can be checked. No published release or fresh host acceptance is claimed here.
