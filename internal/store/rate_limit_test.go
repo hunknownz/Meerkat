@@ -61,7 +61,7 @@ func TestRateLimitRequiresDefiniteRejectionAndBoundsNewAttempts(t *testing.T) {
 	}
 	_, ev, err := s.ExecutionEvidence(p.TaskID)
 	if err != nil || ev.UnknownRequests != 0 || ev.PendingRequests != 0 || ev.ConfirmedTokens != 0 {
-		t.Fatal(ev, err)
+		 t.Fatal(ev, err)
 	}
 	out, err := s.CloseRequestBudgetOwned(l.Token, p.RunID)
 	if err != nil || !out.Confirmed {

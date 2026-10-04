@@ -48,7 +48,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.12` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
+Version `0.4.0-beta.13` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
 
 ```sh
 codex plugin marketplace add hunknownz/Meerkat --ref main
@@ -56,7 +56,7 @@ codex plugin add meerkat@meerkat
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.12
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.13
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
 export MY_PROVIDER_KEY=...        # in your own shell only
 node scripts/launch.mjs serve --port 47826

@@ -68,6 +68,12 @@ func TestReportExampleParsesForEachRole(t *testing.T) {
 		if !strings.Contains(p, digestInstruction) {
 			t.Fatalf("%s prompt lacks the byte-for-byte digest instruction:\n%s", role, p)
 		}
+		var report struct {
+			Checks []map[string]string `json:"checks"`
+		}
+		if err := json.Unmarshal(ex, &report); err != nil || len(report.Checks) != 0 {
+			t.Fatal("example fabricated check evidence", err)
+		}
 	}
 }
 

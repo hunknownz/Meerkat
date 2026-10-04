@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.12` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.13` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.12
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.13
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.12` / `--branch v0.4.0-beta.12`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.13` / `--branch v0.4.0-beta.13`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
@@ -101,7 +101,7 @@ execution-readiness guarantee. See [diagnostics](doctor.md).
 
 Start a new Codex chat (or restart Codex) after installing, then ask: `打开 Meerkat 面板`.
 This calls the MCP Apps tool `open_monitor` (global or per-thread entrypoint); the local stdio monitor
-supports bounded human instructions and stopping through app-only host tools; settings stay read-only.
+supports bounded directions, follow-ups, graceful pause and stopping through app-only host tools; settings stay read-only.
 The beta.11 panel, live snapshots, task details, usage and read-only settings
 were verified inside Codex on 2026-10-04. The global entry and native instruction,
 receipt and stop transport also passed with local protocol fixtures. A real

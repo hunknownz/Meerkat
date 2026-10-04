@@ -11,9 +11,9 @@ that fails either binding as `report_stale`, unchanged by this work.
 Two real Pi reviewers normalized `contextDigest` by dropping the `sha256:`
 prefix before writing their role report. The reports were otherwise well formed,
 but the strict byte-for-byte comparison in the executor rejected them as
-`report_stale`. Root cause: `buildPrompt` in `internal/executor/pi.go` showed a
+`report_stale`. A contributing prompt problem: `buildPrompt` in `internal/executor/pi.go` showed a
 pseudo-JSON shape (`{"candidateSha","contextDigest",...}`) that was not valid
-JSON, so models had to reconstruct the report from prose and guessed at both
+JSON, so models reconstructed the report from prose and guessed at both
 the shape and the digest form.
 
 ## Fix
@@ -34,13 +34,13 @@ and parse as JSON for each supported role.
 ### Developer and polisher (decision `changed` | `no_change`)
 
 ```json
-{"candidateSha":"<final HEAD from git rev-parse HEAD>","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","summary":"Implemented the task; all local checks pass.","checks":[{"command":"go test ./internal/executor -count=1","result":"pass"}],"knownGaps":[],"decision":"changed"}
+{"candidateSha":"<final HEAD from git rev-parse HEAD>","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","summary":"<summarize the actual work>","checks":[],"knownGaps":[],"decision":"changed"}
 ```
 
 ### Reviewer (verdict `pass` | `changes_requested`)
 
 ```json
-{"candidateSha":"0c9a1f2b3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e9","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","verdict":"pass","summary":"Reviewed the candidate against the task; all local checks pass.","findings":[],"checks":[{"command":"go test ./internal/executor -count=1","result":"pass"}],"knownGaps":[]}
+{"candidateSha":"0c9a1f2b3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e9","contextDigest":"sha256:7357b2dd4b2ba0f835799a19c222a78259b54bcd1bda781ddaf590a7a1b22c36","verdict":"pass","summary":"<summarize the actual review>","findings":[],"checks":[],"knownGaps":[]}
 ```
 
 The reviewer example carries the exact reviewed SHA; in a real run that value is
@@ -65,3 +65,5 @@ reviewer example passing strict report validation with the exact
 `ExpectedSHA`, and prompt robustness when the task brief and context contain
 quotes, backslashes and Unicode. Stale SHA/context validation and all report
 schema checks remain unchanged.
+
+Coordinator review removed sample pass evidence. Examples now leave checks empty; the prompt requires actual command outcomes. The Pi developer candidate used 649,025 confirmed tokens over 13 requests and 294.116 wall seconds. Fees and missing breakdown fields remain unknown. This was one developer run, reviewed by the coordinator; it was not the complete automated workflow.

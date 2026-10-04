@@ -264,6 +264,7 @@ func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 	parts = append(parts, "", "## Role report", "Report file: "+report, "Context digest: "+digest,
 		"When finished, write one JSON object (max 65536 bytes) to the report file above (outside the worktree; create it as a new regular file, never a symlink).",
 		"Set candidateSha to "+shaHint+" and contextDigest to the literal context digest above: copy it byte-for-byte including any sha256: prefix; never normalize, truncate, or re-derive it; write the JSON null value when the digest is null.",
+		"Replace example summary, decision/verdict, findings and gaps with your actual result. checks must contain only commands you actually ran with observed outcomes; leave it empty if none ran. The example is not evidence of a passing task.",
 		"The report must be valid JSON matching this exact shape:", "", "```json", reportExample(req.Role, req.ContextDigest, req.ExpectedSHA), "```")
 	return strings.Join(parts, "\n")
 }
@@ -273,7 +274,7 @@ func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 // polisher examples carry a placeholder the model must substitute with the
 // final HEAD. contextDigest is embedded literally, or null when absent.
 func reportExample(role, contextDigest, expectedSHA string) string {
-	checks := []map[string]string{{"command": "go test ./internal/executor -count=1", "result": "pass"}}
+	checks := []map[string]string{}
 	digest := any(nil)
 	if contextDigest != "" {
 		digest = contextDigest
@@ -292,7 +293,7 @@ func reportExample(role, contextDigest, expectedSHA string) string {
 			Findings      []map[string]string `json:"findings"`
 			Checks        []map[string]string `json:"checks"`
 			KnownGaps     []string            `json:"knownGaps"`
-		}{CandidateSHA: sha, ContextDigest: digest, Verdict: "pass", Summary: "Reviewed the candidate against the task; all local checks pass.", Findings: []map[string]string{}, Checks: checks, KnownGaps: []string{}}
+		}{CandidateSHA: sha, ContextDigest: digest, Verdict: "pass", Summary: "<summarize the actual review>", Findings: []map[string]string{}, Checks: checks, KnownGaps: []string{}}
 	} else {
 		ex = struct {
 			CandidateSHA  string              `json:"candidateSha"`
@@ -301,7 +302,7 @@ func reportExample(role, contextDigest, expectedSHA string) string {
 			Checks        []map[string]string `json:"checks"`
 			KnownGaps     []string            `json:"knownGaps"`
 			Decision      string              `json:"decision"`
-		}{CandidateSHA: sha, ContextDigest: digest, Summary: "Implemented the task; all local checks pass.", Checks: checks, KnownGaps: []string{}, Decision: "changed"}
+		}{CandidateSHA: sha, ContextDigest: digest, Summary: "<summarize the actual work>", Checks: checks, KnownGaps: []string{}, Decision: "changed"}
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

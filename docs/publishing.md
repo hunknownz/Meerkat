@@ -1,6 +1,6 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.12`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.13`.
 
 ## GitHub repository (current)
 
@@ -12,7 +12,7 @@ Meerkat has two independent distribution paths. Only the first is used for `0.4.
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.12` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.13` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
   Until then, use the documented source build in [install](install.md); no
   nonexistent release download is required for the repository installation.
 
@@ -37,3 +37,5 @@ Those fixtures made no model request; combined native-panel and paid-executor
 acceptance remains separate. Beta.12 simplifies the shared monitor layout.
 See [host acceptance and limits](codex-ui-acceptance.md) and
 [UI simplification](../design/ui-simplification-20261004.md) for the current checks.
+
+Beta.13 adds graceful pause and same-session follow-up controls, retained retry decisions for gateways proving rejection before generation, and richer nullable metrics export. New host buttons and the real pause/continuation scenario require their own evidence; earlier panel acceptance is not substituted.

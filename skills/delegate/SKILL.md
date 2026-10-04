@@ -19,4 +19,9 @@ cannot continue delegate tasks. An exhausted allowance needs a separately
 [authorized budget decision](../../docs/budget-decisions.md) before continuing.
 Unknown or changed evidence stays blocked; never recreate the task to bypass it.
 
+For an authorized graceful pause, use the panel or `control pause` bound to the
+exact Run/Session and a stable UUID. Query the same receipt; acknowledgement
+alone is not a checkpoint. Bounded follow-ups use the same Session and frozen
+scope. See [Run controls](../../docs/run-controls.md).
+
 This path runs only the developer, with explicit continuation when needed and no automated review loop. Push, merge, Issue comments and deployment require corresponding authorization. Worktrees isolate Git state; they are not an execution sandbox. Never print keys or pass them as arguments.

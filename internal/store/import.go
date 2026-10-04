@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	budget "github.com/hunknownz/Meerkat/internal/requestbudget"
 )
 
 // Import limits.
@@ -1259,7 +1260,14 @@ type MetricsRow struct {
 	TestSeconds  *float64 `json:"testSeconds"`
 	FixRound     *int     `json:"fixRound"`
 	// Additive project linkage from stored task/history references; unknown is null (JSON) / empty (CSV).
-	ProjectID *string `json:"projectId"`
+	ProjectID           *string `json:"projectId"`
+	AgentID             *string `json:"agentId"`
+	SessionID           *string `json:"sessionId"`
+	RequestCount        *int64  `json:"requestCount"`
+	UnknownRequests     *int64  `json:"unknownRequests"`
+	RateLimitedRequests *int64  `json:"rateLimitedRequests"`
+	CheckpointID        *string `json:"checkpointId"`
+	FirstReviewPass     *bool   `json:"firstReviewPass"`
 }
 
 // optProject returns a stored project reference, or nil when unknown (never guessed).
@@ -1304,6 +1312,7 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 		}
 	}
 	seen := map[string]bool{}
+	firstReviewedRun := map[string]bool{}
 	out := []MetricsRow{}
 	for _, r := range st.Runs {
 		seen[r.ID] = true
@@ -1320,6 +1329,49 @@ func (s *Store) MetricsRows() ([]MetricsRow, error) {
 			row.ProjectID = optProject(t.ProjectID)
 		}
 		fillUsage(&row, r.Usage)
+		row.AgentID = optProject(r.AgentID)
+		ss, err := s.SessionForRun(r.ID)
+		if err == nil {
+			row.SessionID = &ss.ID
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		records, err := s.RequestBudgetRecords(r.ID)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		if len(records) > 0 {
+			count, unknown, limited := int64(len(records)), int64(0), int64(0)
+			for _, record := range records {
+				if record.State == budget.Unknown {
+					unknown++
+				}
+				if record.State == budget.RateLimited {
+					limited++
+				}
+			}
+			row.RequestCount, row.UnknownRequests, row.RateLimitedRequests = &count, &unknown, &limited
+		}
+		if r.Role == "reviewer" && !firstReviewedRun[r.TaskID] {
+			firstReviewedRun[r.TaskID] = true
+			for _, review := range st.Reviews {
+				if review.RunID == r.ID {
+					pass := review.Verdict == "pass"
+					row.FirstReviewPass = &pass
+					break
+				}
+			}
+		}
+		checkpoints, err := s.CheckpointsForTask(r.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		for _, cp := range checkpoints {
+			if cp.ResumedRunID != nil && *cp.ResumedRunID == r.ID {
+				row.CheckpointID = &cp.ID
+				break
+			}
+		}
 		out = append(out, row)
 	}
 	for _, h := range hist {
@@ -1357,7 +1409,7 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 		w := csv.NewWriter(&buf)
 		_ = w.Write([]string{"source", "origin", "taskId", "runId", "role", "executor", "provider", "model", "changeId", "state", "startedAt", "endedAt",
 			"wallSeconds", "modelSeconds", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens", "usageCompleteness", "estimatedCostUsd", "usageSource",
-			"queuedAt", "queueSeconds", "testSeconds", "fixRound", "projectId"})
+			"queuedAt", "queueSeconds", "testSeconds", "fixRound", "projectId", "agentId", "sessionId", "requestCount", "unknownRequests", "rateLimitedRequests", "checkpointId", "firstReviewPass"})
 		ps := func(p *string) string {
 			if p == nil {
 				return ""
@@ -1383,9 +1435,13 @@ func (s *Store) ExportMetrics(format string) ([]byte, error) {
 			return strconv.Itoa(*p)
 		}
 		for _, r := range rows {
+			firstPass := ""
+			if r.FirstReviewPass != nil {
+				firstPass = strconv.FormatBool(*r.FirstReviewPass)
+			}
 			_ = w.Write([]string{r.Source, r.Origin, r.TaskID, r.RunID, r.Role, r.Executor, r.Provider, r.Model, ps(r.ChangeID), r.State, r.StartedAt, ps(r.EndedAt),
 				pf(r.WallSeconds), pf(r.ModelSeconds), pi(r.Input), pi(r.Output), pi(r.CacheRead), pi(r.CacheWrite), pi(r.Total), r.Completeness, pf(r.CostUsd), r.UsageSource,
-				ps(r.QueuedAt), pf(r.QueueSeconds), pf(r.TestSeconds), pn(r.FixRound), ps(r.ProjectID)})
+				ps(r.QueuedAt), pf(r.QueueSeconds), pf(r.TestSeconds), pn(r.FixRound), ps(r.ProjectID), ps(r.AgentID), ps(r.SessionID), pi(r.RequestCount), pi(r.UnknownRequests), pi(r.RateLimitedRequests), ps(r.CheckpointID), firstPass})
 		}
 		w.Flush()
 		return buf.Bytes(), w.Error()

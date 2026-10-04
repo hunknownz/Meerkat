@@ -188,7 +188,7 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 	}
 	// Additive nullable timing columns: appended after the existing columns; unknown stays null/empty.
 	header := strings.SplitN(string(csv), "\n", 2)[0]
-	if !strings.HasSuffix(header, ",usageSource,queuedAt,queueSeconds,testSeconds,fixRound,projectId") ||
+	if !strings.HasSuffix(header, ",usageSource,queuedAt,queueSeconds,testSeconds,fixRound,projectId,agentId,sessionId,requestCount,unknownRequests,rateLimitedRequests,checkpointId,firstReviewPass") ||
 		!strings.HasPrefix(header, "source,origin,taskId,runId,role,executor,provider,model,changeId,state,startedAt,endedAt,wallSeconds,modelSeconds,") {
 		t.Fatalf("csv header %s", header)
 	}
@@ -220,7 +220,7 @@ func TestImportLegacyRepeatAndHistory(t *testing.T) {
 		t.Fatalf("metrics export %s", js)
 	}
 	csv, _ = s.ExportMetrics("csv")
-	if !strings.Contains(string(csv), ","+at+",1.5,,0,"+uP+"\n") {
+	if !strings.Contains(string(csv), ","+at+",1.5,,0,"+uP+",,,,,,,\n") {
 		t.Fatalf("csv %s", csv)
 	}
 }
@@ -396,7 +396,7 @@ func TestMetricsUnknownProjectStaysEmpty(t *testing.T) {
 	csv, _ := s.ExportMetrics("csv")
 	for _, line := range strings.Split(strings.TrimSpace(string(csv)), "\n")[1:] {
 		f := strings.Split(line, ",")
-		if len(f) != 27 {
+		if len(f) != 34 {
 			t.Fatalf("column count %d: %s", len(f), line)
 		}
 		if f[3] == uSR && f[26] != "" {
