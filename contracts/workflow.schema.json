@@ -74,7 +74,8 @@
           "type": "string",
           "enum": [
             "wrap_up",
-            "stop"
+            "stop",
+            "instruction"
           ]
         },
         "state": {

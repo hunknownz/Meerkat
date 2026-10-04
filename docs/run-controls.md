@@ -16,9 +16,9 @@ node scripts/launch.mjs control receipt --request-id <uuid>
 ```
 
 MCP equivalents are `request_wrap_up` and `get_control_receipt`. They are
-model-only tools; the Codex monitor stays read-only. The authorization reference
+model-only tools. Beta.9 also supplies a separate [human intervention](ui-intervention.md) surface in the monitor. The authorization reference
 records evidence, not human authentication. It must not contain credentials.
-No arbitrary message, new requirement, extra budget or resumed task is accepted.
+The wrap-up tool accepts no arbitrary message, new requirement, extra budget or resumed task.
 The instruction uses the fixed wrap-up text and retains the original contract.
 
 | Receipt | Meaning |

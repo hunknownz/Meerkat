@@ -334,7 +334,7 @@ func (s *Server) doInitialize(params json.RawMessage) (any, *rpcError) {
 	}
 	instructions := "Read-only Meerkat monitor. Requires a running `meerkat serve` daemon; these tools never start, stop or change runs."
 	if s.Command != nil {
-		instructions = "Meerkat local monitor and run controls. Requires a running `meerkat serve` daemon. Stop acceptance is not proof of process exit. Settings affect future runs. Use control tools only within the user's authorization; a lost reply is unknown and must not trigger automatic write retries. The monitor app remains read-only."
+		instructions = "Meerkat local monitor and run controls. Requires a running `meerkat serve` daemon. Stop acceptance is not proof of process exit. Settings affect future runs. Use control tools only within the user's authorization; a lost reply is unknown and must not trigger automatic write retries. The monitor app exposes bounded human instructions and stop controls through app-only tools; settings remain read-only in the app."
 	}
 	return map[string]any{
 		"protocolVersion": version,
@@ -378,7 +378,7 @@ func (s *Server) toolList() []any {
 	open := map[string]any{
 		"name":        ToolOpenMonitor,
 		"title":       "Meerkat",
-		"description": "Open the read-only Meerkat agent monitor and summarize current task and run counts.",
+		"description": "Open the Meerkat agent monitor and summarize current task and run counts. Human controls are separate app-only actions.",
 		"inputSchema": emptySchema(),
 		"annotations": readOnly,
 		"_meta": map[string]any{
@@ -408,6 +408,7 @@ func (s *Server) toolList() []any {
 		tools = append(tools, budgetTools()...)
 		tools = append(tools, recoveryTools()...)
 		tools = append(tools, runControlTools()...)
+		tools = append(tools, interventionTools()...)
 	}
 	return tools
 }
@@ -424,7 +425,7 @@ func monitorResource() map[string]any {
 		"uri":         MonitorURI,
 		"name":        "meerkat-monitor",
 		"title":       "Meerkat Agent Monitor",
-		"description": "Read-only Meerkat monitor of local agents, tasks and usage.",
+		"description": "Meerkat monitor of local agents, tasks and usage, with bounded human instructions and stop controls.",
 		"mimeType":    MonitorMIME,
 		"_meta":       uiMeta(),
 	}
@@ -484,6 +485,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		}
 		if p.Name == ToolRequestWrapUp || p.Name == ToolGetControlReceipt {
 			return s.runControlTool(ctx, p.Name, p.Arguments)
+		}
+		if p.Name == ToolSendInstruction || p.Name == ToolInterventionReceipt || p.Name == ToolStopFromUI {
+			return s.interventionTool(ctx, p.Name, p.Arguments)
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
 	}

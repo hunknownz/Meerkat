@@ -19,6 +19,7 @@ type controlledFake struct {
 	ready           chan executor.Request
 	consume, finish chan struct{}
 	effects         atomic.Int32
+	controlCount    int
 }
 
 func (f *controlledFake) Capabilities() executor.Capabilities {
@@ -32,16 +33,18 @@ func (f *controlledFake) Execute(ctx context.Context, r executor.Request, event 
 		case <-f.consume:
 		case <-ctx.Done():
 		}
-		select {
-		case v := <-r.Controls.Messages:
-			if e := r.Controls.Authority.Begin(v.ID); e != nil {
-				return executor.Result{Category: executor.CatSessionUnknown}, e
+		for n := 0; n < max(1, f.controlCount); n++ {
+			select {
+			case v := <-r.Controls.Messages:
+				if e := r.Controls.Authority.Begin(v.ID); e != nil {
+					return executor.Result{Category: executor.CatSessionUnknown}, e
+				}
+				f.effects.Add(1)
+				if e := r.Controls.Authority.Finish(v.ID, model.ControlAcknowledged, "queued", ""); e != nil {
+					return executor.Result{}, e
+				}
+			case <-ctx.Done():
 			}
-			f.effects.Add(1)
-			if e := r.Controls.Authority.Finish(v.ID, model.ControlAcknowledged, "queued", ""); e != nil {
-				return executor.Result{}, e
-			}
-		case <-ctx.Done():
 		}
 		select {
 		case <-f.finish:

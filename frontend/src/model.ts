@@ -56,6 +56,7 @@ export function eventLabel(e: { type: string; summary?: string }): string {
   if (e.type === 'budget' && e.summary === 'wrap_up_requested') return '预算临界，已请求收尾';
   if (e.type === 'budget' && e.summary === 'wrap_up_accepted') return '收尾请求已接受，等待执行结束';
   if (e.type === 'control' && e.summary === 'wrap_up_requested') return '已请求收尾，原范围和预算不变';
+  if (e.type === 'control' && e.summary === 'instruction_acknowledged') return '执行器已接收人工指令';
   if (e.type === 'control' && e.summary === 'wrap_up_acknowledged') return '执行器已接收收尾指令，等待运行结果';
   return e.summary || e.type;
 }

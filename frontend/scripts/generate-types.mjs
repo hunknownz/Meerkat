@@ -17,7 +17,7 @@ await writeFile(new URL('src/generated/workflow.ts', root), ts);
 const ajv = new Ajv({ allErrors: false, strict: true, strictRequired: false, allowUnionTypes: true, code: { source: true, esm: true } });
 ajv.addSchema(schema);
 const id = schema.$id;
-const code = standaloneCode(ajv, { validateEnvelope: id, validateSettingsInput: `${id}#/definitions/SettingsInput` });
+const code = standaloneCode(ajv, { validateEnvelope: id, validateControlReceipt: `${id}#/definitions/ControlReceipt`, validateSettingsInput: `${id}#/definitions/SettingsInput` });
 // Ajv emits require() for its runtime helpers even in ESM mode; rewrite to static imports for bundling.
 const helpers = new Map();
 const esm = code.replace(/require\("(ajv\/dist\/runtime\/[a-z0-9]+)"\)\.default/g, (_m, mod) => {
@@ -32,4 +32,4 @@ const imports = [...helpers].map(([mod, name]) => {
   return known[mod](name);
 }).join('\n');
 await writeFile(new URL('src/generated/validate.js', root), `${banner}\n// @ts-nocheck\n${imports}\n${esm}\n`);
-await writeFile(new URL('src/generated/validate.d.ts', root), `${banner}\nexport interface Validator { (data: unknown): boolean; errors?: { instancePath: string; message?: string }[] | null }\nexport declare const validateEnvelope: Validator;\nexport declare const validateSettingsInput: Validator;\n`);
+await writeFile(new URL('src/generated/validate.d.ts', root), `${banner}\nexport interface Validator { (data: unknown): boolean; errors?: { instancePath: string; message?: string }[] | null }\nexport declare const validateEnvelope: Validator;\nexport declare const validateControlReceipt: Validator;\nexport declare const validateSettingsInput: Validator;\n`);

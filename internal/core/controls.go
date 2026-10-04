@@ -13,7 +13,19 @@ import (
 // authentication mechanism. Scope, budget and context remain frozen.
 func (c *Core) RequestWrapUp(in model.WrapUpInput) (model.ControlReceipt, error) {
 	if !model.ValidWrapUpInput(in) {
-		return model.ControlReceipt{}, invalid("explicit wrap-up authorization required")
+		return model.ControlReceipt{}, invalid("invalid wrap-up input")
+	}
+	return c.requestControl(in)
+}
+func (c *Core) RequestInstruction(in model.WrapUpInput) (model.ControlReceipt, error) {
+	if !model.ValidInstructionInput(in) {
+		return model.ControlReceipt{}, invalid("invalid instruction input")
+	}
+	return c.requestControl(in)
+}
+func (c *Core) requestControl(in model.WrapUpInput) (model.ControlReceipt, error) {
+	if !(model.ValidWrapUpInput(in) || model.ValidInstructionInput(in)) {
+		return model.ControlReceipt{}, invalid("explicit control authorization required")
 	}
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
@@ -28,12 +40,25 @@ func (c *Core) RequestWrapUp(in model.WrapUpInput) (model.ControlReceipt, error)
 		c.mu.Lock()
 		l := c.lanes[in.RunID]
 		can := !c.closed && l != nil && l.controls != nil && !l.controlClosed && l.controlSession == in.SessionID
+		if can && model.ControlKind(in) == "instruction" {
+			st, e := c.st.Read()
+			can = e == nil
+			if can {
+				r := findRun(st, in.RunID)
+				can = r != nil && (r.Role == "developer" || r.Role == "polisher")
+			}
+		}
 		c.mu.Unlock()
 		if !can {
 			return model.ControlReceipt{}, invalid("no owned Run supports this control and session")
 		}
 	}
-	_, err := c.st.RequestWrapUpOwned(c.token, in)
+	var err error
+	if model.ControlKind(in) == "instruction" {
+		_, err = c.st.RequestInstructionOwned(c.token, in)
+	} else {
+		_, err = c.st.RequestWrapUpOwned(c.token, in)
+	}
 	if err != nil {
 		return model.ControlReceipt{}, err
 	}
@@ -61,7 +86,7 @@ func (c *Core) processControls() {
 		l := c.lanes[v.Input.RunID]
 		if l != nil && l.controls != nil && !l.controlClosed && l.controlSession == v.Input.SessionID && l.controlID == "" {
 			select {
-			case l.controls <- executor.RunControl{ID: v.Input.RequestID, Kind: "wrap_up"}:
+			case l.controls <- executor.RunControl{ID: v.Input.RequestID, Kind: model.ControlKind(v.Input), Message: v.Input.Message}:
 				l.controlID = v.Input.RequestID
 			default:
 			}
@@ -121,7 +146,19 @@ func (a *controlAuthority) Finish(id, state, disposition, reason string) error {
 	if err != nil || v.Input.RunID != a.runID {
 		return store.ErrConflict
 	}
-	return c.st.FinishControlOwned(c.token, id, state, disposition, reason)
+	err = c.st.FinishControlOwned(c.token, id, state, disposition, reason)
+	if err == nil {
+		c.mu.Lock()
+		if l := c.lanes[a.runID]; l != nil && l.controlID == id {
+			l.controlID = ""
+		}
+		c.mu.Unlock()
+		select {
+		case c.kick <- struct{}{}:
+		default:
+		}
+	}
+	return err
 }
 
 func (c *Core) closeControls(runID string, l *lane) error {

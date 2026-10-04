@@ -19,11 +19,22 @@ CREATE TABLE run_controls(request_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFE
 CREATE INDEX run_controls_task ON run_controls(task_id);
 PRAGMA user_version=9;`
 
+const migrationV10 = `
+ALTER TABLE run_controls RENAME TO run_controls_v9;
+CREATE TABLE run_controls(request_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+ task_id TEXT NOT NULL REFERENCES tasks(id), session_id TEXT NOT NULL REFERENCES execution_sessions(id),
+ kind TEXT NOT NULL CHECK(kind IN ('wrap_up','instruction')), state TEXT NOT NULL, payload TEXT NOT NULL);
+INSERT INTO run_controls SELECT * FROM run_controls_v9 ORDER BY rowid;
+DROP TABLE run_controls_v9;
+CREATE INDEX run_controls_task ON run_controls(task_id);
+CREATE UNIQUE INDEX run_controls_wrap_up ON run_controls(run_id) WHERE kind='wrap_up';
+PRAGMA user_version=10;`
+
 func controlDigest(v model.ControlRecord) string {
 	return model.RecoveryDigest([]any{v.Input, v.TaskID, v.ContractDigest, v.ProfileDigest, v.CreatedAt})
 }
 func validControl(v model.ControlRecord) bool {
-	if !model.ValidWrapUpInput(v.Input) || !uuidRE.MatchString(v.TaskID) || !digestRE.MatchString(v.ContractDigest) || !digestRE.MatchString(v.ProfileDigest) || controlDigest(v) != v.Digest || !model.ValidControlState(v.State) {
+	if !(model.ValidWrapUpInput(v.Input) || model.ValidInstructionInput(v.Input)) || !uuidRE.MatchString(v.TaskID) || !digestRE.MatchString(v.ContractDigest) || !digestRE.MatchString(v.ProfileDigest) || controlDigest(v) != v.Digest || !model.ValidControlState(v.State) {
 		return false
 	}
 	start, e := time.Parse(time.RFC3339Nano, v.CreatedAt)
@@ -50,7 +61,7 @@ func loadControl(q querier, id string) (model.ControlRecord, error) {
 	if err == sql.ErrNoRows {
 		return v, ErrNotFound
 	}
-	if err != nil || json.Unmarshal(raw, &v) != nil || !validControl(v) || v.Input.RequestID != id || v.Input.RunID != rid || v.Input.SessionID != sid || v.TaskID != tid || kind != "wrap_up" || v.State != state {
+	if err != nil || json.Unmarshal(raw, &v) != nil || !validControl(v) || v.Input.RequestID != id || v.Input.RunID != rid || v.Input.SessionID != sid || v.TaskID != tid || kind != model.ControlKind(v.Input) || v.State != state {
 		return v, ErrConflict
 	}
 	return v, nil
@@ -75,6 +86,9 @@ func controlBinding(q querier, v model.ControlRecord) error {
 	if err != nil || t == nil || r == nil || r.TaskID != t.ID || ss.TaskID != t.ID || ss.ProfileID != r.ProfileID || ss.Role != r.Role || ss.ContractDigest != v.ContractDigest || ss.ProfileDigest != v.ProfileDigest || model.FrozenTaskDigest(st, *t) != v.ContractDigest {
 		return ErrConflict
 	}
+	if model.ControlKind(v.Input) == "instruction" && r.Role != "developer" && r.Role != "polisher" {
+		return ErrConflict
+	}
 	if !model.IsActiveRunState(r.State) || r.State == model.RunStopping || ss.State != model.SessionRunning || ss.ActiveRunID == nil || *ss.ActiveRunID != r.ID {
 		return ErrUnknownRun
 	}
@@ -95,9 +109,21 @@ func putControl(tx *sql.Tx, v model.ControlRecord) error {
 	return nil
 }
 func (s *Store) RequestWrapUpOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
-	var out model.ControlRecord
 	if !model.ValidWrapUpInput(in) {
-		return out, model.Invalidf("explicit wrap-up authorization required")
+		return model.ControlRecord{}, model.Invalidf("invalid wrap-up")
+	}
+	return s.requestControlOwned(token, in)
+}
+func (s *Store) RequestInstructionOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
+	if !model.ValidInstructionInput(in) {
+		return model.ControlRecord{}, model.Invalidf("invalid instruction")
+	}
+	return s.requestControlOwned(token, in)
+}
+func (s *Store) requestControlOwned(token string, in model.WrapUpInput) (model.ControlRecord, error) {
+	var out model.ControlRecord
+	if !(model.ValidWrapUpInput(in) || model.ValidInstructionInput(in)) {
+		return out, model.Invalidf("explicit control authorization required")
 	}
 	err := s.tx(func(tx *sql.Tx) error {
 		if err := checkToken(tx, token); err != nil {
@@ -118,7 +144,7 @@ func (s *Store) RequestWrapUpOwned(token string, in model.WrapUpInput) (model.Co
 		if tx.QueryRow("SELECT count(*) FROM stop_receipts WHERE request_id=?", in.RequestID).Scan(&n) != nil || n != 0 {
 			return ErrConflict
 		}
-		if tx.QueryRow("SELECT count(*) FROM run_controls WHERE run_id=?", in.RunID).Scan(&n) != nil || n != 0 {
+		if tx.QueryRow("SELECT count(*) FROM run_controls WHERE run_id=? AND kind=?", in.RunID, model.ControlKind(in)).Scan(&n) != nil || (model.ControlKind(in) == "wrap_up" && n != 0) || n >= 256 {
 			return ErrConflict
 		}
 		ss, err := loadSession(tx, in.SessionID)
@@ -134,7 +160,7 @@ func (s *Store) RequestWrapUpOwned(token string, in model.WrapUpInput) (model.Co
 		if !validControl(out) {
 			return ErrConflict
 		}
-		_, err = tx.Exec("INSERT INTO run_controls(request_id,run_id,task_id,session_id,kind,state,payload) VALUES(?,?,?,?,?,?,?)", in.RequestID, in.RunID, out.TaskID, in.SessionID, "wrap_up", out.State, mustJSON(out))
+		_, err = tx.Exec("INSERT INTO run_controls(request_id,run_id,task_id,session_id,kind,state,payload) VALUES(?,?,?,?,?,?,?)", in.RequestID, in.RunID, out.TaskID, in.SessionID, model.ControlKind(in), out.State, mustJSON(out))
 		return err
 	})
 	return out, err
@@ -284,7 +310,7 @@ func controlReceipt(v model.ControlRecord, st *model.State) model.ControlReceipt
 			outcome = &r.State
 		}
 	}
-	return model.ControlReceipt{RequestID: v.Input.RequestID, TaskID: v.TaskID, RunID: v.Input.RunID, SessionID: &v.Input.SessionID, Kind: "wrap_up", State: v.State, Disposition: v.Disposition, Reason: v.Reason, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, RunState: runState, Outcome: outcome}
+	return model.ControlReceipt{RequestID: v.Input.RequestID, TaskID: v.TaskID, RunID: v.Input.RunID, SessionID: &v.Input.SessionID, Kind: model.ControlKind(v.Input), State: v.State, Disposition: v.Disposition, Reason: v.Reason, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, RunState: runState, Outcome: outcome}
 }
 func loadStop(q querier, id string) (model.StopReceipt, error) {
 	v := model.StopReceipt{RequestID: id, Accepted: true}

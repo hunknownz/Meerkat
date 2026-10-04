@@ -1,12 +1,26 @@
-import type { LegacyActive, Snapshot, SettingsInput, WorkflowEnvelope } from './generated/workflow';
-import { validateEnvelope, validateSettingsInput } from './generated/validate.js';
+import type { ControlReceipt, LegacyActive, Snapshot, SettingsInput, WorkflowEnvelope } from './generated/workflow';
+import { validateControlReceipt, validateEnvelope, validateSettingsInput } from './generated/validate.js';
 
 export interface SnapshotUpdate { snapshot: Snapshot; legacyActive: LegacyActive[] }
 export interface StopAccepted { accepted: true; requestId: string }
+export interface InstructionInput { runId: string; sessionId: string; requestId: string; message: string }
+export interface InterventionActions {
+  send(input: InstructionInput): Promise<ControlReceipt>;
+  receipt(requestId: string): Promise<ControlReceipt>;
+  stop(runId: string, requestId: string): Promise<ControlReceipt>;
+}
+
+export function parseControlReceipt(body: unknown, requestId: string, runId?: string, sessionId?: string): ControlReceipt {
+  if (!validateControlReceipt(body)) throw new ContractError('回执格式无效，请查询原请求');
+  const rc = body as ControlReceipt;
+  if (rc.requestId !== requestId || runId && rc.runId !== runId || sessionId && (rc.sessionId !== sessionId || rc.kind !== 'instruction')) throw new ContractError('回执不属于当前请求');
+  return rc;
+}
 
 /** Host-agnostic data/action channel. Shared App never calls fetch directly. */
 export interface Transport {
   readonly readonly: boolean;
+  readonly intervention?: InterventionActions;
   read(): Promise<SnapshotUpdate>;
   /** onUpdate receives full snapshots; onStale is called immediately when the live channel fails. Returns unsubscribe. */
   subscribe(onUpdate: (u: SnapshotUpdate) => void, onStale: (message: string) => void): () => void;
@@ -15,6 +29,9 @@ export interface Transport {
 }
 
 export class ContractError extends Error {}
+export class ControlActionError extends Error {
+  constructor(readonly outcome: 'rejected' | 'not_sent' | 'unknown', message: string) { super(message); }
+}
 
 /** Runtime contract check against contracts/workflow.schema.json (standalone Ajv). */
 export function parseEnvelope(body: unknown): WorkflowEnvelope {
@@ -46,6 +63,21 @@ interface BrowserDeps {
  */
 export class BrowserTransport implements Transport {
   readonly readonly = false;
+  readonly intervention: InterventionActions = {
+    send: async (input) => {
+      const body = await this.#write('POST', `/api/workflow/runs/${encodeURIComponent(input.runId)}/instruction`, { sessionId: input.sessionId, requestId: input.requestId, message: input.message });
+      return parseControlReceipt((body as { data?: unknown })?.data, input.requestId, input.runId, input.sessionId);
+    },
+    receipt: async (id) => {
+      if (!isUuid(id)) throw new Error('无效请求 ID');
+      const body = await this.#request(`/api/workflow/controls/${encodeURIComponent(id)}`);
+      return parseControlReceipt((body as { data?: unknown })?.data, id);
+    },
+    stop: async (runId, id) => {
+      await this.stop(runId, id);
+      return this.intervention.receipt(id);
+    },
+  };
   #token = '';
   #fetch: typeof fetch;
   #ES: typeof EventSource | undefined;
@@ -70,7 +102,7 @@ export class BrowserTransport implements Transport {
       const body: unknown = await res.json().catch(() => null);
       if (!res.ok) {
         const msg = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : `HTTP ${res.status}`;
-        throw new Error(msg.slice(0, 200));
+        throw new ControlActionError(res.status >= 400 && res.status < 500 ? 'rejected' : 'unknown', msg.slice(0, 200));
       }
       return body;
     } catch (e) {

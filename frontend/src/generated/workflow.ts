@@ -189,7 +189,7 @@ export interface ControlReceipt {
   updatedAt: string;
   runState: string;
   sessionId: string | null;
-  kind: 'wrap_up' | 'stop';
+  kind: 'wrap_up' | 'stop' | 'instruction';
   state: 'accepted' | 'sending' | 'acknowledged' | 'rejected' | 'unknown' | 'processed';
   disposition: null | 'queued' | 'handled';
   reason:

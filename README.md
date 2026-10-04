@@ -48,7 +48,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.8` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
+Version `0.4.0-beta.9` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
 
 ```sh
 codex plugin marketplace add hunknownz/Meerkat --ref main
@@ -56,7 +56,7 @@ codex plugin add meerkat@meerkat
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.8
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.9
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
 export MY_PROVIDER_KEY=...        # in your own shell only
 node scripts/launch.mjs serve --port 47826
@@ -76,7 +76,7 @@ node scripts/launch.mjs stop --run <run-id> --request-id <uuid>
 node scripts/launch.mjs execute --task <task-id> --resume
 ```
 
-See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. The browser can request a stop and change future-run settings; it cannot start tasks. Codex display is read-only.
+See [task input](skills/workflow/references/task-input.md). The monitor displays active agents, tasks, deliveries and usage. Expand a running Agent to send a bounded instruction to its current session or stop it. The Codex MCP Apps panel uses host tools for these actions; settings remain read-only there. The browser also supports future-run settings. Neither panel starts tasks. See [human intervention](docs/ui-intervention.md).
 
 The runtime supports immediate `dispatch` receipts and bounded `operation` queries through CLI and MCP. All submissions share one durable queue. See [asynchronous dispatch](docs/async-dispatch.md) for request IDs, lost-reply recovery, restart behavior and current limits.
 
@@ -126,7 +126,7 @@ Metrics include Project, Task, Run, Role, Executor, Model and available change I
 
 ## Codex plugin
 
-The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens a read-only monitor (global or per-thread entrypoint). The real Codex MCP Apps panel was [verified on 2026-10-03](docs/codex-ui-acceptance.md), including Agents / Tasks / Usage and disabled writes. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
+The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens the monitor (global or per-thread entrypoint). The real Codex MCP Apps panel was [verified on 2026-10-03](docs/codex-ui-acceptance.md), including Agents / Tasks / Usage and disabled writes in beta.8. The new beta.9 human controls require separate host acceptance. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
 
 ## Development and evidence
 

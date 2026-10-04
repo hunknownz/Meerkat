@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hunknownz/Meerkat/internal/core"
 	"github.com/hunknownz/Meerkat/internal/issues"
@@ -235,6 +236,10 @@ type recoveryController interface {
 	RecoveryDecision(string) (model.RecoveryReceipt, error)
 }
 
+type instructionController interface {
+	RequestInstruction(model.WrapUpInput) (model.ControlReceipt, error)
+}
+
 type runController interface {
 	RequestWrapUp(model.WrapUpInput) (model.ControlReceipt, error)
 	ControlReceipt(string) (model.ControlReceipt, error)
@@ -248,6 +253,20 @@ func (s *Service) Do(req Request) Response {
 	default:
 	}
 	switch req.Op {
+	case "request-instruction":
+		cc, can := s.core.(instructionController)
+		if !can {
+			return bad("unknown op")
+		}
+		var in model.WrapUpInput
+		if decodeInstructionInput(req.Input, &in, "runId", "sessionId", "requestId", "message", "kind", "authorizationRef", "apply") != nil || !model.ValidInstructionInput(in) {
+			return bad("invalid instruction")
+		}
+		v, e := cc.RequestInstruction(in)
+		if e != nil {
+			return fail(e)
+		}
+		return ok(v)
 	case "request-wrap-up", "control-receipt":
 		cc, can := s.core.(runController)
 		if !can {
@@ -476,6 +495,48 @@ func decodeBudgetInput(raw []byte, out any) error {
 	}
 	if e := d.Decode(new(any)); !errors.Is(e, io.EOF) {
 		return errors.New("trailing input")
+	}
+	return nil
+}
+
+// Human control inputs are flat, bounded objects. Reject duplicate and
+// case-insensitive aliases before decoding; JSON null is never an input value.
+func decodeInstructionInput(raw []byte, out any, fields ...string) error {
+	if len(raw) == 0 || len(raw) > 32*1024 || !utf8.Valid(raw) {
+		return errors.New("invalid instruction")
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	tok, e := d.Token()
+	if e != nil || tok != json.Delim('{') {
+		return errors.New("instruction object required")
+	}
+	allowed := map[string]bool{}
+	for _, k := range fields {
+		allowed[k] = true
+	}
+	seen := map[string]bool{}
+	for d.More() {
+		tok, e = d.Token()
+		if e != nil {
+			return e
+		}
+		k, ok := tok.(string)
+		if !ok || !allowed[k] || seen[k] {
+			return errors.New("invalid instruction field")
+		}
+		seen[k] = true
+		var value json.RawMessage
+		if d.Decode(&value) != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return errors.New("invalid instruction value")
+		}
+	}
+	d = json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if e = d.Decode(out); e != nil {
+		return e
+	}
+	if e = d.Decode(new(any)); !errors.Is(e, io.EOF) {
+		return errors.New("trailing instruction")
 	}
 	return nil
 }

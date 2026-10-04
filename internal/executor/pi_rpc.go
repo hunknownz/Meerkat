@@ -213,7 +213,10 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 						uncertain, o.protocolErr = true, true
 						break waiting
 					}
-					if sent {
+					if sent && control.Kind == "instruction" {
+						safeEvent(onEvent, "control", "instruction_acknowledged")
+					}
+					if sent && control.Kind == "wrap_up" {
 						wrapSent, wrapUp, wrapTime = true, nil, nil
 						if wrapTimer != nil {
 							wrapTimer.Stop()
@@ -358,17 +361,21 @@ func sendRunControl(ctx context.Context, client *pirpc.Client, authority Control
 	reject := func(reason string) (bool, bool) {
 		return false, authority.Finish(v.ID, model.ControlRejected, "", reason) != nil
 	}
-	if v.Kind != "wrap_up" {
+	if v.Kind != "wrap_up" && v.Kind != "instruction" || v.Kind == "instruction" && !model.ValidInstructionMessage(v.Message) {
 		return reject("unsupported_control")
 	}
-	if alreadySent {
+	if alreadySent && v.Kind == "wrap_up" {
 		return reject("wrap_up_already_requested")
 	}
 	if authority.Begin(v.ID) != nil {
 		return false, true
 	}
 	sctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	rc, err := client.Steer(sctx, budgetWrapUpMessage)
+	message := budgetWrapUpMessage
+	if v.Kind == "instruction" {
+		message = v.Message
+	}
+	rc, err := client.Steer(sctx, message)
 	cancel()
 	if err != nil {
 		var rpcErr *pirpc.Error

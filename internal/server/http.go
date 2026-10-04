@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/core"
+	"github.com/hunknownz/Meerkat/internal/model"
 	"github.com/hunknownz/Meerkat/internal/web"
 )
 
@@ -31,7 +32,7 @@ var apiPaths = map[string]bool{"/api/health": true, "/api/workflow": true, "/api
 
 // HTTPHandler serves the loopback browser API for the bound port. Only hosts
 // 127.0.0.1:port and localhost:port are accepted (DNS-rebinding guard).
-// Browsers can only view, stop and change settings.
+// Browsers can view, send bounded instructions, stop and change future-run settings.
 func (s *Service) HTTPHandler(port int) http.Handler {
 	p := strconv.Itoa(port)
 	hosts := map[string]bool{"127.0.0.1:" + p: true, "localhost:" + p: true}
@@ -71,6 +72,41 @@ func (s *Service) HTTPHandler(port int) http.Handler {
 		}
 		s.stop(w, r.PathValue("runId"), in.RequestID)
 	}))
+	mux.HandleFunc("POST /api/workflow/runs/{runId}/instruction", s.write(func(w http.ResponseWriter, r *http.Request, body []byte) {
+		var in struct {
+			SessionID string `json:"sessionId"`
+			RequestID string `json:"requestId"`
+			Message   string `json:"message"`
+		}
+		if decodeInstructionInput(body, &in, "sessionId", "requestId", "message") != nil {
+			writeErr(w, 400, "invalid instruction")
+			return
+		}
+		cc, can := s.core.(instructionController)
+		if !can {
+			writeErr(w, 409, "instructions unavailable")
+			return
+		}
+		v, e := cc.RequestInstruction(model.WrapUpInput{Kind: "instruction", RunID: r.PathValue("runId"), SessionID: in.SessionID, RequestID: in.RequestID, Message: in.Message, AuthorizationRef: "Direct user instruction in Meerkat UI", Apply: true})
+		if e != nil {
+			s.apiErr(w, e)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "data": v})
+	}))
+	mux.HandleFunc("GET /api/workflow/controls/{requestId}", func(w http.ResponseWriter, r *http.Request) {
+		cc, can := s.core.(runController)
+		if !can {
+			writeErr(w, 409, "controls unavailable")
+			return
+		}
+		v, e := cc.ControlReceipt(r.PathValue("requestId"))
+		if e != nil {
+			s.apiErr(w, e)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "data": v})
+	})
 	mux.HandleFunc("PUT /api/workflow/settings", s.write(func(w http.ResponseWriter, r *http.Request, body []byte) {
 		patch, err := core.ParseSettingsPatch(body)
 		if err != nil {
@@ -214,7 +250,7 @@ func (s *Service) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// write guards browser writes: same-origin, session token, JSON, 8 KiB body.
+// write guards browser writes: same-origin, session token and bounded JSON.
 func (s *Service) write(next func(http.ResponseWriter, *http.Request, []byte)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "http://"+r.Host {
@@ -234,7 +270,11 @@ func (s *Service) write(next func(http.ResponseWriter, *http.Request, []byte)) h
 			writeErr(w, http.StatusUnsupportedMediaType, "application/json required")
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+		limit := int64(MaxBodyBytes)
+		if strings.HasSuffix(r.URL.Path, "/instruction") {
+			limit = 32 * 1024 // Up to 4000 codepoints plus JSON escaping and IDs.
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
 			writeErr(w, http.StatusRequestEntityTooLarge, "body too large")
 			return

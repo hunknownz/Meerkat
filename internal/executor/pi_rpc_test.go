@@ -117,6 +117,9 @@ func TestPiRPCFixtureChild(t *testing.T) {
 		case "clear_queue":
 			response(q.ID, q.Type, nil)
 		case "steer":
+			log, _ := os.OpenFile(os.Getenv("ARGS_OUT")+".steer", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+			fmt.Fprintln(log, q.Message)
+			log.Close()
 			if path := os.Getenv("CONTROL_BEFORE_SEND"); path != "" {
 				if _, e := os.Stat(path); e != nil {
 					os.Exit(9)

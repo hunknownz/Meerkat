@@ -414,3 +414,9 @@ html, body { margin: 0; padding: 0; }
 #meerkat-ui .err { color: var(--red); }
 #meerkat-ui h1 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
 #meerkat-ui .brandmark { width: 18px; height: 18px; }
+
+#meerkat-ui .intervention { padding: 0 18px 16px; border-top: 1px solid var(--line); }
+#meerkat-ui .intervention textarea { display:block; width:100%; box-sizing:border-box; margin-top:8px; padding:10px 12px; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:8px; resize:vertical; }
+#meerkat-ui .intervention textarea:focus { outline:2px solid var(--fg); outline-offset:2px; }
+#meerkat-ui .control-note { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:13px; }
+#meerkat-ui .control-note .btn { margin-left:auto; }

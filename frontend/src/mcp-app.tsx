@@ -1,18 +1,18 @@
 // MCP Apps entry: the shared Agents/Tasks/Usage monitor rendered inside an MCP host via the official
-// ext-apps SDK bridge. Read-only; data arrives only through host tool results (no fetch/EventSource).
+// ext-apps SDK bridge. Data and bounded human controls use host tools; no fetch/EventSource.
 import { App as McpApp, type McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { mount, type MountHandle } from './mount';
 import { McpTransport, type McpBridge, type McpToolResult } from './mcp-transport';
 import { preferredTheme } from './theme';
 
 type Theme = 'light' | 'dark';
-const READONLY_NOTE = 'MCP 视图为只读：可查看运行、任务与用量，不能停止运行或修改设置。';
+const READONLY_NOTE = '可在 Agent 干预入口发送指令或停止运行；此宿主不能修改设置。';
 
 export interface McpMonitor { destroy(): void }
 
 /** Boots the monitor in `container`. Handlers are registered before the SDK `ui/initialize` handshake. */
 export function startMcpMonitor(container: Element): McpMonitor {
-  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.8' });
+  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.9' });
   const bridge: McpBridge = {
     callServerTool: (params, options) => app.callServerTool(params, options) as Promise<McpToolResult>,
   };

@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.8` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.9` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.8
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.9
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.8` / `--branch v0.4.0-beta.8`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.9` / `--branch v0.4.0-beta.9`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
@@ -101,8 +101,8 @@ execution-readiness guarantee. See [diagnostics](doctor.md).
 
 Start a new Codex chat (or restart Codex) after installing, then ask: `打开 Meerkat 面板`.
 This calls the MCP Apps tool `open_monitor` (global or per-thread entrypoint); the local stdio monitor
-is read-only. The real Codex panel, its three views, live snapshots and disabled
-write controls were verified on 2026-10-03; see [host acceptance](codex-ui-acceptance.md).
+supports bounded human instructions and stopping through app-only host tools; settings stay read-only.
+The beta.8 panel and its live snapshots were verified on 2026-10-03; beta.9 human controls need fresh host acceptance. See [human intervention](ui-intervention.md) and [previous host acceptance](codex-ui-acceptance.md).
 Hosts without MCP Apps support should use `node scripts/launch.mjs snapshot`; a browser page is not the
 native panel. The legacy CDP adapter is optional, see [desktop adapter](../desktop/README.md).
 

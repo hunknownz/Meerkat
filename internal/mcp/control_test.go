@@ -73,10 +73,10 @@ func noCommand(context.Context, server.Request) (server.Response, error) {
 func TestControlToolsMetadata(t *testing.T) {
 	s := controlled(snapshotWith(), noCommand)
 	tools := s.toolList()
-	if len(tools) != 18 {
+	if len(tools) != 21 {
 		t.Fatalf("tools: %v", tools)
 	}
-	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false, ToolDispatchTasks: false, ToolGetOperation: true, ToolWaitOperation: true, ToolProposeBudget: true, ToolApplyBudget: false, ToolGetBudgetDecision: true, ToolInspectRecovery: true, ToolApplyRecovery: false, ToolGetRecovery: true, ToolRequestWrapUp: false, ToolGetControlReceipt: true}
+	want := map[string]bool{ToolListRuns: true, ToolGetRun: true, ToolGetSettings: true, ToolStopRun: false, ToolUpdateSettings: false, ToolDispatchTasks: false, ToolGetOperation: true, ToolWaitOperation: true, ToolProposeBudget: true, ToolApplyBudget: false, ToolGetBudgetDecision: true, ToolInspectRecovery: true, ToolApplyRecovery: false, ToolGetRecovery: true, ToolRequestWrapUp: false, ToolGetControlReceipt: true, ToolSendInstruction: false, ToolInterventionReceipt: true, ToolStopFromUI: false}
 	for _, raw := range tools[2:] {
 		tool := raw.(map[string]any)
 		name := tool["name"].(string)
@@ -86,7 +86,7 @@ func TestControlToolsMetadata(t *testing.T) {
 		}
 		delete(want, name)
 		ann := tool["annotations"].(map[string]any)
-		if ann["readOnlyHint"] != readonly || ann["openWorldHint"] != false || ann["destructiveHint"] != (name == ToolStopRun || name == ToolApplyBudget || name == ToolApplyRecovery || name == ToolRequestWrapUp) || ann["idempotentHint"] != (name != ToolUpdateSettings) {
+		if ann["readOnlyHint"] != readonly || ann["openWorldHint"] != false || ann["destructiveHint"] != (name == ToolStopRun || name == ToolApplyBudget || name == ToolApplyRecovery || name == ToolRequestWrapUp || name == ToolSendInstruction || name == ToolStopFromUI) || ann["idempotentHint"] != (name != ToolUpdateSettings) {
 			t.Fatalf("annotations %s: %v", name, ann)
 		}
 		if tool["execution"].(map[string]any)["taskSupport"] != "forbidden" {
@@ -94,7 +94,11 @@ func TestControlToolsMetadata(t *testing.T) {
 		}
 		meta := tool["_meta"].(map[string]any)["ui"].(map[string]any)
 		b, _ := json.Marshal(meta)
-		if string(b) != `{"visibility":["model"]}` {
+		visibility := `{"visibility":["model"]}`
+		if name == ToolSendInstruction || name == ToolInterventionReceipt || name == ToolStopFromUI {
+			visibility = `{"visibility":["app"]}`
+		}
+		if string(b) != visibility {
 			t.Fatalf("monitor app gained controls: %s", b)
 		}
 	}
@@ -108,7 +112,7 @@ func TestControlToolsMetadata(t *testing.T) {
 	}
 	init := &Server{Command: noCommand}
 	b := init.handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`))
-	if !bytes.Contains(b, []byte("run controls")) || !bytes.Contains(b, []byte("monitor app remains read-only")) {
+	if !bytes.Contains(b, []byte("run controls")) || !bytes.Contains(b, []byte("monitor app exposes bounded human instructions")) {
 		t.Fatalf("instructions %s", b)
 	}
 }

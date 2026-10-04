@@ -1,5 +1,5 @@
 import type { SettingsInput } from './generated/workflow';
-import { parseEnvelope, type SnapshotUpdate, type StopAccepted, type Transport } from './transport';
+import { ControlActionError, parseControlReceipt, parseEnvelope, type InterventionActions, type SnapshotUpdate, type StopAccepted, type Transport } from './transport';
 
 /** Subset of a tools/call result the monitor understands. Full snapshots travel in `_meta.snapshot` only. */
 export interface McpToolResult {
@@ -27,7 +27,7 @@ export interface McpTransportOptions {
 }
 
 export const SNAPSHOT_TOOL = 'get_monitor_snapshot';
-const READONLY_MSG = 'MCP 视图为只读，不能停止运行或修改设置';
+const READONLY_MSG = '设置保持只读；请使用 Agent 干预入口停止运行';
 
 const errText = (e: unknown, fallback: string): string => String(e instanceof Error && e.message ? e.message : fallback).slice(0, 200);
 
@@ -62,6 +62,11 @@ interface Listener { onUpdate: (u: SnapshotUpdate) => void; onStale: (message: s
  */
 export class McpTransport implements Transport {
   readonly readonly = true;
+  readonly intervention: InterventionActions = {
+    send: async (input) => parseControlReceipt(await this.#control('send_run_instruction', { ...input }), input.requestId, input.runId, input.sessionId),
+    receipt: async (requestId) => parseControlReceipt(await this.#control('get_intervention_receipt', { requestId }), requestId),
+    stop: async (runId, requestId) => parseControlReceipt(await this.#control('stop_run_from_ui', { runId, requestId }), requestId, runId),
+  };
   #bridge: McpBridge;
   #pollMs: number;
   #timeoutMs: number;
@@ -155,6 +160,20 @@ export class McpTransport implements Transport {
   }
 
   #call(): Promise<SnapshotUpdate> {
+    return this.#tool(SNAPSHOT_TOOL, {}).then(parseToolResult);
+  }
+
+  async #control(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (!this.#connected || this.#closed) throw new Error('宿主未连接，发送结果未知');
+    const r = await this.#tool(name, args);
+    if (r.isError) {
+      const status = (r.structuredContent as { status?: unknown })?.status;
+      throw new ControlActionError(status === 'rejected' || status === 'not_sent' ? status : 'unknown', '未取得有效回执，请查询原请求');
+    }
+    return r._meta?.receipt;
+  }
+
+  #tool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
     const ctl = new AbortController();
     this.#pending.add(ctl);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -165,11 +184,11 @@ export class McpTransport implements Transport {
     });
     aborted.catch(() => {});
     const req = Promise.resolve()
-      .then(() => this.#bridge.callServerTool({ name: SNAPSHOT_TOOL, arguments: {} }, { signal: ctl.signal, timeout: this.#timeoutMs }));
+      .then(() => this.#bridge.callServerTool({ name, arguments: args }, { signal: ctl.signal, timeout: this.#timeoutMs }));
     return Promise.race([req, aborted])
       .then((r) => {
         if (this.#closed) throw new Error('已关闭');
-        return parseToolResult(r);
+        return r;
       })
       .finally(() => { clearTimeout(timer); this.#pending.delete(ctl); });
   }

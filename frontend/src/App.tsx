@@ -4,12 +4,14 @@ import {
   DELIVERY_LABEL, ROLES, ROLE_LABEL, agentLabel, checkView, type CheckEntry, dedupLegacy, formatDuration, formatTime, isActiveRun, lastEvent,
   eventLabel, isWrappingUp, modelLabel, num, roleLabel, runLabel, runTokens, safeHttpsUrl, short, summarizeUsage, taskCategory, taskLabel,
 } from './model';
-import { newRequestId } from './transport';
+import { newRequestId, type InterventionActions } from './transport';
+import { Intervention } from './Intervention';
 
 /** Host actions. In readonly hosts stop/settings are disabled; reconnect may still be offered. */
 export interface AppActions {
   readonly: boolean;
   readonlyNote?: string;
+  intervention?: InterventionActions;
   stop(runId: string, requestId: string): Promise<unknown>;
   settings(input: SettingsInput): Promise<unknown>;
   reconnect?(): Promise<unknown>;
@@ -169,10 +171,11 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             </dl>
             <div className="inline-actions">
               {t ? <button type="button" className="btn" onClick={() => setOpenTask(t.id)}>打开任务</button> : null}
-              {stopControl(r)}
+              {!actions.intervention ? stopControl(r) : null}
             </div>
           </div>
         </div>
+        {actions.intervention && open ? <Intervention run={r} sessionId={t?.sessions?.find(s => s.activeRunId === r.id && s.state === 'running')?.id} actions={actions.intervention} disabled={!!stale || !connected || r.state === 'unknown'} receipts={t?.controlReceipts ?? []} /> : null}
       </div>
     );
   }
@@ -318,7 +321,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             </div> : null}
             {task.controlReceipts?.length ? <div className="card"><h3>控制回执</h3><div className="run-table">{task.controlReceipts.map(c => (
               <div className="run" key={c.requestId}>
-                <span className="rt">{c.kind === 'wrap_up' ? '收尾' : '停止'} · {{accepted:'已保存',sending:'发送中',acknowledged:'执行器已接收',rejected:'已拒绝',unknown:'结果未知',processed:'已处理'}[c.state]}</span>
+                <span className="rt">{c.kind === 'wrap_up' ? '收尾' : c.kind === 'instruction' ? '指令' : '停止'} · {{accepted:'已保存',sending:'发送中',acknowledged:'执行器已接收',rejected:'已拒绝',unknown:'结果未知',processed:'已处理'}[c.state]}</span>
                 <span className="rm">请求 <code>{short(c.requestId)}</code> · Run <code>{short(c.runId)}</code>{c.sessionId ? <> · Session <code>{short(c.sessionId)}</code></> : null} · {formatTime(c.updatedAt)}</span>
                 <span className="rm">{c.disposition ? `协议回执：${c.disposition === 'queued' ? '已入队' : '已处理'} · ` : ''}实际运行：{runLabel(c.runState)}{c.outcome ? ` · 结束结果：${runLabel(c.outcome)}` : ' · 结束结果尚未确认'}</span>
                 {c.reason ? <span className="rm">{{run_ended_before_send:'运行已结束，指令未发送',run_interrupted:'运行中断',contract_changed:'冻结任务或配置已变更',executor_refused:'执行器拒绝指令',wrap_up_already_requested:'本轮已请求收尾，未重复发送',protocol_reply_unknown:'协议回执未确认',controller_interrupted:'服务中断，保留未知且不重发',unsupported_control:'执行器不支持此指令'}[c.reason]}</span> : null}

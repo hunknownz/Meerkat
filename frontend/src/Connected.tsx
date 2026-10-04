@@ -20,6 +20,7 @@ export function Connected({ transport, initialTheme }: { transport: Transport; i
 
   const actions = useMemo<AppActions>(() => ({
     readonly: transport.readonly,
+    intervention: transport.intervention,
     stop: (runId, requestId) => transport.stop(runId, requestId),
     settings: async (input) => {
       await transport.settings(input);

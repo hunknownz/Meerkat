@@ -82,6 +82,7 @@ export function mount(container: Element, initialState: InitialState = {}, optio
   const actions: AppActions = {
     readonly,
     readonlyNote: options.readonlyNote,
+    intervention: t?.intervention,
     stop: (runId, requestId) => {
       if (readonly) return Promise.reject(new Error('只读视图'));
       if (!isUuid(runId) || !isUuid(requestId)) return Promise.reject(new Error('无效的运行 ID'));
