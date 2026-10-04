@@ -85,6 +85,39 @@ func TestPiVersionProbeIsolationAndBoundaries(t *testing.T) {
 	}
 }
 
+func TestPiDiagnosticsLoopbackGatewayBoundaries(t *testing.T) {
+	dir := t.TempDir()
+	os.Chmod(dir, 0o700)
+	bin := filepath.Join(dir, "pi")
+	os.WriteFile(bin, []byte("#!/bin/sh\nexit 1\n"), 0o700)
+	p := model.Profile{Provider: "gateway", Model: "text", AuthEnv: "GATEWAY_KEY", PiCommand: []string{"env", "PI_CODING_AGENT_DIR=" + dir, bin}}
+	for _, tc := range []struct{ endpoint, want string }{
+		{"http://127.0.0.1:3425/v1", "ok"},
+		{"http://[::1]:3425/v1", "ok"},
+		{"https://gateway.example.test/v1", "ok"},
+		{"http://localhost:3425/v1", "blocked"},
+		{"http://192.168.1.20:3425/v1", "blocked"},
+		{"http://0.0.0.0:3425/v1", "blocked"},
+		{"http://127.0.0.1.example.test:3425/v1", "blocked"},
+		{"http://u:p@127.0.0.1:3425/v1", "blocked"},
+		{"http://127.0.0.1:3425/v1?", "blocked"},
+		{"http://[::1]:3425/v1#", "blocked"},
+		{"http://127.0.0.1:3425/v1?key=SECRET_SENTINEL", "blocked"},
+		{"https:///v1", "blocked"},
+	} {
+		b, _ := json.Marshal(map[string]any{"providers": map[string]any{"gateway": map[string]any{"api": "openai-completions", "apiKey": "${GATEWAY_KEY}", "baseUrl": tc.endpoint, "models": []map[string]any{{"id": "text", "input": []string{"text"}}}}}})
+		os.WriteFile(filepath.Join(dir, "models.json"), b, 0o600)
+		cs := NewPi().Diagnose(context.Background(), p, false)
+		if diagnosticStatus(cs, "executor.model") != tc.want {
+			t.Errorf("%s: want %s", tc.endpoint, tc.want)
+		}
+		out, _ := json.Marshal(cs)
+		if strings.Contains(string(out), "SECRET_SENTINEL") {
+			t.Fatal("diagnostics exposed endpoint credentials")
+		}
+	}
+}
+
 func TestInstalledPiDiagnosticVersion(t *testing.T) {
 	binary := os.Getenv("MEERKAT_TEST_PI_RPC_BINARY")
 	if binary == "" {

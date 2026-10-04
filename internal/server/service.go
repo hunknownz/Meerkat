@@ -19,7 +19,7 @@ import (
 )
 
 // Version is the Meerkat release.
-const Version = "0.4.0-beta.7"
+const Version = "0.4.0-beta.8"
 
 // Core is the subset of *core.Core used by the service (injectable in tests).
 type Core interface {

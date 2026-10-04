@@ -69,6 +69,22 @@ test('refuses to overwrite an existing profile', () => {
   rmSync(home, { recursive: true, force: true });
 });
 
+test('isolated loopback gateway profiles store canonical endpoints and only auth references', () => {
+  for (const endpoint of ['http://127.0.0.1:3425/v1', 'http://[::1]:3425/v1']) {
+    const home = tmp();
+    try {
+      const r = run([...base, '--base-url', endpoint, '--api', 'openai-completions'], home);
+      assert.equal(r.status, 0, r.stderr);
+      const file = join(home, '.meerkat', 'pi', 'demo', 'models.json');
+      const provider = JSON.parse(readFileSync(file, 'utf8')).providers.acme;
+      assert.equal(provider.baseUrl, endpoint);
+      assert.equal(provider.apiKey, '${ACME_API_KEY}');
+      assert.equal(statSync(file).mode & 0o777, 0o600);
+      assert.ok(!existsSync(join(home, '.pi')), 'global Pi configuration stays separate');
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  }
+});
+
 test('refuses symlinked or shared directories', () => {
   const home = tmp();
   mkdirSync(join(home, 'real'), { mode: 0o700 });
@@ -96,6 +112,10 @@ test('rejects keys, unsafe names, partial or unsafe endpoints and shell commands
     [[...base, '--base-url', 'https://llm.example.test/v1'], /both/],
     [[...base, '--api', 'openai-completions'], /both/],
     [[...base, '--base-url', 'http://llm.example.test', '--api', 'openai-completions'], /HTTPS/],
+    ...['http://192.168.1.20:3425/v1', 'http://0.0.0.0:3425/v1', 'http://localhost:3425/v1',
+      'http://127.0.0.1.example.test:3425/v1', 'http://u:p@127.0.0.1:3425/v1',
+      'http://127.0.0.1:3425/v1?', 'http://[::1]:3425/v1#'].map(endpoint =>
+      [[...base, '--base-url', endpoint, '--api', 'openai-completions'], /HTTPS/]),
     [[...base, '--base-url', 'https://u:p@llm.example.test', '--api', 'openai-completions'], /HTTPS/],
     [[...base, '--base-url', 'https://llm.example.test/?key=x', '--api', 'openai-completions'], /HTTPS/],
     [[...base, '--base-url', 'https://llm.example.test/#x', '--api', 'openai-completions'], /HTTPS/],

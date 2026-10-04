@@ -2,7 +2,7 @@
 // Write a private Pi executor profile that stores only provider/model/authEnv references, never a key.
 //
 // Usage: node scripts/configure.mjs --project-id SLUG --provider ID --model ID --auth-env ENV
-//          [--data-dir DIR] [--base-url https://...] [--api openai-completions] [--pi-command ABS]
+//          [--data-dir DIR] [--base-url URL] [--api openai-completions] [--pi-command ABS]
 // Writes <data-dir>/profiles/<slug>.json (default data dir ~/.meerkat). With --base-url/--api it also writes an
 // isolated Pi agent directory <data-dir>/pi/<slug>/models.json whose apiKey is the literal "${ENV}" reference.
 // The API key itself stays in the inherited service environment; this script never reads it.
@@ -42,9 +42,10 @@ export function validate(o, home = homedir()) {
   if (o.baseUrl !== undefined) {
     let u;
     try { u = new URL(o.baseUrl); } catch { throw new Error('--base-url is not a valid URL'); }
-    if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || o.baseUrl.includes('?') || o.baseUrl.includes('#') ||
+    const localHttp = u.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(u.hostname);
+    if ((u.protocol !== 'https:' && !localHttp) || u.username || u.password || u.search || u.hash || o.baseUrl.includes('?') || o.baseUrl.includes('#') ||
       o.baseUrl.length > 2048 || CREDENTIAL.test(o.baseUrl)) {
-      throw new Error('--base-url must be HTTPS without credentials, query or fragment');
+      throw new Error('--base-url must be HTTPS or HTTP on 127.0.0.1/::1, without credentials, query or fragment');
     }
     if (!APIS.includes(o.api)) throw new Error(`--api must be one of ${APIS.join(', ')}`);
     baseUrl = u.href;

@@ -138,8 +138,8 @@ func piDiagnosticModel(p model.Profile, agentDir string) DiagnosticCheck {
 		return diag("executor.model", "blocked", "The selected provider is absent from the isolated configuration.", "Match the profile's provider and model to models.json.")
 	}
 	u, err := url.Parse(c.BaseURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || model.LooksLikeCredential(c.BaseURL) || c.APIKey != "${"+p.AuthEnv+"}" {
-		return diag("executor.model", "blocked", "The endpoint or credential reference does not match supported private configuration.", "Use an HTTPS endpoint without URL credentials and an authEnv reference; keep keys outside config files.")
+	if err != nil || !supportedModelEndpoint(u) || strings.ContainsAny(c.BaseURL, "?#") || model.LooksLikeCredential(c.BaseURL) || c.APIKey != "${"+p.AuthEnv+"}" {
+		return diag("executor.model", "blocked", "The endpoint or credential reference does not match supported private configuration.", "Use HTTPS or HTTP on 127.0.0.1/::1, without URL credentials, query or fragment, and an authEnv reference.")
 	}
 	for _, m := range c.Models {
 		if m.ID != p.Model {
@@ -160,6 +160,13 @@ func piDiagnosticModel(p model.Profile, agentDir string) DiagnosticCheck {
 		return diag("executor.model", "ok", "The isolated selected model uses the supported API and environment credential reference.", "")
 	}
 	return diag("executor.model", "blocked", "The selected model is absent from the isolated configuration.", "Match the profile's model to models.json.")
+}
+
+func supportedModelEndpoint(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return false
+	}
+	return u.Scheme == "https" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")
 }
 
 type versionOutput struct {

@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.7` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.8` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.7
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.8
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.7` / `--branch v0.4.0-beta.7`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.8` / `--branch v0.4.0-beta.8`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
@@ -65,6 +65,8 @@ node scripts/configure.mjs --project-id example --provider PROVIDER --model MODE
 - Choose the provider and model yourself. Without `--base-url`, Pi's existing provider configuration is used.
 - Optional flags: `--base-url URL` together with `--api openai-completions`,
   `--pi-command /abs/path/to/pi`, and `--data-dir /abs/private/dir`.
+  Endpoints use HTTPS; local gateways may use HTTP on `127.0.0.1` or `::1`.
+  HTTP hostnames and LAN addresses are refused.
 - With `--base-url`/`--api`, a custom provider is written to an isolated `pi/example/models.json`
   that references the environment variable name only, never the key.
 - The profile is written to `~/.meerkat/profiles/example.json`; existing profiles are not overwritten.
@@ -72,6 +74,8 @@ node scripts/configure.mjs --project-id example --provider PROVIDER --model MODE
 - Current request-budget support is Pi 0.99.1 text HTTP SSE using `openai-completions`.
   An existing provider must use this API too. Anthropic Messages, WebSocket and
   media inputs are not supported by this release's budget bridge.
+
+For keys managed by a local Magpie gateway, see [Magpie routing](magpie.md).
 
 ## 4. Start the service
 
