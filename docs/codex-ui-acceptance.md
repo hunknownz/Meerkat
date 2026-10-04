@@ -150,3 +150,12 @@ have not yet been accepted inside a freshly loaded real Codex panel. Existing
 panels may still hold old resources: start a new chat and reopen `open_monitor`
 for this version. No browser, stdio or generated-resource result is counted as
 new native rendering evidence. Paid full delivery remains deferred.
+
+## Beta.11 startup repair (2026-10-04)
+
+Codex reported a failed MCP initialization while beta.10's direct stdio probe
+worked. Its launch command resolved the script under an unrelated project rather
+than the installed plugin. Beta.11 supplies a plugin-relative `cwd` and forwards
+the host Node path; see the [launch repair record](verification/mcp-launch-root-20261004.md).
+Earlier native screenshots remain historical evidence. A freshly opened panel
+after this repair still requires separate native acceptance.

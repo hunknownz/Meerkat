@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.10` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
+Meerkat `0.4.0-beta.11` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
 The repository install below works from source. Tag-based binary downloads become
 available only when the GitHub release is published.
 It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
@@ -31,12 +31,12 @@ Until binary assets are published, build the committed source and install locall
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.10
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.11
 ```
 
 The builder compiles four supported targets from clean committed HEAD. After a
 release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.10` / `--branch v0.4.0-beta.10`) and use `node scripts/setup.mjs`
+`--ref v0.4.0-beta.11` / `--branch v0.4.0-beta.11`) and use `node scripts/setup.mjs`
 to download binaries. `setup.mjs` validates the selected binary against the release's
 `SHA256SUMS` and `release.json`. Defaults:
 
@@ -157,7 +157,15 @@ Remote Issue updates need explicit `--apply` and your authorization; nothing is 
 | Daemon not reachable | Is `serve` still running? Do service and CLI use the same `--data-dir`/`MEERKAT_DATA_DIR`? |
 | Missing environment variable | Export the `--auth-env` name in the shell that started `serve`, then restart it. |
 | Pi not found | `pi --version` should report 0.99.1; otherwise reinstall or pass `--pi-command`. |
-| No panel in Codex | Start a new chat after install; if the host lacks MCP Apps, use `snapshot`. |
+| No panel in Codex | Check that the plugin is enabled and its MCP server starts. `codex mcp list --json` should resolve Meerkat's `cwd` to the installed plugin directory. Reload after updating; hosts without MCP Apps can use `snapshot`. |
+
+The bundled MCP configuration uses an explicit plugin-relative working directory
+and forwards Codex's Node path. It does not depend on `PLUGIN_ROOT` being present
+in the child shell. Versions before beta.11 could fail with `Cannot find module
+.../scripts/launch.mjs` from an unrelated project directory; update the plugin and
+matching runtime before reloading Codex. Asking to open the panel cannot repair a
+failed MCP server. A declared sidebar entrypoint also depends on host support and
+successful tool discovery; installation alone does not prove the entry is visible.
 
 ## Update and uninstall
 

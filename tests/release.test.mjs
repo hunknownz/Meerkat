@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   PLATFORMS, artifactName, checksumsText, parseArgs, releaseMetadata,
@@ -12,7 +12,7 @@ import {
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(REPO, 'scripts', 'build-release.mjs');
-const VERSION = '0.4.0-beta.10';
+const VERSION = '0.4.0-beta.11';
 const readJSON = (rel) => JSON.parse(readFileSync(join(REPO, rel), 'utf8'));
 
 function git(cwd, ...args) {
@@ -72,8 +72,8 @@ test('metadata helpers validate and sort', () => {
     { file: artifactName(VERSION, 'linux', 'amd64'), os: 'linux', arch: 'amd64', sha256: 'b'.repeat(64) },
     { file: artifactName(VERSION, 'darwin', 'arm64'), os: 'darwin', arch: 'arm64', sha256: 'c'.repeat(64) },
   ];
-  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.10_linux_amd64');
-  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.10_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.10_linux_amd64\n`);
+  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.11_linux_amd64');
+  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.11_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.11_linux_amd64\n`);
   const meta = releaseMetadata(VERSION, sha, arts);
   assert.equal(meta.name, 'meerkat');
   assert.deepEqual(meta.artifacts.map((a) => a.os), ['darwin', 'linux']);
@@ -120,7 +120,7 @@ test('repeated --platform builds only the selected subset', () => {
     const r = release(root, env, '--platform', 'linux/arm64');
     assert.equal(r.status, 0, r.stderr);
     const meta = JSON.parse(readFileSync(join(root, '.dist', 'releases', VERSION, 'release.json'), 'utf8'));
-    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.10_linux_arm64']);
+    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.11_linux_arm64']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -181,9 +181,38 @@ test('repository metadata: marketplace, MCP launcher and versions are consistent
     mcpServers: {
       meerkat: {
         command: '/bin/sh',
-        args: ['-c', 'exec "${CODEX_MCP_NODE_PATH:-node}" "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-.}}/scripts/launch.mjs" mcp', '--'],
+        args: ['-c', 'exec "${CODEX_MCP_NODE_PATH:-node}" ./scripts/launch.mjs mcp', '--'],
+        cwd: '.',
+        env_vars: ['CODEX_MCP_NODE_PATH', 'MEERKAT_BIN', 'MEERKAT_RUNTIME_DIR', 'MEERKAT_DATA_DIR'],
       },
     },
   });
   assert.ok(existsSync(join(REPO, 'scripts', 'launch.mjs')));
+});
+
+test('MCP launcher uses the installed root and host Node without plugin-root environment variables', () => {
+  const temp = realpathSync(mkdtempSync(join(tmpdir(), 'mk-mcp-launch-')));
+  const root = join(temp, 'installed plugin with spaces');
+  const unrelated = join(temp, 'unrelated project');
+  const data = join(temp, 'private data');
+  const config = readJSON('.mcp.json').mcpServers.meerkat;
+  try {
+    mkdirSync(unrelated);
+    for (const rel of ['scripts/launch.mjs', 'scripts/lib/go-cli.mjs']) {
+      put(root, rel, readFileSync(join(REPO, rel)));
+    }
+    const binary = join(root, 'bin', 'meerkat');
+    put(root, 'bin/meerkat', '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+    chmodSync(binary, 0o700);
+    // Codex resolves a relative MCP cwd against the installed plugin root.
+    // Without cwd the previous launcher fell back to this unrelated project.
+    assert.notEqual(resolve(root, config.cwd), unrelated);
+    const available = { CODEX_MCP_NODE_PATH: process.execPath, MEERKAT_BIN: binary, MEERKAT_DATA_DIR: data };
+    const env = { PATH: '/nonexistent', ...Object.fromEntries(config.env_vars.filter((key) => available[key]).map((key) => [key, available[key]])) };
+    const r = spawnSync(config.command, config.args, { cwd: resolve(root, config.cwd), env, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.stdout.trimEnd().split('\n'), ['mcp', '--data-dir', data]);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 });
