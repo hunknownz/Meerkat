@@ -42,6 +42,7 @@ Via daemon:
                                              full review workflow; exit 0 only when delivered
   run       --input FILE|- [--dry-run]       one developer run -> local candidate (not reviewed);
                                              --dry-run validates only, records nothing
+            --task ID --resume              continue the existing developer-only task
   snapshot                                   public snapshot (+ local history summary)
   stop      --run ID [--request-id UUID]     request a stop (accepted != stopped)
   control wrap-up --run ID --session ID --request-id UUID --authorization REF --apply

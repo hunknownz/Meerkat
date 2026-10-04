@@ -212,6 +212,10 @@ type delegator interface {
 	Delegate(ctx context.Context, raw []byte) (core.Result, error)
 }
 
+type delegateResumer interface {
+	ResumeDelegate(context.Context, string) (core.Result, error)
+}
+
 type dispatcher interface {
 	Dispatch(model.DispatchRequest) (model.DispatchReceipt, error)
 	Operation(string) (model.Operation, error)
@@ -396,6 +400,19 @@ func (s *Service) Do(req Request) Response {
 			return ok(d)
 		}
 		r, err := dc.Delegate(s.ctx, req.Input)
+		if err != nil {
+			return fail(err)
+		}
+		return ok(r)
+	case "resume-delegate": // private socket only; no browser execution route
+		dc, can := s.core.(delegateResumer)
+		if !can {
+			return bad("unknown op")
+		}
+		if req.TaskID == "" || !req.Resume || len(req.Input) != 0 || len(req.Tasks) != 0 || req.Acknowledge {
+			return bad("one taskId and explicit resume required")
+		}
+		r, err := dc.ResumeDelegate(s.ctx, req.TaskID)
 		if err != nil {
 			return fail(err)
 		}

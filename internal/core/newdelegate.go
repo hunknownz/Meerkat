@@ -73,3 +73,11 @@ func (c *Core) Delegate(ctx context.Context, raw []byte) (Result, error) {
 		return []string{t.ID}, err
 	}, false, false, true)
 }
+
+// ResumeDelegate continues the original developer-only task. Selection verifies
+// its origin, checkpoint, session and remaining budget without preparing a new task.
+func (c *Core) ResumeDelegate(ctx context.Context, taskID string) (Result, error) {
+	return c.dispatchLocked(ctx, func() ([]string, error) {
+		return []string{taskID}, nil
+	}, true, false, true)
+}

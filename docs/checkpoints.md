@@ -10,6 +10,11 @@ candidate or passed review is created from incomplete work.
 node scripts/launch.mjs execute --task TASK_ID --resume
 ```
 
+For a task created by developer-only `run`, continue with
+`node scripts/launch.mjs run --task TASK_ID --resume` instead. It keeps the same
+Task, Session, checkpoint and charged usage and returns an unreviewed local
+candidate. `execute` and `dispatch` remain the full workflow entry points.
+
 The asynchronous equivalent is `dispatch --task TASK_ID --request-id NEW_UUID
 --resume`, or MCP `dispatch_tasks` with `resume: true`. Reuse the request UUID
 only for the same dispatch receipt, not a later continuation.

@@ -329,6 +329,7 @@ func TestSanitize(t *testing.T) {
 type delegCore struct {
 	fakeCore
 	dry, deleg int
+	resumed    string
 }
 
 func (d *delegCore) DryPrepare(raw []byte) (core.DryRun, error) {
@@ -342,6 +343,33 @@ func (d *delegCore) Delegate(ctx context.Context, raw []byte) (core.Result, erro
 	d.deleg++
 	d.mu.Unlock()
 	return core.Result{Mode: "delegate", Tasks: []core.TaskResult{{ID: "t1", State: model.TaskFirstDelivery}}}, nil
+}
+
+func (d *delegCore) ResumeDelegate(_ context.Context, id string) (core.Result, error) {
+	d.mu.Lock()
+	d.resumed = id
+	d.mu.Unlock()
+	return core.Result{Mode: "delegate", Tasks: []core.TaskResult{{ID: id, State: model.TaskFirstDelivery}}}, nil
+}
+
+func TestDelegateResumeRequiresExplicitSocketInput(t *testing.T) {
+	dc := &delegCore{}
+	svc, _ := New(dc, nil, nil)
+	t.Cleanup(svc.cancel)
+	for _, req := range []Request{
+		{Op: "resume-delegate", TaskID: "task"},
+		{Op: "resume-delegate", Resume: true},
+		{Op: "resume-delegate", TaskID: "task", Resume: true, Input: json.RawMessage(`{}`)},
+		{Op: "resume-delegate", TaskID: "task", Resume: true, Acknowledge: true},
+		{Op: "resume-delegate", TaskID: "task", Resume: true, Tasks: []string{"task"}},
+	} {
+		if svc.Do(req).OK || dc.resumed != "" {
+			t.Fatal("ambiguous continuation accepted", req)
+		}
+	}
+	if r := svc.Do(Request{Op: "resume-delegate", TaskID: "task", Resume: true}); !r.OK || dc.resumed != "task" {
+		t.Fatal("continuation was not forwarded", r)
+	}
 }
 
 func TestUnixDryPrepareAndDelegateSocketOnly(t *testing.T) {
@@ -379,7 +407,7 @@ func TestUnixDryPrepareAndDelegateSocketOnly(t *testing.T) {
 	// The browser API has no route to these ops.
 	srv, host := startHTTP(t, svc)
 	hdr := map[string]string{"Origin": "http://" + host, "X-Meerkat-Token": svc.Token(), "Content-Type": "application/json"}
-	for _, p := range []string{"/api/workflow/delegate", "/api/workflow/dry-prepare", "/api/delegate"} {
+	for _, p := range []string{"/api/workflow/delegate", "/api/workflow/dry-prepare", "/api/delegate", "/api/workflow/resume-delegate"} {
 		if res, _ := do(t, "POST", srv.URL+p, `{}`, hdr); res.StatusCode < 400 {
 			t.Fatalf("%s reachable over HTTP: %d", p, res.StatusCode)
 		}

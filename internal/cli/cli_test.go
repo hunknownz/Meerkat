@@ -163,9 +163,17 @@ func TestRunFlagsAndResultCodes(t *testing.T) {
 	if c, _, e := run(t, "run", "--data-dir", d, "--input", in, "--dry-run"); c != ExitUsage || !strings.Contains(e, "daemon unavailable") {
 		t.Fatalf("dry-run without daemon: %d %s", c, e)
 	}
+	if c, _, e := run(t, "run", "--data-dir", d, "--task", "existing", "--resume"); c != ExitUsage || !strings.Contains(e, "daemon unavailable") {
+		t.Fatalf("resume without daemon: %d %s", c, e)
+	}
 	for _, a := range [][]string{{"run"}, {"run", "--input", in, "--config", "x"}, {"run", "--input", in, "--acknowledge"}} {
 		if c, _, e := run(t, append(a, "--data-dir", d)...); c != ExitUsage || strings.Contains(e, "daemon unavailable") {
 			t.Fatalf("%v -> %d %s", a, c, e)
+		}
+	}
+	for _, a := range [][]string{{"run", "--task", "existing"}, {"run", "--task", "existing", "--resume", "--dry-run"}, {"run", "--input", in, "--resume"}, {"run", "--input", in, "--task", "existing", "--resume"}} {
+		if c, _, e := run(t, append(a, "--data-dir", d)...); c != ExitUsage || strings.Contains(e, "daemon unavailable") {
+			t.Fatalf("ambiguous run %v -> %d %s", a, c, e)
 		}
 	}
 	reason := core.DelegateCandidate

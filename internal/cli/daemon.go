@@ -155,25 +155,32 @@ func resultCode(r core.Result, state, reason string) int {
 func cmdRun(env Env, args []string) (int, error) {
 	fs, dd := newFlags("run")
 	in := fs.String("input", "", "task input JSON file or -")
+	task := fs.String("task", "", "existing delegated task UUID")
+	resume := fs.Bool("resume", false, "explicitly continue an existing delegated task")
 	dry := fs.Bool("dry-run", false, "validate input, profiles and worktree only")
 	if err := parse(fs, args); err != nil {
 		return ExitUsage, err
 	}
-	if *in == "" {
-		return ExitUsage, usageErr{"--input required"}
+	if (*in == "") == (*task == "") || (*task != "" && (!*resume || *dry)) || (*in != "" && *resume) {
+		return ExitUsage, usageErr{"use --input [--dry-run] or --task UUID --resume"}
 	}
-	b, err := readInput(env, *in)
-	if err != nil {
-		return ExitUsage, err
-	}
-	if *dry {
-		return remote(env, *dd, server.Request{Op: "dry-prepare", Input: b})
+	request := server.Request{Op: "resume-delegate", TaskID: *task, Resume: *resume}
+	if *in != "" {
+		b, err := readInput(env, *in)
+		if err != nil {
+			return ExitUsage, err
+		}
+		request = server.Request{Op: "delegate", Input: b}
+		if *dry {
+			request.Op = "dry-prepare"
+			return remote(env, *dd, request)
+		}
 	}
 	dir, err := dataDir(*dd)
 	if err != nil {
 		return ExitUsage, err
 	}
-	data, code, err := call(env, dir, server.Request{Op: "delegate", Input: b})
+	data, code, err := call(env, dir, request)
 	if err != nil {
 		if err == errHandled {
 			return code, nil

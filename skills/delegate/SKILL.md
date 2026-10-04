@@ -12,4 +12,11 @@ The coordinator prepares a clean linked Git worktree on a task branch and a stri
 3. With the service running, run without --dry-run. This yields the first local candidate only, unreviewed. Respect the declared budget; if stopped, retain changes and inspect the reason before another run.
 4. Read the receipt, review the baseline-to-result diff and rerun relevant checks. Report local SHA, checks, gaps and actual usage; missing cost remains unknown.
 
-This path performs one run without an automated review loop. Push, merge, Issue comments and deployment require corresponding authorization. Worktrees isolate Git state; they are not an execution sandbox. Never print keys or pass them as arguments.
+For an existing paused delegate task, use `launch.mjs run --task <task-id> --resume`.
+This verifies its original checkpoint, session, contract and remaining allowance;
+it neither prepares another task nor enters automated review. Workflow `execute`
+cannot continue delegate tasks. An exhausted allowance needs a separately
+[authorized budget decision](../../docs/budget-decisions.md) before continuing.
+Unknown or changed evidence stays blocked; never recreate the task to bypass it.
+
+This path runs only the developer, with explicit continuation when needed and no automated review loop. Push, merge, Issue comments and deployment require corresponding authorization. Worktrees isolate Git state; they are not an execution sandbox. Never print keys or pass them as arguments.
