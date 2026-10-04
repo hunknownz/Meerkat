@@ -5,9 +5,11 @@ beta.14 packages the same verified behavior. Original design remains in
 [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
 The full plan is **not complete**. Real Pi/model pause, checkpoint continuation,
 queued follow-up, structured reporting and multi-role delivery passed. Fresh
-native Codex control acceptance is still pending. Reliable monetary ceilings
+native Codex pause, checkpoint continuation and stop passed on beta.14; native
+instruction and follow-up delivery remain pending. Reliable monetary ceilings
 and unmeasured timing/cost breakdowns remain unavailable; they are not zero.
-See [the current real-run evidence](real-controls-20261005.md).
+See [the current real-run evidence](real-controls-20261005.md) and
+[fresh native controls](native-controls-20261005.md).
 
 ## Current capabilities
 
@@ -16,12 +18,12 @@ See [the current real-run evidence](real-controls-20261005.md).
 | 01 | Frozen contracts and separate execution/phase/delivery projections; model tests invalidate reviews after SHA changes. | Fresh host display of projections. |
 | 02–04 | Executor capabilities, private Pi RPC, persistent developer/fix sessions and independent reviews. | Unsupported executor adapters remain unavailable. |
 | 05–06 | Request reservations, one-time permits, raw usage, optional task token enforcement, per-Run/time/request bounds and explicit additions. | Reliable monetary ceilings; missing prices/fees remain unknown. |
-| 07–09 | Early wrap-up, verified checkpoints, owned process lease, restart reconciliation and completed-step recovery. | Unknown processes/requests without evidence require investigation; no replay. |
+| 07–09 | Early wrap-up, verified dirty checkpoints, owned process lease, restart reconciliation and completed-step recovery. | A scoped provisional commit currently prevents partial checkpoint capture; repair is pending. Unknown processes/requests without evidence require investigation; no replay. |
 | 10 | Durable directions, wrap-up, independent pause, queued follow-up, stop and UUID receipts. Go seals new directions before final reporting; Pi drains pending input. Real pause/resume and follow-up delivery passed. | Fresh real Pi/model Codex button scenario. |
 | 11 | Dependencies, Worktree exclusion, global/project/Provider task caps; fairness and dynamic-cap tests. Bounded retry requires an attested pre-generation 429 rejection and a new permit. | The configured gateway has not been verified to supply that proof. Ordinary 429, 5xx, disconnects and unknown settlements do not retry. |
 | 12 | Development, exact-SHA review, bounded fixes, polish and re-review. | No claim of independent QA or customer acceptance. |
 | 13–14 | SQLite V12, generated TS/runtime validation, snapshots and SSE recovery. V10→V12 migration and V12 backup/restore parity passed. | Matching plugin/runtime and a reopened panel are required after a host surface change. |
-| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Fresh native pause/follow-up interaction evidence. |
+| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Receipt-query completion feedback has an unverified patch; native follow-up delivery remains pending. |
 | 16 | Issue source, drafts, delivery summaries and receipt deduplication. | External sends require the user's corresponding authorization. |
 | 17 | Updated workflow/delegate skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
 | 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
@@ -86,11 +88,23 @@ result and the pause exercise's checkpoint linkage were present. Fees remained
 null in JSON and empty in CSV. The [metrics meanings](../metrics.md) distinguish
 wall time from summed Agent time and leave unmeasured breakdowns unknown.
 
-The expanded MCP App tab inventory was empty on 2026-10-05. The monitor tool
-opened inline, which does not establish native button acceptance. The user has
-been asked to expand it; no Codex main-window automation or CDP workaround was
-used. Real-run details, failures and measured usage are in
-[the current record](real-controls-20261005.md).
+On 2026-10-05 the user expanded the native panel and operated real Pi pause and
+stop controls. The pause saved a verified checkpoint; explicit continuation
+reused the original Session. The separate stop had a processed receipt and
+verified process exit. Continuation then hit upstream HTTP 502/EOF and unknown
+request settlement; native direction consumption was not verified. A subsequent
+manual input window ended without controls. These attempts and measurements are
+in [the fresh native record](native-controls-20261005.md). No Codex main-window
+automation or CDP workaround was used.
+
+A second native attempt consumed the ordinary instruction and made a scoped
+provisional commit. Its queued follow-up reached the original Session history,
+but the next model request could not fit the frozen allowance. Beta.14 did not
+capture a checkpoint after that commit. Separate Pi repair attempts produced
+an unverified receipt-feedback patch and no checkpoint implementation; one
+repair Run has an unknown upstream settlement. Across the eight new Runs,
+752,961 tokens are confirmed and two requests remain unknown. These are
+additional failures and incomplete work, not passing native delivery evidence.
 
 ## Historical beta.10 checks
 

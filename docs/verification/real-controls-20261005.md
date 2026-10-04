@@ -109,9 +109,15 @@ unavailable. The stopped case's configured request ceiling is not actual usage.
 ## Remaining native gate
 
 The standard Codex panel and earlier native protocol-fixture controls already
-have [host evidence](native-controls-20261004.md). The fresh beta.13 combined
-real Pi/model native direction, follow-up, pause and stop scenario remains
-pending. On 2026-10-05 the expanded MCP App inventory was empty after opening
-the monitor inline. The user has been asked to expand it; automation cannot
-operate Codex's main window. No browser screenshot or CLI result substitutes
-for this gate. The [complete plan](plan-completion-20261004.md) stays open.
+have [host evidence](native-controls-20261004.md). The user expanded beta.14 and
+operated its real Pi pause and stop controls. Checkpoint preservation,
+same-session continuation and process exit were independently verified. An
+upstream 502/EOF interrupted direction consumption; a later input window ended
+without controls. A second native attempt consumed the ordinary instruction,
+but stopped before processing the queued follow-up after a provisional commit.
+The missing committed checkpoint and receipt-query feedback are now explicit
+repair items. Native follow-up delivery remains pending. See
+[the fresh real Pi/native record](native-controls-20261005.md), which separates
+user clicks, receipts and actual results. No browser screenshot or CLI write
+substitutes for a native button. The [complete plan](plan-completion-20261004.md)
+stays open.
