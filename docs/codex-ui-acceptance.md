@@ -230,8 +230,12 @@ These are paid executor/native UI results, not local protocol fixtures.
 That exercise exposed two display defects: an ended expanded Run disappeared
 before its receipt lookup finished, and follow-up/pause Task receipts were
 labeled as stop requests. Beta.18 fixes both and is installed; its Go/React
-resource and private-state preservation passed checks. Fresh host display of
-those fixes, native stop and post-end lookup remain pending after reload.
+resource and private-state preservation passed checks. After the user's restart
+on 2026-10-06, the native panel showed corrected receipt labels. A real Pi Run
+was stopped from the native button, with its owned process and children exiting,
+draft retained and no candidate. The ended expanded card retained its original
+receipt; querying showed unchanged feedback without another write. New controls
+were disabled and collapsing the ended card preserved truthful running counts.
 Exact IDs, commits, screenshots, usage and Windows CI are in
 [the current record](verification/native-controls-beta18-20261005.md).
 The Windows device test is deferred; neither CI nor macOS display replaces it.

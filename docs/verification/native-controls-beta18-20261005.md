@@ -1,6 +1,6 @@
-# Native controls and reviewed delivery — 2026-10-05
+# Native controls and reviewed delivery — updated 2026-10-06
 
-Paid exercises used the installed beta.17 Go/Pi adapter, Pi 0.99.1 and
+Paid exercises on 2026-10-05 used the installed beta.17 Go/Pi adapter, Pi 0.99.1 and
 `zenmux/deepseek/deepseek-v4-flash` through the local gateway. Codex MCP Apps
 controls were clicked directly in the expanded native panel. No loopback browser
 or CLI instruction/pause write substitutes for these clicks.
@@ -89,16 +89,55 @@ read the same UUID without another write.
 - The installed stdio MCP server reports beta.18 and 23 tools. Its embedded HTML
   matches main, SHA-256
   `4e1a872c7545c2a93e94eaf2d0a5c8e08c93c1da446e92b308739a7933ed4d92`.
-  Native reload and the changed receipt surface still require host evidence.
+  The reloaded native panel and changed receipt surface passed on 2026-10-06,
+  as recorded below.
+
+## Beta.18 native stop and receipt lookup — 2026-10-06
+
+After the user's Codex restart, the expanded MCP App showed the corrected
+instruction, follow-up and pause labels on the existing real Task receipts.
+This verifies the changed native resource, beyond the installed package probe.
+
+Task `7e15ce88-fca7-4831-b41b-fc347f4eb0be` started real Pi developer Run
+`7e5358cb-b260-4998-b828-96846313bfbd`, Session
+`7e4f6676-b952-4c4f-9b6e-715e1eacfcec`. It wrote the scoped draft and entered
+the single finite 90-second tool window. Immediately before the native stop
+click, Pi PID 31092 belonged to the current controller PID 22631 and its working
+directory matched the Task worktree. Its bash/sleep children were 31113/31114.
+No process was stopped using an old PID or a direct signal from the coordinator.
+
+The native **停止运行** button created request
+`7c168804-9199-40bb-bfd4-f3e98bbb08bc`. Its receipt became `processed`, with
+outcome `stopped`. Both Task and Run became stopped; the three observed
+processes were absent. The draft remained, HEAD stayed at the frozen baseline
+`64cf3b7915f5a05e18cdfaabc23a8bc2acad69bc`, and there was no candidate or
+delivery. This is successful stop verification, not a delivered coding task.
+
+The selected ended Run stayed expanded. New instruction, pause and stop
+controls were disabled; the original receipt's query button remained usable.
+One native query displayed **查询完成，回执无变化。** The stop receipt still had
+one row with the original UUID, and its payload and Session history were
+unchanged. The retained history SHA-256 was
+`fb504b95905fc315c251e487698e01ee15028b71f27f9d1d46bb69fda579ac85`.
+Collapsing the selected Run removed it from Agents without changing the real
+counts: zero running, zero queued, four historical unknown outcomes.
+
+Task history retained the processed stop receipt with the same Run and Session.
+The native settings controls remained read-only. Agents, Tasks and Usage stayed
+connected; Usage preserved missing fees as unknown. Final state contains
+44 Tasks and 75 Runs. The four historical unknown Tasks were compared with the
+pre-dispatch snapshot and remain unchanged.
 
 ## Measured usage
 
 | Exercise | Confirmed tokens | Wall span seconds | Summed Agent seconds |
 | --- | ---: | ---: | ---: |
 | Missing-report attempt | 29,089 | 57.337 | 57.337 |
-| Native directions and four-role delivery | 392,103 | 304.599 | 304.214 |
+| Native directions and four-stage delivery | 392,103 | 304.599 | 304.214 |
 | Native pause, resume and reviewed delivery | 423,816 | 452.771 | 367.567 |
 | Subtotal before final stop | 845,008 | — | 729.117 |
+| Beta.18 native stop and post-end receipt query | 10,016 | 94.833 | 94.833 |
+| Subtotal including final stop | 855,024 | — | 823.950 |
 
 Wall span includes the explicit pause interval. Agent time includes tools and
 finite 90-second manual-control windows; it is not pure model time. Some token
@@ -116,10 +155,14 @@ Screenshots are retained privately; no raw Session or profile is published.
 | Native pause queue acknowledgement | `6c886a0d4a680c078d13b2c7e899cd9194fc9a691502dd56e59cd390e1885a7c` |
 | Final native Task delivery | `a03fafbd87742bf38dc24a457aff6478d3d6032c59bd0eabf5294fbec1ad9f95` |
 | Original developer Session and consumed checkpoint | `a3b051f9c99666fe78f84a58a32c59fda61d5d3dad577ebc402a7603634d4120` |
+| Beta.18 corrected native receipt labels | `0c0b2593cb149c6d42768d95e6f39fc3e5002c6e15f5a375dfd4464e5fe0727d` |
+| Beta.18 stopped expanded Run and unchanged-query feedback | `c799bf2666c5720a6dec4f01ac71c10c9db7abfab5ec411af5fa80de0c38204f` |
+| Beta.18 stopped Task and processed receipt | `b03c68fe62ebfbf7781598757067fd37c7e3cecbcd7e70379cbb8cab2253cba1` |
+| Beta.18 native Usage with unknown fees | `dfc5738ae5f3d3ef6d29dcc4778525973dd826a303bbb1b042e2ea9ecca5bbe9` |
 
 ## Remaining
 
-Fresh beta.18 native stop, post-end receipt lookup and corrected labels remain
-pending after host reload. Real Windows Codex display is deferred until the
-user's device test. Public prerelease/tag still requires explicit maintainer
-authorization; directory submission is not required for GitHub installation.
+Beta.18 native reload, stop, post-end receipt lookup and corrected labels passed.
+Real Windows Codex display is deferred until the user's device test.
+Public prerelease/tag still requires explicit maintainer authorization;
+directory submission is not required for GitHub installation.

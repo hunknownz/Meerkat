@@ -1,12 +1,12 @@
-# Plan status and verification — updated 2026-10-05
+# Plan status and verification — updated 2026-10-06
 
 Candidate: `0.4.0-beta.18`. The [current native/model record](native-controls-beta18-20261005.md)
 verifies two native directions in one Pi Session, reviewed delivery, native pause,
 exact staged/unstaged checkpoint preservation and explicit same-session recovery.
 Beta.18 repairs disappearing Run cards and incorrect receipt labels, and is
-installed. Fresh display of those changes and the final stop/query exercise are
-pending after reload. Windows Codex UI is deferred to the user's device test;
-public prerelease/tag needs explicit maintainer authorization. The full plan
+installed. After Codex reload, the changed native display, real Pi stop and
+post-end receipt query passed on 2026-10-06. Windows Codex UI is deferred to the
+user's device test; public prerelease/tag needs explicit maintainer authorization. The full plan
 remains open for those gates. GitHub source installation is available.
 
 Original design: [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
@@ -18,20 +18,20 @@ is historical and does not replace the current remaining-gate list.
 
 | Package | Implementation and evidence | Remaining |
 |---|---|---|
-| 01 | Frozen contracts and separate execution/phase/delivery projections; model tests invalidate reviews after SHA changes. | Native Task projections verified on beta.17; beta.18 changed receipt display requires recheck. |
+| 01 | Frozen contracts and separate execution/phase/delivery projections; model tests invalidate reviews after SHA changes. Native Task projections and beta.18 receipt labels verified. | No claim of deployment or customer acceptance. |
 | 02–04 | Executor capabilities, private Pi RPC, persistent developer/fix sessions and independent reviews. | Unsupported executor adapters remain unavailable. |
 | 05–06 | Request reservations, one-time permits, raw usage, optional task token enforcement, per-Run/time/request bounds and explicit additions. | Reliable monetary ceilings; missing prices/fees remain unknown. |
 | 07–09 | Early wrap-up, verified dirty checkpoints, owned process lease, restart reconciliation and completed-step recovery. | Beta.15 supports one scoped provisional commit with exact saved HEAD, original role baseline and explicit same-session continuation; local checks are recorded in the repair evidence. Unknown processes/requests without evidence require investigation; no replay. |
-| 10 | Durable directions, wrap-up, independent pause, queued follow-up, stop and UUID receipts. Go seals new directions before final reporting; Pi drains pending input. Real pause/resume and follow-up delivery passed. | Directions, follow-up, pause and resumed reviewed delivery passed in real Codex/Pi on beta.17; fresh beta.18 stop/query remains. |
+| 10 | Durable directions, wrap-up, independent pause, queued follow-up, stop and UUID receipts. Go seals new directions before final reporting; Pi drains pending input. Native directions, pause/resume and reviewed delivery passed on beta.17; real Pi native stop/query passed on beta.18. | A processed receipt alone does not prove delivery or process exit; both were checked separately. |
 | 11 | Dependencies, Worktree exclusion, global/project/Provider task caps; fairness and dynamic-cap tests. Bounded retry requires an attested pre-generation 429 rejection and a new permit. | The configured gateway has not been verified to supply that proof. Ordinary 429, 5xx, disconnects and unknown settlements do not retry. |
 | 12 | Development, exact-SHA review, bounded fixes, polish and re-review. | No claim of independent QA or customer acceptance. |
 | 13–14 | SQLite V12, generated TS/runtime validation, snapshots and SSE recovery. V10→V12 migration and V12 backup/restore parity passed. | Matching plugin/runtime and a reopened panel are required after a host surface change. |
-| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Beta.18 retains expanded ended Runs and labels pause/follow-up correctly; fresh native query feedback remains pending. |
+| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. Beta.18 native ended-card retention, disabled writes, corrected labels and explicit query feedback passed. | Historical unknown outcomes remain visible; they are not running-process claims. |
 | 16 | Issue source, drafts, delivery summaries and receipt deduplication. | External sends require the user's corresponding authorization. |
 | 17 | Optional direct/delegate/workflow selection, updated skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
 | 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
 | 19 | Read-only doctor, pinned Pi protocol/version probes. | Static checks do not certify balance or provider availability. |
-| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.18 plugin/runtime retain history; 27 non-lease tables matched (43 Tasks / 74 Runs). Current native Windows/macOS installation CI passed at `64cf3b7`; device UI is separate. | Beta.18 native changed-surface check, real Windows host check and authorized public prerelease. Directory submission is not required for Git installs. |
+| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.18 plugin/runtime retain history; 27 non-lease tables matched at cutover (43 Tasks / 74 Runs). Native beta.18 macOS display and stop/query passed; state now has 44 Tasks / 75 Runs. Native Windows/macOS installation CI passed at `64cf3b7`. | Real Windows host check and authorized public prerelease. Directory submission is not required for Git installs. |
 
 ## Changed behavior
 

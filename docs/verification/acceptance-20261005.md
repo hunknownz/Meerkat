@@ -3,7 +3,8 @@
 Current candidate: `0.4.0-beta.18`; integration baseline: `64cf3b7`.
 [Current native/model acceptance](native-controls-beta18-20261005.md) records
 successful directions, follow-up, pause and resumed reviewed delivery. The
-changed beta.18 native receipt surface is pending after reload. Windows UI and
+changed beta.18 native receipt surface, real Pi stop and unchanged post-end
+receipt query passed after reload on 2026-10-06. Windows UI and
 public prerelease remain separate gates.
 
 The beta.17 installation/race audit below predates these paid exercises.
@@ -43,7 +44,7 @@ Checkpoint capture rejection now records a static phase code. Rejected file
 names, file bodies, Git stderr and storage paths are not exposed by that event.
 The existing unsafe/scope fixture verifies rejection and public redaction.
 
-## Remaining acceptance
+## Historical remaining acceptance — beta.17 before the paid exercises
 
 | Item | State | Required evidence |
 | --- | --- | --- |

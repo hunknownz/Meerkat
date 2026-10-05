@@ -95,6 +95,8 @@ These checks do not replace the native button scenario. See
 Beta.17 real native instruction and follow-up clicks reached the original Pi
 Session and its developer candidate. A separate native pause preserved staged
 and unstaged changes, then resumed and delivered through review. Beta.18 fixes
-receipt visibility after Run completion and Task receipt labels. Current checks
-and remaining native reload evidence are in
+receipt visibility after Run completion and Task receipt labels. The changed
+native surface passed after reload on 2026-10-06, including a real Pi stop,
+confirmed process exit, retained ended-card receipt and unchanged-query feedback
+without resend. Current checks and deferred Windows host evidence are in
 [the latest record](verification/native-controls-beta18-20261005.md).

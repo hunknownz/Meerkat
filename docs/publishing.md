@@ -49,8 +49,10 @@ earlier panel acceptance is not substituted.
 
 Real native direction/follow-up delivery and native pause with same-session
 reviewed continuation passed on beta.17. Beta.18 fixes ended-Run receipt
-visibility and pause/follow-up labels; its installed resource is verified, while
-the changed native surface awaits reload. See
+visibility and pause/follow-up labels. Its installed resource is verified, and
+the changed native surface passed after reload on 2026-10-06. A native button
+stopped real Pi and its children; the ended card retained the original receipt
+and showed unchanged-query feedback without resending. See
 [the current record](verification/native-controls-beta18-20261005.md).
 Windows Codex display is deferred to the user's device; public release and
 directory submission are separate from source installation.
