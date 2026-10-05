@@ -22,7 +22,7 @@ installation, private dependencies and a portable MCP host package.
 | --- | --- | --- |
 | Windows runtime | Native amd64 checks passed | arm64 remains cross-compile only |
 | macOS clean installation | Passed locally and on macos-14 | Current Codex host reload is separate |
-| Current Codex package | beta.16 installed; service/resource checks passed | Fresh host reload and visible receipt-query feedback |
+| Current Codex package | beta.17 installed; service/resource checks passed | Fresh host reload and visible receipt-query feedback |
 | Real model + native controls + final reviewed delivery | Incomplete | Fresh bounded task, original Session directions, exact SHA review |
 | Windows Codex native display | User-assisted test deferred | Real Windows host; CI is not GUI acceptance |
 | Public binary release | Unpublished | Authorized tag/assets with checksums/source metadata |
@@ -106,6 +106,9 @@ The user supplied a new genuine Codex global-entry/panel screenshot. Full race
 checks passed after updating the Go patch. Native Windows and macOS installation
 checks passed for beta.17 at `c562482`, including Windows missing-toolchain
 bootstrap. A clean macOS arm64 binary installation also passed with Pi and a
-loopback model fixture. [The current audit](acceptance-20261005.md) records the
+loopback model fixture. Main at `07b60e5` passed Windows and macOS CI. beta.17 is
+installed locally; all 27 authority tables match the pre-update backup, and a
+fresh private restoration recovered the actual sessions and checkpoints without
+changing current records. [The current audit](acceptance-20261005.md) records the
 diagnosis and remaining native/device/distribution gates. Earlier beta.16
 installation checks do not certify the new package.

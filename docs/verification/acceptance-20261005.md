@@ -40,10 +40,10 @@ The existing unsafe/scope fixture verifies rejection and public redaction.
 
 | Item | State | Required evidence |
 | --- | --- | --- |
-| Current package and receipt-query feedback | Awaiting native panel access | Reloaded package/resource and visible updated/unchanged query result |
+| Current package and receipt-query feedback | beta.17 installed; current chat's native panel unavailable | Reloaded package/resource and visible updated/unchanged query result |
 | Real Pi/model native controls and final reviewed delivery | Not started in this audit | Same-session directions/follow-up, pause/checkpoint/resume, stop, exact SHA review |
 | Windows Codex panel | User has a Windows computer; device test explicitly deferred | Real Windows Codex screenshot and live controls; native CI is separate |
-| Six-target distribution | Built and checksummed from `c562482`; macOS arm64 binary installation passed | Public download requires release authorization; other native targets are covered separately |
+| Six-target distribution | Six artifacts checksummed; `release.json` records the exact committed source; macOS arm64 binary installation passed | Public download requires release authorization; other native targets are covered separately |
 | Public prerelease | Unpublished | Explicit maintainer authorization after assets are ready |
 
 The four historical unknown Runs, requests and budget reservations remain
@@ -66,6 +66,32 @@ All four historical unknown Tasks were inspected through the read-only recovery
 interface. Each remained blocked with `completion_evidence_missing` and
 `absence_is_not_completion_proof`. No recovery application, replay, old-PID signal
 or budget release was performed. The audit used no paid provider request.
+
+## Local cutover and backup restoration
+
+- Main integration at `07b60e5` passed
+  [native Windows and macOS CI](https://github.com/hunknownz/Meerkat/actions/runs/37279431206).
+  The optional Windows missing-toolchain download was not repeated on main.
+- After checking the current executable, start time and idle state, the beta.16
+  controller exited gracefully. Its runtime produced a consistent backup before
+  beta.17 started at the same loopback address. All 27 non-lease authority tables
+  matched exactly: 40 Tasks, 64 Runs and four historical unknown outcomes remain.
+  SQLite integrity and foreign keys passed.
+- beta.17 is installed and enabled through the private generated marketplace
+  from `07b60e5`, with absolute Node/runtime paths. A process launched using the
+  installed MCP configuration reported beta.17, returned all 23 tools and the
+  matching embedded UI resource, and read the preserved snapshot. That process
+  exited cleanly. This is package/resource evidence, not host display evidence.
+- The actual pre-update backup was restored into a fresh private directory
+  without starting a controller. All 27 authority tables matched after the
+  expected Issue body path rebasing. The backup recovered 37 session files,
+  eight checkpoint files and one Issue body. Native store diagnostics, integrity
+  and foreign keys passed; restoring over the existing destination was refused.
+  The disposable restore directory was removed. Current records were untouched.
+- The previous binary and consistent backup are retained. The user was asked to
+  reload Codex and expand the MCP App in this chat; automation cannot operate
+  the Codex main window or see a global-only panel. No paid task was started while
+  this acceptance surface was unavailable.
 
 ## Deferred Windows host check
 
