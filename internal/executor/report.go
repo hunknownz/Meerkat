@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 const maxReport = 64 << 10
@@ -35,7 +36,7 @@ func checkReportPath(p, worktree string) (string, error) {
 		return "", invalid("report directory does not exist")
 	}
 	fi, err := os.Stat(dir)
-	if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o077 != 0 || !ownedByMe(fi) {
+	if err != nil || !fi.IsDir() || !platform.Private(dir, fi, 0o700) {
 		return "", invalid("report directory must be a private directory owned by the current user")
 	}
 	real := filepath.Join(dir, filepath.Base(p))
@@ -64,7 +65,7 @@ func readReport(path, role string) (*Report, string) {
 		return nil, CatReportInvalid
 	}
 	defer f.Close()
-	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() || st.Size() > maxReport || !ownedByMe(st) {
+	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() || st.Size() > maxReport || !platform.Owned(path, st) {
 		return nil, CatReportInvalid
 	}
 	b, err := io.ReadAll(io.LimitReader(f, maxReport+1))

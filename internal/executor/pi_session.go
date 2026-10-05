@@ -6,10 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -24,10 +24,7 @@ func sessionParent(b SessionBinding) error {
 		return invalid("invalid session binding")
 	}
 	fi, err := os.Lstat(filepath.Dir(b.File))
-	if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
-		return invalid("session directory is unsafe")
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+	if err != nil || !fi.IsDir() || !platform.Private(filepath.Dir(b.File), fi, 0o700) {
 		return invalid("session directory is unsafe")
 	}
 	return nil
@@ -40,7 +37,7 @@ func (p *Pi) InitializeSession(b SessionBinding) (SessionSnapshot, error) {
 		return SessionSnapshot{}, err
 	}
 	header, _ := json.Marshal(map[string]any{"type": "session", "version": 3, "id": b.ID, "timestamp": time.Now().UTC().Format(time.RFC3339Nano), "cwd": b.Worktree})
-	f, err := os.OpenFile(b.File, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	f, err := platform.OpenFile(b.File, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return SessionSnapshot{}, invalid("session file already exists or is unsafe")
 	}
@@ -52,12 +49,7 @@ func (p *Pi) InitializeSession(b SessionBinding) (SessionSnapshot, error) {
 	if err != nil || ce != nil {
 		return SessionSnapshot{}, invalid("session file could not be saved")
 	}
-	dir, e := os.Open(filepath.Dir(b.File))
-	if e != nil {
-		return SessionSnapshot{}, invalid("session directory could not be saved")
-	}
-	e = dir.Sync()
-	dir.Close()
+	e := platform.SyncDir(filepath.Dir(b.File))
 	if e != nil {
 		return SessionSnapshot{}, invalid("session directory could not be saved")
 	}
@@ -71,17 +63,14 @@ func (*Pi) InspectSession(b SessionBinding) (SessionSnapshot, error) {
 	if err := sessionParent(b); err != nil {
 		return SessionSnapshot{}, err
 	}
-	f, err := os.OpenFile(b.File, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := platform.OpenFile(b.File, os.O_RDWR, 0)
 	if err != nil {
 		return SessionSnapshot{}, invalid("session file unavailable")
 	}
 	defer f.Close()
 	fi, err := f.Stat()
-	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0o600 || fi.Size() < 1 || fi.Size() > MaxSessionBytes {
+	if err != nil || !fi.Mode().IsRegular() || !platform.Private(b.File, fi, 0o600) || fi.Size() < 1 || fi.Size() > MaxSessionBytes {
 		return SessionSnapshot{}, invalid("session file unsafe or oversized")
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
-		return SessionSnapshot{}, invalid("session file is unsafe")
 	}
 	h := sha256.New()
 	scan := bufio.NewScanner(io.TeeReader(io.LimitReader(f, MaxSessionBytes+1), h))

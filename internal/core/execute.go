@@ -10,12 +10,12 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/executor"
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 // TaskResult is the per-task outcome of one dispatch.
@@ -230,8 +230,7 @@ func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	return platform.Alive(pid)
 }
 
 // Execute dispatches the selected tasks through developer -> reviewer -> (bounded fix -> reviewer) ->
@@ -714,7 +713,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	runsDir := filepath.Join(c.st.DataDir(), "runs")
 	runID := newUUID()
 	runDir := filepath.Join(runsDir, runID)
-	if err := os.MkdirAll(runsDir, 0o700); err != nil || os.Mkdir(runDir, 0o700) != nil {
+	if err := os.MkdirAll(runsDir, 0o700); err != nil || platform.Mkdir(runDir, 0o700) != nil {
 		c.failTask(t.ID, model.TaskFailed, "scratch_unavailable", s.role)
 		return false
 	}

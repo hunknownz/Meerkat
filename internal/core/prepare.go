@@ -16,11 +16,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 // MaxInput is the strict prepare input limit.
@@ -411,8 +411,7 @@ func inspectProfile(configFile, role string, expectedProject *string) (model.Pro
 	if err != nil {
 		return p, invalid("%s config not found", where)
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0o077 != 0 || !ok || int(st.Uid) != os.Getuid() || fi.Size() > maxConfigFile {
+	if !fi.Mode().IsRegular() || !platform.Private(real, fi, 0o600) || fi.Size() > maxConfigFile {
 		return p, invalid("%s config must be a private regular file owned by the current user", where)
 	}
 	b, err := os.ReadFile(real)

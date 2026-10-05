@@ -6,7 +6,7 @@
 // worktree, so untracked or ignored files cannot influence the published binaries.
 //
 // Usage: node scripts/build-release.mjs [--root <repo>] [--platform <os>/<arch>]...
-//   Platforms: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 (default: all four).
+//   Platforms: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/arm64 windows/amd64 (default: all six).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const PLATFORMS = Object.freeze(['darwin/arm64', 'darwin/amd64', 'linux/arm64', 'linux/amd64']);
+export const PLATFORMS = Object.freeze(['darwin/arm64', 'darwin/amd64', 'linux/arm64', 'linux/amd64', 'windows/amd64', 'windows/arm64']);
 export const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
 const DEFAULT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -40,7 +40,7 @@ export function parseArgs(argv, defaultRoot = DEFAULT_ROOT) {
 }
 
 export function artifactName(version, os, arch) {
-  return `meerkat_${version}_${os}_${arch}`;
+  return `meerkat_${version}_${os}_${arch}${os === 'windows' ? '.exe' : ''}`;
 }
 
 export function checksumsText(artifacts) {

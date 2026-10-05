@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	"io"
 	"os"
 	"sync"
@@ -60,14 +61,14 @@ func reportWriter(req Request, pp *prepared) func(context.Context, json.RawMessa
 		if decoder.Decode(&strict) != nil {
 			return nil, invalid("invalid report draft")
 		}
-		file, err := os.OpenFile(pp.report, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		file, err := platform.OpenFile(pp.report, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if errors.Is(err, os.ErrExist) {
 			f, e := openNoFollow(pp.report)
 			if e != nil {
 				return nil, invalid("report unreadable")
 			}
 			defer f.Close()
-			if st, e := f.Stat(); e != nil || !st.Mode().IsRegular() || st.Size() > maxReport || !ownedByMe(st) {
+			if st, e := f.Stat(); e != nil || !st.Mode().IsRegular() || st.Size() > maxReport || !platform.Owned(pp.report, st) {
 				return nil, invalid("report unreadable")
 			}
 			raw, e := io.ReadAll(io.LimitReader(f, maxReport+1))

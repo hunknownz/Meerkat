@@ -16,10 +16,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	budget "github.com/hunknownz/Meerkat/internal/requestbudget"
 )
 
@@ -191,27 +191,19 @@ type sourceSet struct {
 	files []sourceFile
 }
 
-func ownedNoSymlink(fi os.FileInfo) bool {
-	if fi.Mode()&os.ModeSymlink != 0 {
-		return false
-	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	return ok && int(st.Uid) == os.Getuid()
-}
-
 // readSafe reads a regular, non-symlinked, owned file bounded by max. Missing returns (nil, nil).
 func readSafe(path string, max int64) ([]byte, error) {
 	fi, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || !fi.Mode().IsRegular() || !ownedNoSymlink(fi) {
+	if err != nil || !fi.Mode().IsRegular() || !platform.Owned(path, fi) {
 		return nil, fmt.Errorf("%w: not a private regular file", ErrUnsafeSource)
 	}
 	if fi.Size() > max {
 		return nil, fmt.Errorf("%w: file exceeds size limit", ErrUnsafeSource)
 	}
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := platform.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, fmt.Errorf("%w: open failed", ErrUnsafeSource)
 	}
@@ -229,7 +221,7 @@ func safeDir(dir string) (bool, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
-	if err != nil || !fi.IsDir() || !ownedNoSymlink(fi) {
+	if err != nil || !fi.IsDir() || !platform.Owned(dir, fi) {
 		return false, fmt.Errorf("%w: unsafe directory", ErrUnsafeSource)
 	}
 	return true, nil

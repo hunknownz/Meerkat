@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 // backupBodiesTable exists only inside backup files. It carries the private Issue update bodies referenced by
@@ -32,7 +32,7 @@ func (s *Store) Backup(destination string) (err error) {
 	if err != nil {
 		return fmt.Errorf("store: invalid backup destination")
 	}
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	f, err := platform.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("%w: backup destination exists", ErrConflict)
@@ -49,7 +49,7 @@ func (s *Store) Backup(destination string) (err error) {
 	if _, err := s.db.Exec("VACUUM INTO ?", dest); err != nil {
 		return fmt.Errorf("store: backup failed")
 	}
-	if err := os.Chmod(dest, 0o600); err != nil {
+	if err := platform.Chmod(dest, 0o600); err != nil {
 		return fmt.Errorf("store: backup permissions failed")
 	}
 	if err := s.bundleBodies(dest); err != nil {
@@ -87,7 +87,7 @@ func (s *Store) bundleBodies(dest string) error {
 	}
 	if len(need) > 0 {
 		fi, err := os.Lstat(s.bodyDir())
-		if err != nil || !fi.IsDir() || !ownedNoSymlink(fi) {
+		if err != nil || !fi.IsDir() || !platform.Owned(s.bodyDir(), fi) {
 			return badBackup("issue body directory is missing or unsafe")
 		}
 	}
@@ -309,7 +309,7 @@ func Restore(backup, dst string) (err error) {
 	if err := ValidateBackup(src); err != nil {
 		return err
 	}
-	if err := os.Mkdir(dst, 0o700); err != nil {
+	if err := platform.Mkdir(dst, 0o700); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("%w: restore destination exists", ErrConflict)
 		}
@@ -320,7 +320,7 @@ func Restore(backup, dst string) (err error) {
 			os.RemoveAll(dst)
 		}
 	}()
-	if err := os.Chmod(dst, 0o700); err != nil {
+	if err := platform.Chmod(dst, 0o700); err != nil {
 		return fmt.Errorf("store: restore permissions failed")
 	}
 	db := filepath.Join(dst, dbName)
@@ -419,7 +419,7 @@ func (s *Store) writeRestoredBody(deliveryID string, body []byte) (string, strin
 
 // copyNewFile copies a regular, non-symlinked file to a new 0600 file (never overwriting).
 func copyNewFile(src, dst string) error {
-	in, err := os.OpenFile(src, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	in, err := platform.OpenFile(src, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func copyNewFile(src, dst string) error {
 	if fi, err := in.Stat(); err != nil || !fi.Mode().IsRegular() {
 		return ErrBadBackup
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	out, err := platform.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

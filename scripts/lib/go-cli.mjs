@@ -1,4 +1,5 @@
 // Thin launcher for the Go `meerkat` CLI. No scheduling, storage, or Pi logic lives in Node.
+import { privatePath } from './private.mjs';
 import { spawn } from 'node:child_process';
 import { accessSync, constants, lstatSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 export const SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
 
-const OS = { darwin: 'darwin', linux: 'linux' };
+const OS = { darwin: 'darwin', linux: 'linux', win32: 'windows', windows: 'windows' };
 const ARCH = { arm64: 'arm64', x64: 'amd64' };
 
 export function buildCommand(root = SOURCE_ROOT) {
@@ -45,7 +46,7 @@ export function runtimeDir(env = process.env) {
 }
 
 export function installedPath(runtime, version, target) {
-  return join(runtime, version, `${target.os}-${target.arch}`, 'meerkat');
+  return join(runtime, version, `${target.os}-${target.arch}`, target.os === 'windows' ? 'meerkat.exe' : 'meerkat');
 }
 
 // Resolve the binary: absolute MEERKAT_BIN, then <root>/bin/meerkat, then the installed release binary.
@@ -55,7 +56,7 @@ export function resolveBinary(env = process.env, root = SOURCE_ROOT, target = se
     if (!isAbsolute(fromEnv)) return { error: 'MEERKAT_BIN must be an absolute path' };
     return checkExecutable(fromEnv, 'MEERKAT_BIN');
   }
-  const local = join(root, 'bin', 'meerkat');
+  const local = join(root, 'bin', process.platform === 'win32' ? 'meerkat.exe' : 'meerkat');
   if (exists(local)) return checkExecutable(local, 'bin/meerkat');
   const hint = `install the release binary with:\n  ${setupCommand(root)}\n(or, in a source checkout: ${buildCommand(root)})`;
   if (!target) return { error: `unsupported platform ${process.platform}/${process.arch}; ${hint}` };
@@ -66,10 +67,8 @@ export function resolveBinary(env = process.env, root = SOURCE_ROOT, target = se
     return { error: `${err.message}; ${hint}` };
   }
   if (!exists(installed)) return { error: `meerkat binary not installed; ${hint}` };
-  const st = lstatSync(installed);
-  if (!st.isFile() || st.uid !== process.getuid() || (st.mode & 0o022) !== 0) {
-    return { error: `installed binary ${installed} is not a private regular file; ${hint}` };
-  }
+  try { privatePath(installed, { strict: false }); }
+  catch {return {error:`installed binary ${installed} is not a private regular file (unsafe ownership or permissions); ${hint}`};}
   return checkExecutable(installed, 'installed binary', hint);
 }
 

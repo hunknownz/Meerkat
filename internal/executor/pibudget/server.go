@@ -10,14 +10,16 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/hunknownz/Meerkat/internal/localipc"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	budget "github.com/hunknownz/Meerkat/internal/requestbudget"
+	"runtime"
 )
 
 //go:embed bridge.mjs
@@ -62,8 +64,16 @@ func Start(provider, model string, a budget.Authority, report ...ReportOption) (
 		return nil, budget.ErrConflict
 	}
 	// macOS Unix socket paths have a small limit; use a short, owned 0700 directory.
-	dir, err := os.MkdirTemp("/tmp", "mkb-")
+	tempRoot := ""
+	if runtime.GOOS != "windows" {
+		tempRoot = "/tmp"
+	}
+	dir, err := os.MkdirTemp(tempRoot, "mkb-")
 	if err != nil {
+		return nil, budget.ErrUnknown
+	}
+	if platform.Chmod(dir, 0o700) != nil {
+		os.RemoveAll(dir)
 		return nil, budget.ErrUnknown
 	}
 	cleanup := true
@@ -83,19 +93,15 @@ func Start(provider, model string, a budget.Authority, report ...ReportOption) (
 	if _, err := rand.Read(raw[:]); err != nil {
 		return nil, budget.ErrUnknown
 	}
-	cfg := Config{Socket: filepath.Join(dir, "gate.sock"), Token: hex.EncodeToString(raw[:]), Provider: provider, Model: model, Version: Version}
+	cfg := Config{Socket: localipc.Endpoint(filepath.Join(dir, "gate.sock")), Token: hex.EncodeToString(raw[:]), Provider: provider, Model: model, Version: Version}
 	var writer ReportWriter
 	var prepareReport func() (bool, error)
 	if len(report) == 1 {
 		cfg.ReportRole, writer = report[0].Role, report[0].Write
 		prepareReport = report[0].Prepare
 	}
-	ln, err := net.Listen("unix", cfg.Socket)
+	ln, err := localipc.Listen(cfg.Socket)
 	if err != nil {
-		return nil, budget.ErrUnknown
-	}
-	if err := os.Chmod(cfg.Socket, 0o600); err != nil {
-		ln.Close()
 		return nil, budget.ErrUnknown
 	}
 	b, _ := json.Marshal(cfg)

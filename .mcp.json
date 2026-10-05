@@ -1,11 +1,10 @@
 {
   "mcpServers": {
     "meerkat": {
-      "command": "/bin/sh",
+      "command": "node",
       "args": [
-        "-c",
-        "exec \"${CODEX_MCP_NODE_PATH:-node}\" ./scripts/launch.mjs mcp",
-        "--"
+        "./scripts/launch.mjs",
+        "mcp"
       ],
       "cwd": ".",
       "env_vars": [

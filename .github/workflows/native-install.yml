@@ -1,0 +1,33 @@
+name: Native installation
+on:
+  push:
+    branches: [main, codex/native-install-20261005]
+    paths: ['internal/**', 'scripts/**', 'tests/**', 'go.*', '.mcp.json', '.codex-plugin/**', '.github/workflows/native-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-install-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Native platform checks
+        run: go test ./internal/platform ./internal/localipc ./internal/executor ./internal/store -run TestNative -count=1 -timeout 2m
+      - name: Bootstrap contracts
+        run: node --test tests/install.test.mjs
+      - name: Clean installation and stdio panel resource
+        run: node scripts/verify-install.mjs

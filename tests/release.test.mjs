@@ -12,7 +12,7 @@ import {
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(REPO, 'scripts', 'build-release.mjs');
-const VERSION = '0.4.0-beta.15';
+const VERSION = '0.4.0-beta.16';
 const readJSON = (rel) => JSON.parse(readFileSync(join(REPO, rel), 'utf8'));
 
 function git(cwd, ...args) {
@@ -58,11 +58,11 @@ function fixture() {
 
 const release = (root, env, ...args) => spawnSync(process.execPath, [SCRIPT, '--root', root, ...args], { encoding: 'utf8', env });
 
-test('parseArgs defaults to all four platforms and accepts repeated --platform', () => {
+test('parseArgs defaults to all six platforms and accepts repeated --platform', () => {
   assert.deepEqual(parseArgs([], '/r').platforms.map((p) => `${p.os}/${p.arch}`), PLATFORMS);
   const o = parseArgs(['--platform', 'linux/amd64', '--platform', 'darwin/arm64', '--platform', 'linux/amd64'], '/r');
   assert.deepEqual(o.platforms, [{ os: 'linux', arch: 'amd64' }, { os: 'darwin', arch: 'arm64' }]);
-  assert.throws(() => parseArgs(['--platform', 'windows/amd64']), /unsupported platform/);
+  assert.throws(() => parseArgs(['--platform', 'freebsd/amd64']), /unsupported platform/);
   assert.throws(() => parseArgs(['--bogus']), /unknown argument/);
 });
 
@@ -72,8 +72,8 @@ test('metadata helpers validate and sort', () => {
     { file: artifactName(VERSION, 'linux', 'amd64'), os: 'linux', arch: 'amd64', sha256: 'b'.repeat(64) },
     { file: artifactName(VERSION, 'darwin', 'arm64'), os: 'darwin', arch: 'arm64', sha256: 'c'.repeat(64) },
   ];
-  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.15_linux_amd64');
-  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.15_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.15_linux_amd64\n`);
+  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.16_linux_amd64');
+  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.16_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.16_linux_amd64\n`);
   const meta = releaseMetadata(VERSION, sha, arts);
   assert.equal(meta.name, 'meerkat');
   assert.deepEqual(meta.artifacts.map((a) => a.os), ['darwin', 'linux']);
@@ -82,7 +82,7 @@ test('metadata helpers validate and sort', () => {
   assert.throws(() => releaseMetadata(VERSION, sha, [{ ...arts[0], sha256: 'x' }]), /invalid sha256/);
 });
 
-test('builds the four-platform matrix from clean HEAD with checksums and source metadata', () => {
+test('builds the six-platform matrix from clean HEAD with checksums and source metadata', () => {
   const { root, env } = fixture();
   try {
     const r = release(root, env);
@@ -95,7 +95,7 @@ test('builds the four-platform matrix from clean HEAD with checksums and source 
     assert.equal(meta.version, VERSION);
     assert.equal(meta.sourceSha, git(root, 'rev-parse', 'HEAD'));
     assert.match(meta.sourceSha, /^[0-9a-f]{40}$/);
-    assert.equal(meta.artifacts.length, 4);
+    assert.equal(meta.artifacts.length, 6);
     const sums = readFileSync(join(out, 'SHA256SUMS'), 'utf8');
     const lines = sums.trimEnd().split('\n');
     assert.deepEqual(lines.map((l) => l.split('  ')[1]), files);
@@ -120,7 +120,7 @@ test('repeated --platform builds only the selected subset', () => {
     const r = release(root, env, '--platform', 'linux/arm64');
     assert.equal(r.status, 0, r.stderr);
     const meta = JSON.parse(readFileSync(join(root, '.dist', 'releases', VERSION, 'release.json'), 'utf8'));
-    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.15_linux_arm64']);
+    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.16_linux_arm64']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -180,8 +180,8 @@ test('repository metadata: marketplace, MCP launcher and versions are consistent
   assert.deepEqual(readJSON('.mcp.json'), {
     mcpServers: {
       meerkat: {
-        command: '/bin/sh',
-        args: ['-c', 'exec "${CODEX_MCP_NODE_PATH:-node}" ./scripts/launch.mjs mcp', '--'],
+        command: 'node',
+        args: ['./scripts/launch.mjs', 'mcp'],
         cwd: '.',
         env_vars: ['CODEX_MCP_NODE_PATH', 'MEERKAT_BIN', 'MEERKAT_RUNTIME_DIR', 'MEERKAT_DATA_DIR'],
       },
@@ -198,7 +198,7 @@ test('MCP launcher uses the installed root and host Node without plugin-root env
   const config = readJSON('.mcp.json').mcpServers.meerkat;
   try {
     mkdirSync(unrelated);
-    for (const rel of ['scripts/launch.mjs', 'scripts/lib/go-cli.mjs']) {
+    for (const rel of ['scripts/launch.mjs', 'scripts/lib/go-cli.mjs', 'scripts/lib/private.mjs', 'scripts/lib/private.ps1']) {
       put(root, rel, readFileSync(join(REPO, rel)));
     }
     const binary = join(root, 'bin', 'meerkat');
@@ -209,7 +209,7 @@ test('MCP launcher uses the installed root and host Node without plugin-root env
     assert.notEqual(resolve(root, config.cwd), unrelated);
     const available = { CODEX_MCP_NODE_PATH: process.execPath, MEERKAT_BIN: binary, MEERKAT_DATA_DIR: data };
     const env = { PATH: '/nonexistent', ...Object.fromEntries(config.env_vars.filter((key) => available[key]).map((key) => [key, available[key]])) };
-    const r = spawnSync(config.command, config.args, { cwd: resolve(root, config.cwd), env, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, config.args, { cwd: resolve(root, config.cwd), env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(r.stdout.trimEnd().split('\n'), ['mcp', '--data-dir', data]);
   } finally {

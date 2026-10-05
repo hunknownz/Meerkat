@@ -5,10 +5,10 @@ import (
 	"errors"
 	"reflect"
 	"slices"
-	"syscall"
 
 	"github.com/hunknownz/Meerkat/internal/executor"
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	"github.com/hunknownz/Meerkat/internal/store"
 )
 
@@ -128,7 +128,7 @@ func (c *Core) InspectRecovery(taskID string) (model.RecoveryInspection, error) 
 			check("process", "unknown", "process_host_or_identity_unverifiable")
 			return out, nil
 		}
-		if !errors.Is(syscall.Kill(*run.PID, 0), syscall.ESRCH) || !errors.Is(syscall.Kill(-e.ProcessGroupID, 0), syscall.ESRCH) {
+		if !platform.GroupAbsent(*run.PID, e.ProcessGroupID) {
 			check("process", "blocked", "process_or_group_may_be_alive")
 			return out, nil
 		}

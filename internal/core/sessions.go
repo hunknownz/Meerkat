@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"syscall"
 
 	"github.com/hunknownz/Meerkat/internal/executor"
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	"github.com/hunknownz/Meerkat/internal/store"
 )
 
@@ -68,7 +68,7 @@ func (c *Core) selectSession(st *model.State, t model.Task, p model.Profile, rol
 		return nil, false, err
 	}
 	dir := filepath.Join(root, id)
-	if err := os.Mkdir(dir, 0o700); err != nil {
+	if err := platform.Mkdir(dir, 0o700); err != nil {
 		return nil, false, invalid("session directory unavailable")
 	}
 	b := c.sessionBinding(ss, t.Worktree)
@@ -78,12 +78,7 @@ func (c *Core) selectSession(st *model.State, t model.Task, p model.Profile, rol
 	}
 	ss.ProviderID, ss.FileDigest = snap.ProviderID, snap.Digest
 	for _, path := range []string{root, c.st.DataDir()} {
-		dir, e := os.Open(path)
-		if e != nil {
-			return nil, false, invalid("session directory could not be saved")
-		}
-		e = dir.Sync()
-		dir.Close()
+		e := platform.SyncDir(path)
 		if e != nil {
 			return nil, false, invalid("session directory could not be saved")
 		}
@@ -94,14 +89,11 @@ func (c *Core) selectSession(st *model.State, t model.Task, p model.Profile, rol
 func privateSessionDir(path string, create bool) error {
 	fi, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) && create {
-		if err = os.Mkdir(path, 0o700); err == nil || errors.Is(err, os.ErrExist) {
+		if err = platform.Mkdir(path, 0o700); err == nil || errors.Is(err, os.ErrExist) {
 			fi, err = os.Lstat(path)
 		}
 	}
-	if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
-		return invalid("session directory is unsafe")
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+	if err != nil || !fi.IsDir() || !platform.Private(path, fi, 0o700) {
 		return invalid("session directory is unsafe")
 	}
 	return nil

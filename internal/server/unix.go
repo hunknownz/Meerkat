@@ -10,13 +10,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
 	"github.com/hunknownz/Meerkat/internal/core"
 	"github.com/hunknownz/Meerkat/internal/issues"
+	"github.com/hunknownz/Meerkat/internal/localipc"
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 // SocketName is the command socket file inside the data directory.
@@ -59,83 +60,37 @@ type Response struct {
 }
 
 // SocketPath returns the socket path for dataDir.
-func SocketPath(dataDir string) string { return filepath.Join(dataDir, SocketName) }
-
-// CheckPrivateDir requires a real 0700 directory owned by the current user.
+func SocketPath(dataDir string) string { return localipc.Endpoint(filepath.Join(dataDir, SocketName)) }
 func CheckPrivateDir(dir string) error {
-	fi, err := os.Lstat(dir)
-	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() || fi.Mode().Perm() != 0o700 || !ownedByMe(fi) {
+	fi, e := os.Lstat(dir)
+	if e != nil || !fi.IsDir() || !platform.Private(dir, fi, 0o700) {
 		return ErrUnsafeSocket
 	}
 	return nil
 }
-
-func ownedByMe(fi os.FileInfo) bool {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	return ok && int(st.Uid) == os.Getuid()
-}
-
-// checkSocket validates an existing socket file (not a symlink, ours, 0600).
-func checkSocket(path string) error {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if fi.Mode()&os.ModeSocket == 0 || !ownedByMe(fi) || fi.Mode().Perm()&0o077 != 0 {
-		return ErrUnsafeSocket
-	}
-	return nil
-}
-
-// Alive reports whether a daemon answers on dataDir's socket.
+func checkSocket(path string) error { return localipc.Check(path) }
 func Alive(dataDir string) bool {
-	p := SocketPath(dataDir)
-	if checkSocket(p) != nil {
+	if CheckPrivateDir(dataDir) != nil {
 		return false
 	}
-	c, err := net.DialTimeout("unix", p, time.Second)
-	if err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	c, e := localipc.Dial(ctx, SocketPath(dataDir))
+	if e != nil {
 		return false
 	}
 	c.Close()
 	return true
 }
-
-// ListenUnix creates the private command socket. An existing socket is removed
-// only when it is ours and provably dead (connection refused); a live one is
-// never unlinked.
-func ListenUnix(dataDir string) (*net.UnixListener, error) {
-	if err := CheckPrivateDir(dataDir); err != nil {
-		return nil, err
+func ListenUnix(dataDir string) (net.Listener, error) {
+	if e := CheckPrivateDir(dataDir); e != nil {
+		return nil, e
 	}
-	p := SocketPath(dataDir)
-	if fi, err := os.Lstat(p); err == nil {
-		if fi.Mode()&os.ModeSocket == 0 || !ownedByMe(fi) {
-			return nil, ErrUnsafeSocket
-		}
-		c, derr := net.DialTimeout("unix", p, time.Second)
-		if derr == nil {
-			c.Close()
-			return nil, ErrActive
-		}
-		if !errors.Is(derr, syscall.ECONNREFUSED) {
-			return nil, ErrActive // unknown state: never unlink blindly
-		}
-		if err := os.Remove(p); err != nil {
-			return nil, ErrUnsafeSocket
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, ErrUnsafeSocket
+	if Alive(dataDir) {
+		return nil, ErrActive
 	}
-	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: p, Net: "unix"})
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(p, 0o600); err != nil {
-		ln.Close()
-		return nil, ErrUnsafeSocket
-	}
-	return ln, nil
+	ln, e := localipc.Listen(SocketPath(dataDir))
+	return ln, e
 }
 
 // ServeUnix accepts commands until ln is closed.
@@ -584,8 +539,7 @@ func Call(ctx context.Context, dataDir string, req Request) (Response, error) {
 		}
 		return resp, ErrNoDaemon
 	}
-	var d net.Dialer
-	c, err := d.DialContext(ctx, "unix", p)
+	c, err := localipc.Dial(ctx, p)
 	if err != nil {
 		return resp, ErrNoDaemon
 	}
@@ -595,7 +549,11 @@ func Call(ctx context.Context, dataDir string, req Request) (Response, error) {
 	if err := json.NewEncoder(c).Encode(req); err != nil {
 		return resp, fmt.Errorf("server: send failed")
 	}
-	_ = c.(*net.UnixConn).CloseWrite()
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	} else {
+		return resp, fmt.Errorf("server: transport cannot finish request")
+	}
 	dec := json.NewDecoder(io.LimitReader(c, MaxResponseBytes))
 	if err := dec.Decode(&resp); err != nil {
 		return resp, fmt.Errorf("server: no reply")

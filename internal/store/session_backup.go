@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 const maxSessionBytes = 64 << 20
@@ -20,7 +20,7 @@ func fileDigest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToStr
 func (s *Store) readSessionBytes(ss model.Session) ([]byte, error) {
 	for _, dir := range []string{filepath.Join(s.dir, "sessions"), filepath.Join(s.dir, "sessions", ss.ID)} {
 		fi, err := os.Lstat(dir)
-		if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 || !ownedNoSymlink(fi) {
+		if err != nil || !fi.IsDir() || !platform.Private(dir, fi, 0o700) {
 			return nil, badBackup("session directory unsafe")
 		}
 	}
@@ -123,10 +123,10 @@ func (s *Store) materializeSessions() error {
 			if err := checkDir(root); err != nil {
 				return err
 			}
-			if err := os.Mkdir(filepath.Join(root, ss.ID), 0o700); err != nil {
+			if err := platform.Mkdir(filepath.Join(root, ss.ID), 0o700); err != nil {
 				return ErrBadBackup
 			}
-			f, err := os.OpenFile(filepath.Join(s.dir, filepath.FromSlash(ss.FileRef)), os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
+			f, err := platform.OpenFile(filepath.Join(s.dir, filepath.FromSlash(ss.FileRef)), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 			if err != nil {
 				return ErrBadBackup
 			}

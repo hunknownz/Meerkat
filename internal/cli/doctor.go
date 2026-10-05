@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/core"
@@ -127,7 +128,7 @@ func doctorService(ctx context.Context, dir string, rep map[string]any, checks *
 	add := func(status, message, next string) {
 		*checks = append(*checks, doctorCheck("service.health", status, message, next))
 	}
-	if _, e := os.Lstat(server.SocketPath(dir)); errors.Is(e, os.ErrNotExist) {
+	if _, e := os.Lstat(server.SocketPath(dir)); runtime.GOOS != "windows" && errors.Is(e, os.ErrNotExist) {
 		rep["daemonActive"] = false
 		add("warning", "No service socket is present.", "Start the service to run tasks.")
 		return

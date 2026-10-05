@@ -1,49 +1,33 @@
 ---
 name: get-started
-description: First-use setup for Meerkat. Install the runtime, configure a private executor profile, start the local service and open the monitor. Use when the user asks to set up, configure or start Meerkat.
+description: Install, configure or start Meerkat on macOS, Linux or native Windows. Verify local setup and open the monitor without making a paid model call during installation.
 ---
 
-# Meerkat: get started
+# Meerkat setup
 
-Act only after the user asks. Full guide: [install](../../docs/install.md).
+Act after the user asks for installation/setup. Find the root relative to this
+skill (`../..`) and read [INSTALL.md](../../INSTALL.md), then [install](../../docs/install.md).
 
-## Locate
+1. Detect the OS and prerequisites. Use native Windows:
+   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1`.
+   macOS/Linux: `sh scripts/install.sh`. A non-Git installed package needs a
+   clean repository clone for the source fallback.
+2. Read the installation result. Reuse the matching controller; preserve another
+   marketplace or service version for explicit idle backup/update. Complete
+   reported registration with the actual Codex executable.
+3. Reuse a private Profile, or obtain project ID, provider, model, endpoint and
+   credential environment-variable **name**. Run `configure.mjs`. Only Pi is
+   implemented; the bridge needs Pi 0.99.1 text HTTP SSE/openai-completions.
+4. Let the user set the key in the service environment. Never request, print or
+   store it. An earlier keyless service needs a deliberate idle restart.
+5. Run `node scripts/launch.mjs doctor --profile ABS --probe-executor` with
+   matching runtime/data overrides. The version probe calls no model. Investigate
+   blocked results; do not resolve/replay old unknown runs as part of setup.
+6. Reload/open a new Codex chat and call `open_monitor`. Verify actual native
+   display when accessible; otherwise request user assistance for this evidence.
+   `snapshot` is a CLI fallback, not native display proof.
 
-Find the plugin root relative to this skill (`../..`); it contains `scripts/launch.mjs`.
-Requirements: macOS/Linux (arm64/amd64), Node 22+, Git, and Pi 0.99.1
-(`npm install -g @earendil-works/pi-coding-agent@0.99.1`). Windows is unsupported.
-
-## Steps
-
-1. Runtime: `node scripts/setup.mjs` downloads and verifies the platform binary
-   (`SHA256SUMS`, `release.json`) into `~/.meerkat/runtime/<version>/<os>-<arch>`.
-   Use `--artifact-dir` for offline files or `--runtime-dir` for an isolated install.
-   Until binary assets are published, use the install guide's source build and
-   `--artifact-dir` path; a plugin install alone does not install the runtime.
-2. Profile: reuse an existing private profile when suitable. Otherwise use supplied project ID,
-   provider, model and credential environment-variable name; ask only for missing values. Run:
-   `node scripts/configure.mjs --project-id ID --provider P --model M --auth-env VAR_NAME`
-   (the current budget bridge requires custom endpoints to use `--base-url URL --api openai-completions`).
-   It refuses to overwrite an existing profile.
-3. Key: tell the user to `export VAR_NAME=...` in their own shell. Never ask for, accept,
-   echo or store the key.
-4. Service: reuse a running service for the chosen data directory. Otherwise start
-   `node scripts/launch.mjs serve --port 47826` with the named key available and `pi` on PATH.
-   If the key is unavailable to your environment, ask the user to start it in their shell.
-5. Diagnose: run `node scripts/launch.mjs doctor --profile /absolute/private/profile.json`.
-   If the executable version needs verification, add `--probe-executor`; this runs only
-   an isolated version command, without keys or model calls. Read blocking findings and
-   unverified checks before a task. A passing report does not verify credentials, balance
-   or a live request gate. See [diagnostics](../../docs/doctor.md) for interpretation.
-6. Monitor: after install, in a new chat, call the `open_monitor` tool and report the counts
-   it shows (agents, tasks, deliveries). If the host lacks MCP Apps, run
-   `node scripts/launch.mjs snapshot` and say it is a CLI fallback, not the native panel.
-
-## Next
-
-Use the `delegate` skill for one reviewed-by-you run, or `workflow` for full delivery.
-
-## Rules
-
-- Store no credentials in files, arguments, chat or reports; profiles hold the variable name only.
-- Remote integration, publishing and deployment require the user's actual authorization. The standard MCP Apps panel was verified in Codex on 2026-10-03; verify the user's current installation rather than assuming every host renders it.
+Report runtime, service, registration, configuration, real task and native
+display separately. Installation does not authorize a paid task. Select
+[direct work, delegation or workflow](../../docs/execution.md) after setup.
+Remote actions require the user's authorization.

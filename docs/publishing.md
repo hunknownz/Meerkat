@@ -1,18 +1,18 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.15`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.16`.
 
 ## GitHub repository (current)
 
 - The repository <https://github.com/hunknownz/Meerkat> is its own Codex marketplace
-  (`.agents/plugins/marketplace.json`). Users install with
+  (`.agents/plugins/marketplace.json`). The recommended AI setup entry is [INSTALL.md](../INSTALL.md); it produces a private local marketplace package with absolute host/runtime paths. Users with Node already on the host PATH can also install with
   `codex plugin marketplace add hunknownz/Meerkat --ref main` and
   `codex plugin add meerkat@meerkat`. No OpenAI registration is needed for this.
 - Release assets are raw binaries plus `SHA256SUMS` and `release.json`, built by
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.15` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.16` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
   Until then, use the documented source build in [install](install.md); no
   nonexistent release download is required for the repository installation.
 

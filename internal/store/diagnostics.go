@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	budget "github.com/hunknownz/Meerkat/internal/requestbudget"
 )
 
@@ -50,10 +50,12 @@ func InspectReadOnly(ctx context.Context, dir string) (Diagnostics, error) {
 		if err != nil {
 			return r, ErrUnsafeDir
 		}
-		st, ok := fi.Sys().(*syscall.Stat_t)
-		if !ok || int(st.Uid) != os.Getuid() || fi.Mode()&os.ModeSymlink != 0 ||
-			name == "" && (!fi.IsDir() || fi.Mode().Perm() != 0o700) ||
-			name != "" && (!fi.Mode().IsRegular() || fi.Mode().Perm() != 0o600) {
+		perm := os.FileMode(0o600)
+		if name == "" {
+			perm = 0o700
+		}
+		if !platform.Private(filepath.Join(dir, name), fi, perm) ||
+			name == "" && !fi.IsDir() || name != "" && !fi.Mode().IsRegular() {
 			return r, ErrUnsafeDir
 		}
 	}

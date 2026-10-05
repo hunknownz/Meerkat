@@ -48,21 +48,28 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.15` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
+Ask your AI Agent: **“安装 https://github.com/hunknownz/Meerkat”**.
+The repository provides [AI installation instructions](INSTALL.md) and native
+bootstrap scripts. Meerkat `0.4.0-beta.16` targets macOS, Linux and native Windows
+on amd64/arm64. See the [verification status](docs/verification/installation-20261005.md)
+for what has actually been tested; a Windows build is not Windows host acceptance.
 
 ```sh
-codex plugin marketplace add hunknownz/Meerkat --ref main
-codex plugin add meerkat@meerkat
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
-node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.15
-node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
-export MY_PROVIDER_KEY=...        # in your own shell only
-node scripts/launch.mjs serve --port 47826
+sh scripts/install.sh                   # macOS / Linux
 ```
 
-Then, in a new Codex chat, ask `打开 Meerkat 面板` (MCP Apps tool `open_monitor`). Full guide, diagnosis, update and uninstall: [docs/install.md](docs/install.md). Distribution: [docs/publishing.md](docs/publishing.md).
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 # Windows
+```
+
+The installer prepares the runtime, private Pi dependency, service and local
+Codex marketplace package. It uses a verified published binary when available,
+or builds the current host from committed source. Installation makes no paid
+model call. Provider configuration and a first real task are separate steps.
+After reloading Codex, ask **“打开 Meerkat 面板”**. Full guide, configuration,
+updates and uninstall: [install](docs/install.md). Distribution: [publishing](docs/publishing.md).
 
 ## Run tasks
 

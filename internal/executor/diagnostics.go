@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 // DiagnosticCheck contains fixed, credential-free text. Compatibility is not
@@ -58,7 +59,11 @@ func piDiagnosticCommand(p model.Profile) (binary, agentDir string, ok bool) {
 		return "", "", false
 	}
 	switch filepath.Base(argv[0]) {
-	case "node", "env", "sh", "bash", "zsh", "python", "python3":
+	case "node", "node.exe":
+		if len(argv) < 2 || !managedPiCLI(argv[1]) {
+			return "", "", false
+		}
+	case "env", "sh", "bash", "zsh", "python", "python3":
 		return "", "", false
 	}
 	return argv[0], agentDir, true
@@ -83,7 +88,7 @@ func (*Pi) Diagnose(ctx context.Context, p model.Profile, probe bool) []Diagnost
 	if !probe {
 		out = append(out, diag("executor.version", "not_checked", "The executor was not launched; its installed version is unverified.", "Use --probe-executor with this profile for an isolated version-only check."))
 	} else if err == nil {
-		version, ok := probePiVersion(ctx, resolved)
+		version, ok := probePiVersion(ctx, resolved, piProbeArgs(p)...)
 		switch {
 		case !ok:
 			out = append(out, diag("executor.version", "blocked", "The isolated version probe failed, timed out or returned an invalid version.", "Check the configured executable and Node 22 installation."))
@@ -105,7 +110,7 @@ func piDiagnosticModel(p model.Profile, agentDir string) DiagnosticCheck {
 		return diag("executor.model", "warning", "This profile uses external Pi configuration; its selected model/API was not inspected.", "Use an isolated provider configured with --base-url and --api openai-completions, or verify the existing provider's API.")
 	}
 	fi, err := os.Lstat(agentDir)
-	if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 || !ownedByMe(fi) {
+	if err != nil || !fi.IsDir() || !platform.Private(agentDir, fi, 0o700) {
 		return diag("executor.model", "blocked", "The isolated Pi configuration directory is unsafe or missing.", "Recreate a private executor profile with configure.mjs.")
 	}
 	f, err := openNoFollow(filepath.Join(agentDir, "models.json"))
@@ -114,7 +119,7 @@ func piDiagnosticModel(p model.Profile, agentDir string) DiagnosticCheck {
 	}
 	defer f.Close()
 	fi, err = f.Stat()
-	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0o600 || !ownedByMe(fi) || fi.Size() > 1<<20 {
+	if err != nil || !fi.Mode().IsRegular() || !platform.Private(filepath.Join(agentDir, "models.json"), fi, 0o600) || fi.Size() > 1<<20 {
 		return diag("executor.model", "blocked", "The isolated model configuration is unsafe or oversized.", "Use a private 0600 model configuration owned by the current user.")
 	}
 	var cfg struct {
@@ -186,7 +191,7 @@ func (b *versionOutput) Write(p []byte) (int, error) {
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
-func probePiVersion(ctx context.Context, binary string) (string, bool) {
+func probePiVersion(ctx context.Context, binary string, prefix ...string) (string, bool) {
 	dir, err := os.MkdirTemp("", "meerkat-version-")
 	if err != nil {
 		return "", false
@@ -199,7 +204,7 @@ func probePiVersion(ctx context.Context, binary string) (string, bool) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, "--version")
+	cmd := exec.CommandContext(ctx, binary, append(prefix, "--version")...)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "PI_CODING_AGENT_DIR=" + dir, "XDG_CACHE_HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "NODE_DISABLE_COMPILE_CACHE=1"}
 	ownGroup(cmd)
@@ -213,7 +218,32 @@ func probePiVersion(ctx context.Context, binary string) (string, bool) {
 	var out versionOutput
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
-	err = cmd.Run()
+	err = cmd.Start()
+	if err == nil {
+		err = bindGroup(cmd)
+		if err != nil {
+			cmd.Process.Kill()
+		}
+		defer releaseGroup(cmd.Process.Pid)
+		waitErr := cmd.Wait()
+		if err == nil {
+			err = waitErr
+		}
+	}
 	v := strings.TrimSpace(out.String())
 	return v, err == nil && ctx.Err() == nil && !out.overflow && versionPattern.MatchString(v)
+}
+
+func managedPiCLI(path string) bool {
+	return filepath.IsAbs(path) && filepath.Clean(path) == path && strings.HasSuffix(filepath.ToSlash(path), "/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js")
+}
+func piProbeArgs(p model.Profile) []string {
+	argv := p.PiCommand
+	if len(argv) >= 3 && filepath.Base(argv[0]) == "env" {
+		argv = argv[2:]
+	}
+	if len(argv) >= 2 && managedPiCLI(argv[1]) && (filepath.Base(argv[0]) == "node" || filepath.Base(argv[0]) == "node.exe") {
+		return []string{argv[1]}
+	}
+	return nil
 }

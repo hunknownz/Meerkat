@@ -94,6 +94,13 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	}
 	if err == nil {
 		err = cmd.Start()
+		if err == nil {
+			err = bindGroup(cmd)
+			if err != nil {
+				cmd.Process.Kill()
+				cmd.Wait()
+			}
+		}
 	}
 	if err != nil {
 		if in != nil {
@@ -110,6 +117,7 @@ func (p *Pi) runRPC(ctx context.Context, pp *prepared, req Request, onEvent func
 	}
 	host, _ := os.Hostname()
 	pid := cmd.Process.Pid
+	defer releaseGroup(pid)
 	o.proc = &Process{Executor: "pi", PID: pid, PGID: pid, Host: host, StartedAt: time.Now().UTC()}
 	if onStart != nil {
 		func() { defer func() { _ = recover() }(); onStart(*o.proc) }()

@@ -10,6 +10,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, closeSync, copyFileSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensurePrivateDir, protectNewFile } from './lib/private.mjs';
 import { SOURCE_ROOT, VERSION_RE, installedPath, manifestVersion, runtimeDir, selectTarget } from './lib/go-cli.mjs';
 
 export const MAX_BINARY = 120 * 1024 * 1024;
@@ -18,7 +19,7 @@ const RELEASE_BASE = 'https://github.com/hunknownz/Meerkat/releases/download';
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 
-export const artifactName = (version, t) => `meerkat_${version}_${t.os}_${t.arch}`;
+export const artifactName = (version, t) => `meerkat_${version}_${t.os}_${t.arch}${t.os === 'windows' ? '.exe' : ''}`;
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 const safeName = (n) => typeof n === 'string' && SAFE_NAME.test(n) && !n.includes('..');
 
@@ -43,7 +44,7 @@ async function fetchBounded(url, limit, timeoutMs) {
       url = new URL(loc, url).href;
       continue;
     }
-    if (res.status !== 200) throw new Error(`download failed: HTTP ${res.status} for ${basename(new URL(url).pathname)}`);
+    if (res.status !== 200) throw Object.assign(new Error(`download failed: HTTP ${res.status} for ${basename(new URL(url).pathname)}`), { status: res.status });
     if (Number(res.headers.get('content-length') ?? 0) > limit) throw new Error('download exceeds size limit');
     const chunks = [];
     let size = 0;
@@ -107,19 +108,6 @@ function hostVersion(file) {
 }
 
 // Each existing runtime component must be a plain private directory owned by the current user.
-function ensurePrivateDir(dir) {
-  try {
-    const st = lstatSync(dir);
-    if (st.isSymbolicLink() || !st.isDirectory() || st.uid !== process.getuid() || (st.mode & 0o077) !== 0) {
-      throw new Error(`${dir} must be a private directory (0700) owned by the current user`);
-    }
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    chmodSync(dir, 0o700);
-  }
-}
-
 export async function install({ version, target, runtime, artifactDir, fetcher = fetchBounded }) {
   if (!VERSION_RE.test(version)) throw new Error('invalid version');
   if (!target) throw new Error(`unsupported platform ${process.platform}/${process.arch}`);
@@ -145,11 +133,11 @@ export async function install({ version, target, runtime, artifactDir, fetcher =
   const result = { path: dest, sha256: hash, sourceSha: meta.sourceSha, source: artifactDir ? resolve(artifactDir) : base };
   if (existing && sha256(readFileSync(dest)) === hash && hostVersion(dest) === version) return { ...result, changed: false };
 
-  const tmp = join(dirname(dest), `.meerkat.tmp-${randomBytes(6).toString('hex')}`);
+  const tmp = join(dirname(dest), `.meerkat.tmp-${randomBytes(6).toString('hex')}${target.os === 'windows' ? '.exe' : ''}`);
   try {
     const fd = openSync(tmp, 'wx', 0o700);
     try { writeSync(fd, bin); } finally { closeSync(fd); }
-    chmodSync(tmp, 0o755);
+    protectNewFile(tmp, 0o755);
     if (sha256(readFileSync(tmp)) !== hash) throw new Error('written binary hash mismatch');
     if (hostVersion(tmp) !== version) throw new Error(`binary does not report version ${version}; nothing replaced`);
     if (existing && hostVersion(dest) === version) {

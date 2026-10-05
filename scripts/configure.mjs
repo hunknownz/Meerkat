@@ -6,6 +6,8 @@
 // Writes <data-dir>/profiles/<slug>.json (default data dir ~/.meerkat). With --base-url/--api it also writes an
 // isolated Pi agent directory <data-dir>/pi/<slug>/models.json whose apiKey is the literal "${ENV}" reference.
 // The API key itself stays in the inherited service environment; this script never reads it.
+import { ensurePrivateDir, privatePath, protectNewFile } from './lib/private.mjs';
+import { managedPiCommand } from './lib/executor-install.mjs';
 import { accessSync, chmodSync, closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, normalize, resolve } from 'node:path';
@@ -63,18 +65,7 @@ export function validate(o, home = homedir()) {
 }
 
 // Existing directories must be plain directories owned by the user; private ones must also be 0700.
-function ensureDir(dir, strict) {
-  try {
-    const st = lstatSync(dir);
-    if (st.isSymbolicLink() || !st.isDirectory() || st.uid !== process.getuid() || (st.mode & (strict ? 0o077 : 0o022)) !== 0) {
-      throw new Error(`${dir} must be a ${strict ? 'private (0700) ' : ''}directory owned by the current user (no symlink)`);
-    }
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    chmodSync(dir, 0o700);
-  }
-}
+function ensureDir(dir, strict) { if (strict) ensurePrivateDir(dir); else { try {privatePath(dir,{directory:true,strict:false});} catch(e){if(e.code!=='ENOENT')throw e;ensurePrivateDir(dir);} } }
 
 function absent(file) {
   try { lstatSync(file); } catch (err) { if (err.code === 'ENOENT') return; throw err; }
@@ -84,7 +75,7 @@ function absent(file) {
 function writePrivate(file, value) {
   const fd = openSync(file, 'wx', 0o600);
   try { writeSync(fd, `${JSON.stringify(value, null, 2)}\n`); } finally { closeSync(fd); }
-  chmodSync(file, 0o600);
+  protectNewFile(file, 0o600);
 }
 
 export function configure(opts) {
@@ -96,7 +87,7 @@ export function configure(opts) {
   ensureDir(c.dataDir, false);
   ensureDir(profilesDir, true);
   absent(profile);
-  let piCommand = [c.pi, '--thinking', 'low'];
+  let piCommand = [...(opts.piCommand ? [c.pi] : managedPiCommand()), '--thinking', 'low'];
   if (c.baseUrl) {
     ensureDir(join(c.dataDir, 'pi'), true);
     ensureDir(piDir, true);

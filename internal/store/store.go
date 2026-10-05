@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 	_ "modernc.org/sqlite"
 )
 
@@ -165,44 +165,41 @@ func dsn(path string, mode dsnMode) string {
 		q.Add("_pragma", "journal_mode(WAL)")
 		q.Set("_txlock", "immediate")
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: q.Encode()}
+	uriPath := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" {
+		uriPath = "/" + uriPath
+	}
+	u := url.URL{Scheme: "file", Path: uriPath, RawQuery: q.Encode()}
 	return u.String()
 }
 
 func checkDir(dir string) error {
 	fi, err := os.Lstat(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		if err = os.Mkdir(dir, 0o700); err != nil {
+		if platform.Mkdir(dir, 0o700) != nil {
 			return ErrUnsafeDir
 		}
 		fi, err = os.Lstat(dir)
 	}
-	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
-		return ErrUnsafeDir
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+	if err != nil || !fi.IsDir() || !platform.Private(dir, fi, 0o700) {
 		return ErrUnsafeDir
 	}
 	return nil
 }
-
 func checkFile(path string) error {
 	fi, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err != nil {
+		f, e := platform.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if e != nil {
 			return ErrUnsafeDir
 		}
 		return f.Close()
 	}
-	if err != nil || !fi.Mode().IsRegular() {
+	if err != nil || !fi.Mode().IsRegular() || !platform.Owned(path, fi) {
 		return ErrUnsafeDir
 	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
-		return ErrUnsafeDir
-	}
-	if fi.Mode().Perm() != 0o600 {
-		return os.Chmod(path, 0o600)
+	if !platform.Private(path, fi, 0o600) {
+		return platform.Chmod(path, 0o600)
 	}
 	return nil
 }
@@ -642,8 +639,7 @@ func pidAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	return platform.Alive(pid)
 }
 
 func newToken() (string, error) {

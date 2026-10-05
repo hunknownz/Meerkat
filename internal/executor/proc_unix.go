@@ -4,7 +4,6 @@ package executor
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"os/exec"
 	"syscall"
@@ -25,11 +24,5 @@ func exitSignal(ps *os.ProcessState) string {
 	return ""
 }
 
-func openNoFollow(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-}
-
-func ownedByMe(fi fs.FileInfo) bool {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	return ok && int(st.Uid) == os.Getuid()
-}
+func bindGroup(cmd *exec.Cmd) error { return nil }
+func releaseGroup(pid int)          {}

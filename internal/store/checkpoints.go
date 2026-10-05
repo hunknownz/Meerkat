@@ -10,6 +10,7 @@ import (
 
 	"github.com/hunknownz/Meerkat/internal/checkpoint"
 	"github.com/hunknownz/Meerkat/internal/model"
+	"github.com/hunknownz/Meerkat/internal/platform"
 )
 
 const migrationV6 = `
@@ -84,10 +85,10 @@ func (s *Store) WriteCheckpointFile(c model.Checkpoint, raw []byte) error {
 		return e
 	}
 	dir := filepath.Join(root, c.ID)
-	if os.Mkdir(dir, 0o700) != nil {
+	if platform.Mkdir(dir, 0o700) != nil {
 		return ErrConflict
 	}
-	f, e := os.OpenFile(filepath.Join(dir, "snapshot.tmp"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, e := platform.OpenFile(filepath.Join(dir, "snapshot.tmp"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if e != nil {
 		return ErrConflict
 	}
@@ -103,12 +104,7 @@ func (s *Store) WriteCheckpointFile(c model.Checkpoint, raw []byte) error {
 		return ErrConflict
 	}
 	for _, p := range []string{dir, root, s.dir} {
-		f, e := os.Open(p)
-		if e != nil {
-			return ErrConflict
-		}
-		e = f.Sync()
-		f.Close()
+		e = platform.SyncDir(p)
 		if e != nil {
 			return ErrConflict
 		}
@@ -121,7 +117,7 @@ func (s *Store) ReadCheckpointFile(c model.Checkpoint) ([]byte, error) {
 	}
 	for _, p := range []string{filepath.Join(s.dir, "checkpoints"), filepath.Join(s.dir, "checkpoints", c.ID)} {
 		fi, e := os.Lstat(p)
-		if e != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 || !ownedNoSymlink(fi) {
+		if e != nil || !fi.IsDir() || !platform.Private(p, fi, 0o700) {
 			return nil, ErrUnsafeDir
 		}
 	}

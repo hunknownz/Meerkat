@@ -1,199 +1,134 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.15` is a release candidate by hunknownz: <https://github.com/hunknownz/Meerkat>.
-The repository install below works from source. Tag-based binary downloads become
-available only when the GitHub release is published.
-It is not listed in the OpenAI plugin directory (see [publishing](publishing.md)).
+Meerkat `0.4.0-beta.16` is maintained by [hunknownz](https://github.com/hunknownz/Meerkat).
+GitHub installation does not require OpenAI directory review. Public binary assets
+are a separate release; source installation works without those assets.
 
-## Requirements
+## AI installation
 
-- macOS or Linux on arm64 or amd64. Windows is unsupported (the service uses Unix sockets).
-- Node 22, Git and Codex. Source installation also needs Go 1.26+; a published
-  binary release removes that Go requirement. Frontend assets are already bundled.
-- Pi is currently the only executor:
-  `npm install -g @earendil-works/pi-coding-agent@0.99.1`.
-  The provider API key stays in your shell environment.
-
-## 1. Install the plugin
-
-From the GitHub repository marketplace:
+Say **“安装 https://github.com/hunknownz/Meerkat”** to a local-capable AI Agent.
+It should read [INSTALL.md](../INSTALL.md), clone a clean checkout and run:
 
 ```sh
-codex plugin marketplace add hunknownz/Meerkat --ref main
-codex plugin add meerkat@meerkat
+sh scripts/install.sh
 ```
 
-## 2. Install the runtime binary
+Native Windows, from PowerShell:
 
-Until binary assets are published, build the committed source and install locally:
-
-```sh
-git clone https://github.com/hunknownz/Meerkat.git
-cd Meerkat
-node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.15
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 ```
 
-The builder compiles four supported targets from clean committed HEAD. After a
-release exists, pin both marketplace and clone to its tag (for example
-`--ref v0.4.0-beta.15` / `--branch v0.4.0-beta.15`) and use `node scripts/setup.mjs`
-to download binaries. `setup.mjs` validates the selected binary against the release's
-`SHA256SUMS` and `release.json`. Defaults:
+Both bootstraps find Node 22.19+/Go and privately install missing toolchains from
+official HTTPS downloads with published SHA-256 checksums. Git and Codex must be
+available. They do not introduce WSL, global npm packages or an administrator
+service. Frontend assets are committed; end users do not run Vite.
+
+The installer verifies a published runtime or builds only the current host from
+clean committed HEAD when the release is absent. Network failures and invalid
+checksums do not silently fall back. It installs Pi 0.99.1 privately, starts/reuses
+a matching Go service, and generates a local marketplace with absolute Node,
+runtime and data paths. Missing host registration is reported with its command.
+A different marketplace or daemon version is preserved for explicit update.
+
+Installer options: `--source`, `--artifact-dir DIR`, `--runtime-dir DIR`,
+`--data-dir DIR`, `--codex-command ABS`, `--no-host`, `--no-executor`, `--no-start`.
 
 | Item | Default |
 | --- | --- |
-| Runtime | `~/.meerkat/runtime/<version>/<os>-<arch>` |
-| Private state (SQLite, profiles, runs) | `~/.meerkat` |
+| Runtime | `~/.meerkat/runtime/<version>/<os>-<arch>/meerkat` (`meerkat.exe` on Windows) |
+| SQLite, profiles and sessions | `~/.meerkat` |
+| Private Pi | `~/.meerkat/executors/pi/0.99.1` |
+| Generated marketplace | `~/.meerkat/marketplaces/<version>-<sourceSha>` |
 
-Options: `--artifact-dir <dir>` installs offline from already downloaded release files;
-`--runtime-dir <dir>` installs into an isolated directory. Absolute overrides:
-`MEERKAT_RUNTIME_DIR`, `MEERKAT_DATA_DIR`, and optionally `MEERKAT_BIN` (absolute path to a binary).
+On Windows, `~` means the current user's home. Private files use protected
+current-user/SYSTEM DACLs; commands use a secured named pipe; executor descendants
+use an owned Job Object. Unix keeps its private modes and socket/process groups.
+See [platform evidence](verification/installation-20261005.md).
 
-Every Go command runs through the launcher, which never builds or downloads:
+## First configuration
+
+Installation makes no model call and does not choose a provider. Only Pi is
+implemented; direct coordinator work is also an [execution choice](execution.md).
 
 ```sh
-node scripts/launch.mjs <command> [--data-dir /private/path]
+node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY --base-url https://provider.example/v1 --api openai-completions
 ```
 
-## 3. Configure an executor profile
+The profile/model files hold the credential variable name, never the value.
+Installed Pi uses a Node/CLI array on both OSs; Go sets its isolated directory
+without a system `env` executable. Existing profiles are not overwritten.
+Overrides: `--data-dir`, `--pi-command`. Pi's native provider configuration can be
+used without `--base-url`/`--api`; the budget bridge still requires Pi 0.99.1 text
+HTTP SSE with `openai-completions`.
 
-```sh
-node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL \
-  --auth-env MY_PROVIDER_KEY
-```
-
-- Choose the provider and model yourself. Without `--base-url`, Pi's existing provider configuration is used.
-- Optional flags: `--base-url URL` together with `--api openai-completions`,
-  `--pi-command /abs/path/to/pi`, and `--data-dir /abs/private/dir`.
-  Endpoints use HTTPS; local gateways may use HTTP on `127.0.0.1` or `::1`.
-  HTTP hostnames and LAN addresses are refused.
-- With `--base-url`/`--api`, a custom provider is written to an isolated `pi/example/models.json`
-  that references the environment variable name only, never the key.
-- The profile is written to `~/.meerkat/profiles/example.json`; existing profiles are not overwritten.
-- Set the key only in your shell (`export MY_PROVIDER_KEY=...`). Never paste it into a chat.
-- Current request-budget support is Pi 0.99.1 text HTTP SSE using `openai-completions`.
-  An existing provider must use this API too. Anthropic Messages, WebSocket and
-  media inputs are not supported by this release's budget bridge.
-
-For keys managed by a local Magpie gateway, see [Magpie routing](magpie.md).
-
-## 4. Start the service
-
-In a shell where the key is exported and `pi` is on `PATH`:
+Set the key in your own service environment; never paste it into chat. A service
+started without that key needs a deliberate idle restart from that environment.
+Foreground startup and version-only diagnostics:
 
 ```sh
 node scripts/launch.mjs serve --port 47826
+node scripts/launch.mjs doctor --profile /absolute/private/profile.json --probe-executor
 ```
 
-It runs in the foreground until terminated.
+The launcher never builds/downloads. Absolute overrides: `MEERKAT_BIN`,
+`MEERKAT_RUNTIME_DIR`, `MEERKAT_DATA_DIR`. Diagnosis/version checks do not prove
+credentials, balance or a real task. [Magpie](magpie.md) can manage upstream keys.
 
-Check setup before the first task:
+## Open and run
+
+Reload Codex or open a new chat and ask **“打开 Meerkat 面板”**. The standard
+`open_monitor` MCP App shows Agents / Tasks / Usage and bounded instructions,
+pause, follow-up, receipt queries and stop. Settings stay read-only. CDP is optional.
+
+Hosts without MCP Apps can use `snapshot` or the loopback browser page; those are
+not native panel evidence. Current [host evidence](codex-ui-acceptance.md) and
+[remaining checks](verification/installation-20261005.md).
+
+Codex prepares a clean linked worktree and frozen [task input](../skills/workflow/references/task-input.md):
 
 ```sh
-node scripts/launch.mjs doctor --profile /Users/me/.meerkat/profiles/example.json --probe-executor
+node scripts/launch.mjs run --input /private/task.json --dry-run
+node scripts/launch.mjs run --input /private/task.json
 ```
 
-This checks local state/configuration and the isolated executable version without
-calling a model. Read warnings and unverified checks; a passing report is not an
-execution-readiness guarantee. See [diagnostics](doctor.md).
-
-## 5. Open the monitor
-
-Start a new Codex chat (or restart Codex) after installing, then ask: `打开 Meerkat 面板`.
-This calls the MCP Apps tool `open_monitor` (global or per-thread entrypoint); the local stdio monitor
-supports bounded directions, follow-ups, graceful pause and stopping through app-only host tools; settings stay read-only.
-The beta.11 panel, live snapshots, task details, usage and read-only settings
-were verified inside Codex on 2026-10-04. The global entry and native instruction,
-receipt and stop transport also passed with local protocol fixtures. A real
-Pi/model task using these native controls still needs end-to-end acceptance.
-See [human intervention](ui-intervention.md) and [host acceptance](codex-ui-acceptance.md).
-Hosts without MCP Apps support should use `node scripts/launch.mjs snapshot`; a browser page is not the
-native panel. The legacy CDP adapter is optional, see [desktop adapter](../desktop/README.md).
-
-## 6. Run a task
-
-Codex prepares a clean linked worktree and a frozen task JSON outside it:
-
-```json
-{
-  "project": { "id": "example", "name": "Example" },
-  "repository": "/abs/path/to/repo",
-  "worktree": "/abs/path/to/clean-linked-worktree",
-  "title": "Update README",
-  "goal": "...",
-  "scope": ["README.md"],
-  "acceptance": ["..."],
-  "context": { "version": 1, "text": "..." },
-  "profiles": {
-    "developer": "/Users/me/.meerkat/profiles/example.json",
-    "reviewer": "/Users/me/.meerkat/profiles/example.json",
-    "polisher": "/Users/me/.meerkat/profiles/example.json"
-  },
-  "budget": { "maxTokens": 150000, "maxWallSeconds": 600, "maxFixRounds": 1 },
-  "changeId": "unique-change-id"
-}
-```
-
-Full schema: [task input](../skills/workflow/references/task-input.md).
-
-Single run (first local candidate only, unreviewed):
+This returns an unreviewed candidate. For automated multi-role local delivery:
 
 ```sh
-node scripts/launch.mjs run --input TASK.json --dry-run
-node scripts/launch.mjs run --input TASK.json
-```
-
-Complete workflow (develop, review, limited fix, polish, recheck, local delivery):
-
-```sh
-node scripts/launch.mjs prepare --input TASK.json   # prints the task ID
-node scripts/launch.mjs execute --task <task-id>
+node scripts/launch.mjs prepare --input /private/task.json
+node scripts/launch.mjs execute --task TASK_ID
 node scripts/launch.mjs snapshot
 ```
 
-Remote Issue updates need explicit `--apply` and your authorization; nothing is published automatically.
+Human acceptance, QA, push, merge and deployment are separate. Issue sending needs
+explicit authorization and `--apply`.
 
-## Diagnosis
+## Update
 
-| Symptom | Check |
-| --- | --- |
-| Binary missing | Rerun `node scripts/setup.mjs`; check `MEERKAT_RUNTIME_DIR`/`MEERKAT_BIN` are absolute. |
-| Daemon not reachable | Is `serve` still running? Do service and CLI use the same `--data-dir`/`MEERKAT_DATA_DIR`? |
-| Missing environment variable | Export the `--auth-env` name in the shell that started `serve`, then restart it. |
-| Pi not found | `pi --version` should report 0.99.1; otherwise reinstall or pass `--pi-command`. |
-| No panel in Codex | Check that the plugin is enabled and its MCP server starts. `codex mcp list --json` should resolve Meerkat's `cwd` to the installed plugin directory. Reload after updating; hosts without MCP Apps can use `snapshot`. |
+1. Finish/explicitly stop owned work and confirm no active operations. Retain
+   unknown histories and allowances unresolved.
+2. Shut down the confirmed old service through its terminal or verified current
+   identity. Never signal a PID merely because it is in a file. Use the old
+   runtime for a consistent `backup --output /absolute/private/backup.db`.
+3. Install the new runtime with `--no-host --no-start` if doing steps separately.
+4. Remove the old registration only, then rerun the installer:
 
-The bundled MCP configuration uses an explicit plugin-relative working directory
-and forwards Codex's Node path. It does not depend on `PLUGIN_ROOT` being present
-in the child shell. Versions before beta.11 could fail with `Cannot find module
-.../scripts/launch.mjs` from an unrelated project directory; update the plugin and
-matching runtime before reloading Codex. Asking to open the panel cannot repair a
-failed MCP server. A declared sidebar entrypoint also depends on host support and
-successful tool discovery; installation alone does not prove the entry is visible.
+   ```sh
+   codex plugin remove meerkat@meerkat
+   codex plugin marketplace remove meerkat
+   node scripts/install.mjs
+   ```
 
-## Update and uninstall
+5. Reload Codex, verify the matching service/native panel and reconcile history.
+   Retain the old binary and backup until verified.
 
-Runtimes are versioned: installing a new version adds a new
-`~/.meerkat/runtime/<version>/` directory. When changing the marketplace's pinned
-ref, remove its old registration first; Codex otherwise reports that the same
-marketplace is already registered from a different source:
+Direct repository installation remains available with Node on the host PATH:
+`codex plugin marketplace add hunknownz/Meerkat --ref main`, then
+`codex plugin add meerkat@meerkat` and runtime setup. Prefer an exact SHA/tag for
+repeatability. Plugin install itself does not execute setup hooks.
 
-```sh
-codex plugin marketplace remove meerkat
-codex plugin marketplace add hunknownz/Meerkat --ref main
-codex plugin add meerkat@meerkat
-```
+## Uninstall
 
-Use a published tag or exact commit instead of `main` when pinning a version.
-Install its matching runtime with `setup.mjs`, and open a new chat or restart Codex
-to reload the MCP server and UI. Before switching the local service, finish or
-stop active work, terminate the old service, and make a consistent backup with
-the old runtime's `backup --output /abs/path/to/backup.db` command. Start the new
-service with the same private data directory; keep the backup until history and
-usage are reconciled.
-
-```sh
-codex plugin remove meerkat@meerkat
-```
-
-Removing the plugin keeps `~/.meerkat` (SQLite history, profiles); delete it manually if desired.
+`codex plugin remove meerkat@meerkat` removes the plugin. Stop a confirmed service
+before removing its runtime. SQLite, profiles and history remain; delete them
+only if you intend to discard them.

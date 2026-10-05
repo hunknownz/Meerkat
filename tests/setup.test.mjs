@@ -181,7 +181,7 @@ test('downloads use the official release URL and only GitHub HTTPS hosts', async
 test('platform selection maps supported hosts only', () => {
   assert.deepEqual(selectTarget('darwin', 'arm64'), { os: 'darwin', arch: 'arm64' });
   assert.deepEqual(selectTarget('linux', 'x64'), { os: 'linux', arch: 'amd64' });
-  assert.equal(selectTarget('win32', 'x64'), null);
+  assert.deepEqual(selectTarget('win32', 'x64'), { os: 'windows', arch: 'amd64' });
   assert.equal(selectTarget('linux', 'ia32'), null);
 });
 

@@ -196,6 +196,17 @@ func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
 	if len(cmd) == 0 {
 		cmd = []string{"pi"}
 	}
+	if filepath.Base(cmd[0]) == "env" {
+		if len(cmd) < 3 || !strings.HasPrefix(cmd[1], "PI_CODING_AGENT_DIR=") {
+			return nil, invalid("unsupported executor environment wrapper")
+		}
+		agentDir := strings.TrimPrefix(cmd[1], "PI_CODING_AGENT_DIR=")
+		if !filepath.IsAbs(agentDir) {
+			return nil, invalid("executor directory must be absolute")
+		}
+		out.env = append(slices.DeleteFunc(slices.Clone(env), func(kv string) bool { return strings.HasPrefix(kv, "PI_CODING_AGENT_DIR=") }), cmd[1])
+		cmd = cmd[2:]
+	}
 	tools := "read,bash,edit,write"
 	if req.Role == "reviewer" {
 		tools = "read,bash"
@@ -386,6 +397,13 @@ func (p *Pi) run(ctx context.Context, pp *prepared, onEvent func(model.RunEvent)
 	stdout, err := cmd.StdoutPipe()
 	if err == nil {
 		err = cmd.Start()
+		if err == nil {
+			err = bindGroup(cmd)
+			if err != nil {
+				cmd.Process.Kill()
+				cmd.Wait()
+			}
+		}
 	}
 	if err != nil {
 		o.spawnErr = true
@@ -393,6 +411,7 @@ func (p *Pi) run(ctx context.Context, pp *prepared, onEvent func(model.RunEvent)
 	}
 	host, _ := os.Hostname()
 	pid := cmd.Process.Pid
+	defer releaseGroup(pid)
 	o.proc = &Process{Executor: "pi", PID: pid, PGID: pid, Host: host, StartedAt: time.Now().UTC()}
 	if onStart != nil {
 		func() { defer func() { _ = recover() }(); onStart(*o.proc) }()
