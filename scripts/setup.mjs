@@ -10,7 +10,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, closeSync, copyFileSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensurePrivateDir, protectNewFile } from './lib/private.mjs';
+import { ensurePrivateDir, privatePath, protectNewFile } from './lib/private.mjs';
 import { SOURCE_ROOT, VERSION_RE, installedPath, manifestVersion, runtimeDir, selectTarget } from './lib/go-cli.mjs';
 
 export const MAX_BINARY = 120 * 1024 * 1024;
@@ -130,6 +130,7 @@ export async function install({ version, target, runtime, artifactDir, fetcher =
   let existing = null;
   try { existing = lstatSync(dest); } catch {}
   if (existing && (existing.isSymbolicLink() || !existing.isFile())) throw new Error(`${dest} is not a regular file; refusing`);
+  if (existing) privatePath(dest, { strict: false });
   const result = { path: dest, sha256: hash, sourceSha: meta.sourceSha, source: artifactDir ? resolve(artifactDir) : base };
   if (existing && sha256(readFileSync(dest)) === hash && hostVersion(dest) === version) return { ...result, changed: false };
 
@@ -143,7 +144,7 @@ export async function install({ version, target, runtime, artifactDir, fetcher =
     if (existing && hostVersion(dest) === version) {
       const prev = `${tmp}.previous`;
       copyFileSync(dest, prev);
-      chmodSync(prev, 0o755);
+      protectNewFile(prev, 0o755);
       renameSync(prev, `${dest}.previous`);
     }
     renameSync(tmp, dest);
