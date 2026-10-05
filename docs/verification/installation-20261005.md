@@ -22,7 +22,7 @@ installation, private dependencies and a portable MCP host package.
 | --- | --- | --- |
 | Windows runtime | Native amd64 checks passed | arm64 remains cross-compile only |
 | macOS clean installation | Passed locally and on macos-14 | Current Codex host reload is separate |
-| Current Codex package | Fresh host check pending | Current version, visible receipt-query feedback |
+| Current Codex package | beta.16 installed; service/resource checks passed | Fresh host reload and visible receipt-query feedback |
 | Real model + native controls + final reviewed delivery | Incomplete | Fresh bounded task, original Session directions, exact SHA review |
 | Windows Codex native display | No evidence | Real Windows host; CI is not GUI acceptance |
 | Public binary release | Unpublished | Authorized tag/assets with checksums/source metadata |
@@ -78,3 +78,24 @@ No paid model call is part of installation verification.
 - CLI/resource success is not native display or real task acceptance. The live
   beta.15 database had 40 Tasks, 64 Runs and four unknown Run/request outcomes
   before this installation work; their state must survive the update unchanged.
+
+## Local update and main integration
+
+- Native installation checks passed again on main at `e110d82`:
+  [macOS and Windows CI](https://github.com/hunknownz/Meerkat/actions/runs/37271699711).
+  The costly missing-toolchain download was skipped here; the preceding branch
+  run covers it. The stdin-import regression passed in the installer suite
+  (23 checks), and private read-only Unix profiles passed their focused Go check.
+- beta.16 is installed and enabled in Codex through the generated local
+  marketplace, with absolute Node/runtime paths. Its Go service responds at the
+  previous loopback address. This is registration/resource evidence; the user
+  was asked to reload Codex and verify the current panel.
+- Only a currently identified idle daemon was stopped. The old runtime made a
+  consistent backup before switching. All 27 non-lease authority tables matched
+  the backup exactly after the update: 40 Tasks, 64 Runs, four unknown Runs,
+  four unknown requests and four unresolved budget reservations remain. The
+  private backup and cutover report are retained outside this repository.
+- Existing user-owned Pi installation directories had mode 0755; this local
+  update explicitly set those three private directories to 0700. The bootstrap
+  continues to reject unsafe existing paths instead of silently changing them.
+- No paid model call, Issue write, tag or release was performed in this update.

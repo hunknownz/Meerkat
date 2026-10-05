@@ -30,7 +30,7 @@ See [the current real-run evidence](real-controls-20261005.md) and
 | 17 | Optional direct/delegate/workflow selection, updated skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
 | 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
 | 19 | Read-only doctor, pinned Pi protocol/version probes. | Static checks do not certify balance or provider availability. |
-| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.15 plugin and runtime retain history; 27 non-lease tables matched across the idle cutover (40 Tasks / 64 Runs). | New native control scenario; public tag/release and directory submission are separate actions. |
+| 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.16 plugin and runtime retain history; 27 non-lease tables matched across the idle cutover (40 Tasks / 64 Runs). Native Windows and macOS installation checks passed. | Fresh beta.16 native panel/control scenario; public tag/release and directory submission are separate actions. |
 
 ## Changed behavior
 
