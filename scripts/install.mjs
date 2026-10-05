@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // User-authorized bootstrap, never invoked as an installation hook. No task is
 // prepared or executed here; scheduling and state remain in Go/SQLite.
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, openSync, closeSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -13,6 +13,21 @@ import { ensurePrivateDir, protectNewFile } from './lib/private.mjs';
 import { installExecutor } from './lib/executor-install.mjs';
 
 const run = (cmd, args, cwd = SOURCE_ROOT) => execFileSync(cmd, args, { cwd, shell: false, encoding: 'utf8', timeout: 600000, maxBuffer: 32 << 20 });
+export function codexCommand(explicit) {
+  if (explicit) return explicit;
+  if (process.env.MEERKAT_CODEX_COMMAND) return process.env.MEERKAT_CODEX_COMMAND;
+  const candidates = ['codex'];
+  if (process.platform === 'darwin') {
+    for (const parent of ['/Applications', join(homedir(), 'Applications')]) {
+      for (const app of ['Codex.app', 'ChatGPT.app']) candidates.push(join(parent, app, 'Contents', 'Resources', 'codex-cli', 'bin', 'codex'));
+    }
+  }
+  for (const candidate of candidates) {
+    const probe = spawnSync(candidate, ['plugin', '--help'], { shell: false, encoding: 'utf8', timeout: 15000 });
+    if (!probe.error && probe.status === 0) return candidate;
+  }
+  return 'codex'; // Report the registration command if no compatible CLI was found.
+}
 export function options(argv) {
   const o = { root: SOURCE_ROOT, runtime: runtimeDir(), dataDir: process.env.MEERKAT_DATA_DIR ?? join(homedir(), '.meerkat'), host: true, executor: true, start: true, source: false };
   for (let i = 0; i < argv.length; i++) {
@@ -101,7 +116,7 @@ export async function installAll(o) {
   if (o.start) result.service = await ensureService(binary.path, o.dataDir);
   if (o.host) {
     const pack = hostPackage(o, binary.path);
-    const codex = o.codex ?? 'codex';
+    const codex = codexCommand(o.codex);
     try {
       // A different existing marketplace is never removed automatically.
       const lists = JSON.parse(run(codex, ['plugin', 'marketplace', 'list', '--json']));

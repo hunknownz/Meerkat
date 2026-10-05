@@ -33,5 +33,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: ./scripts/install.ps1 -Source -NoHost -NoExecutor -NoStart -DataDir "$env:RUNNER_TEMP\meerkat-bootstrap-state" -RuntimeDir "$env:RUNNER_TEMP\meerkat-bootstrap-runtime"
+      - name: Windows missing toolchains bootstrap
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $gitBin=Split-Path (Get-Command git).Source -Parent
+          $env:USERPROFILE=Join-Path $env:RUNNER_TEMP 'meerkat-fresh-home'
+          $env:PATH="$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0;$gitBin"
+          ./scripts/install.ps1 -Source -NoHost -NoExecutor -NoStart -DataDir "$env:RUNNER_TEMP\meerkat-fresh-state" -RuntimeDir "$env:RUNNER_TEMP\meerkat-fresh-runtime"
       - name: Clean installation and stdio panel resource
         run: node scripts/verify-install.mjs

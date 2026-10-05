@@ -9,6 +9,7 @@ import { installAll, options, hostPackage } from './install.mjs';
 import { ensurePrivateDir } from './lib/private.mjs';
 import { configure } from './configure.mjs';
 import { PI_VERSION, installExecutor } from './lib/executor-install.mjs';
+import { installationTask } from './lib/installation-task.mjs';
 const base=mkdtempSync(join(process.platform==='darwin'?'/tmp':tmpdir(),'mk-i-'));
 let service, mcp;
 try {
@@ -18,7 +19,7 @@ try {
   const version=execFileSync(bin,['version'],{encoding:'utf8'}).trim();
   if(version!=='0.4.0-beta.16')throw Error('wrong binary version');
   ensurePrivateDir(dataDir);
-  service=spawn(bin,['serve','--data-dir',dataDir,'--port','0'],{stdio:['ignore','pipe','pipe'],shell:false});
+  service=spawn(bin,['serve','--data-dir',dataDir,'--port','0'],{env:{...process.env,LOCAL_INSTALL_KEY:'local-fixture'},stdio:['ignore','pipe','pipe'],shell:false});
   let output='',errors='',ready;service.stdout.on('data',b=>output+=b);service.stderr.on('data',b=>errors+=b);
   for(let i=0;i<200&&!ready;i++){if(service.exitCode!==null)throw Error(`service failed: ${errors}`);try{ready=JSON.parse(output);}catch{};if(!ready)await new Promise(r=>setTimeout(r,50));}
   if(!ready)throw Error('service readiness timed out');
@@ -43,7 +44,10 @@ try {
   const configured=configure({projectId:'smoke',provider:'example',model:'text',authEnv:'EXAMPLE_MODEL_KEY',baseUrl:'https://example.invalid/v1',api:'openai-completions',dataDir,piCommand:executor.command[0],piCLI:executor.command[1]});
   const probed=JSON.parse(execFileSync(bin,['doctor','--data-dir',dataDir,'--profile',configured.profile,'--probe-executor'],{encoding:'utf8',timeout:15000}));
   if(!probed.ok||!probed.data.checks.some(c=>c.id==='executor.version'&&c.status==='ok'))throw Error('configured executor probe failed');
-  console.log(JSON.stringify({os:process.platform,arch:process.arch,version,runtime:'passed',privateIPC:'passed',snapshot:'passed',idempotence:'passed',mcpResource:'passed',piVersion:executor.version,configuration:'passed',nativeDisplay:'not_verified',realModelTask:'not_verified'},null,2));
+  const fixture=await installationTask(bin,base,dataDir,executor);
+  const refreshed=await request(6,'tools/call',{name:'open_monitor',arguments:{}});
+  if(refreshed.structuredContent?.counts.runs!==1||refreshed.structuredContent?.counts.deliveries!==1)throw Error('panel snapshot did not include fixture delivery');
+  console.log(JSON.stringify({os:process.platform,arch:process.arch,version,runtime:'passed',privateIPC:'passed',snapshot:'passed',idempotence:'passed',mcpResource:'passed',piVersion:executor.version,configuration:'passed',fixtureTask:fixture,nativeDisplay:'not_verified',realModelTask:'not_verified'},null,2));
 } finally {
   mcp?.stdin.end();mcp?.kill();service?.kill('SIGTERM');
   if(service)await new Promise(r=>{if(service.exitCode!==null){r();return;}service.once('exit',r);setTimeout(r,5000);});
