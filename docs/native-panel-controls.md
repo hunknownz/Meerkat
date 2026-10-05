@@ -5,8 +5,7 @@ often confused: receipts, delivery, checkpoints, and process exit.
 
 ## Sessions, agents and runs
 
-- Queued follow-ups stay in the original Session.
-- End-of-turn follow-ups queue in the original Session that produced them.
+- Queued follow-ups stay in the original session.
 - Expand the current owned running Agent to issue further controls.
 - Instructions attached to the current tool take effect after that tool
   completes, before the next model request is generated.
@@ -30,11 +29,10 @@ that a control was accepted; it does not prove resulting code delivery.
 - A graceful pause acknowledgement does not prove a checkpoint exists.
 - The Task must be paused with a verified checkpoint before explicit
   coordinator resume is allowed.
+- Pause saves the verified index and working tree; resume requires those
+  exact files and the same frozen contract.
 
 ## Stop acceptance is not process exit
 
 - Stop acceptance does not prove the process exited; verify the Run outcome.
-
-## Outside scope
-
-Other files, installation, credentials and remote actions are outside scope.
+- Closing the panel does not stop a Run.
