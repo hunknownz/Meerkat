@@ -57,10 +57,28 @@ were not hidden as successful checks.
 
 ## Installation and remaining acceptance
 
-Installation/cutover results are recorded separately after the built artifact and
-loaded plugin are verified. The existing beta.14 native pause and stop evidence
-remains historical. Fresh beta.15 receipt feedback needs a reopened Codex panel;
-browser and loopback evidence cannot substitute for that host check.
+Reviewed source `c00fd4a7ede3c580c4346e58e6b6ad0c9108667e` was integrated and
+pushed to main. Four release artifacts were built from its clean tracked tree for
+darwin/linux on arm64/amd64; only darwin/arm64 was installed and executed here.
+The verified installer checked version, source SHA and the host binary checksum
+`eef5667aba00c3beffc6b2d01e4ede514c4a4a149b6f331f6d5bf916a52c3e05`.
+
+The Git marketplace was refreshed and `codex plugin add meerkat@meerkat --json`
+reported beta.15. Installed UI assets and skills match the reviewed source. Its
+stdio MCP handshake reports beta.15; the standard UI resource contains the new
+feedback, and `open_monitor` returns successfully. This is protocol evidence,
+not proof of native rendering.
+
+The idle beta.14 controller was identified and stopped gracefully before the
+consistent backup; the backup command correctly refused while the daemon was
+active. Beta.15 then acquired the lease. All 27 non-lease authority tables matched
+before and after: 40 Tasks, 64 Runs, 4 unknown Runs and zero active/queued Runs.
+Schema 12, integrity and foreign-key checks passed. Doctor verifies service and
+storage but still blocks the historical uncertain work; no such Run was replayed.
+
+The existing beta.14 native pause and stop evidence remains historical. Fresh
+beta.15 receipt feedback needs a reopened Codex panel; browser and loopback
+evidence cannot substitute for that host check.
 
 Real paid Pi/model native follow-up delivery remains incomplete after the
 failures in [the native record](native-controls-20261005.md). This repair does not
