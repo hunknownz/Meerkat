@@ -5,7 +5,12 @@ $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 $tools=Join-Path $env:USERPROFILE '.meerkat\tools'
 function Private-Dir([string]$p) {
-  if(-not (Test-Path -LiteralPath $p)) { [void](New-Item -ItemType Directory -Path $p -Force); & "$PSScriptRoot\lib\private.ps1" -Path $p -Action protect }
+  if(-not (Test-Path -LiteralPath $p)) {
+    $parent=Split-Path $p -Parent
+    if(-not (Test-Path -LiteralPath $parent)){Private-Dir $parent}
+    [void](New-Item -ItemType Directory -Path $p)
+    & "$PSScriptRoot\lib\private.ps1" -Path $p -Action protect
+  }
   & "$PSScriptRoot\lib\private.ps1" -Path $p -Action check
 }
 function Download-Verified([string]$url,[string]$file,[string]$hash) {

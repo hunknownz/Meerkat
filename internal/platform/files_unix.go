@@ -10,6 +10,9 @@ import (
 	"syscall"
 )
 
+// Unix file creation already uses the current user as owner.
+func PreparePrivateCreation() error { return nil }
+
 func Owned(path string, fi os.FileInfo) bool {
 	if fi == nil || fi.Mode()&os.ModeSymlink != 0 {
 		return false

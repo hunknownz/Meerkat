@@ -29,5 +29,9 @@ jobs:
         run: go test ./internal/platform ./internal/localipc ./internal/executor ./internal/store -run TestNative -count=1 -timeout 2m
       - name: Bootstrap contracts
         run: node --test tests/install.test.mjs
+      - name: Windows PowerShell installation
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/install.ps1 -Source -NoHost -NoExecutor -NoStart -DataDir "$env:RUNNER_TEMP\meerkat-bootstrap-state" -RuntimeDir "$env:RUNNER_TEMP\meerkat-bootstrap-runtime"
       - name: Clean installation and stdio panel resource
         run: node scripts/verify-install.mjs

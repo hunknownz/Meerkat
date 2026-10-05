@@ -6,8 +6,34 @@ import (
 	"errors"
 	"golang.org/x/sys/windows"
 	"os"
+	"sync"
 	"unsafe"
 )
+
+var creationOnce sync.Once
+var creationErr error
+
+// PreparePrivateCreation sets the current process's default object owner to
+// its user SID. Elevated Windows tokens otherwise give SQLite-created WAL/SHM
+// files the Administrators owner. Existing files and their ACLs are untouched.
+func PreparePrivateCreation() error {
+	creationOnce.Do(func() {
+		var token windows.Token
+		creationErr = windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY|windows.TOKEN_ADJUST_DEFAULT, &token)
+		if creationErr != nil {
+			return
+		}
+		defer token.Close()
+		user, err := token.GetTokenUser()
+		if err != nil {
+			creationErr = err
+			return
+		}
+		owner := struct{ Owner *windows.SID }{user.User.Sid}
+		creationErr = windows.SetTokenInformation(token, windows.TokenOwner, (*byte)(unsafe.Pointer(&owner)), uint32(unsafe.Sizeof(owner)))
+	})
+	return creationErr
+}
 
 func UserSID() (*windows.SID, error) {
 	u, e := windows.GetCurrentProcessToken().GetTokenUser()

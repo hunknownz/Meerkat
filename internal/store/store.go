@@ -206,6 +206,9 @@ func checkFile(path string) error {
 
 // Open opens (creating if needed) the store in dir.
 func Open(dir string) (*Store, error) {
+	if err := platform.PreparePrivateCreation(); err != nil {
+		return nil, ErrUnsafeDir
+	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, ErrUnsafeDir

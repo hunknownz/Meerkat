@@ -42,6 +42,9 @@ type diagnosticGroup struct {
 // are written. All queries share one snapshot and have a caller deadline.
 func InspectReadOnly(ctx context.Context, dir string) (Diagnostics, error) {
 	r := Diagnostics{SupportedSchema: schemaVersion}
+	if err := platform.PreparePrivateCreation(); err != nil {
+		return r, ErrUnsafeDir
+	}
 	for _, name := range []string{"", dbName, dbName + "-wal", dbName + "-shm"} {
 		fi, err := os.Lstat(filepath.Join(dir, name))
 		if errors.Is(err, os.ErrNotExist) && name != "" && name != dbName {

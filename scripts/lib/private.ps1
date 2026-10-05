@@ -2,10 +2,16 @@ param([Parameter(Mandatory=$true)][string]$Path, [ValidateSet('check','protect')
 $ErrorActionPreference='Stop'
 $item=Get-Item -LiteralPath $Path -Force
 if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse points are refused' }
-$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+$sid=$identity.User
 $acl=Get-Acl -LiteralPath $Path
-if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value) { throw 'Private path is not owned by the current user' }
+$owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+# protect is called only for a newly created object. Elevated tokens can give
+# those objects the token's default owner; normalize it without adopting any
+# pre-existing object in check mode, or an unrelated owner's object.
+if ($owner -ne $sid.Value -and ($Action -ne 'protect' -or $owner -ne $identity.Owner.Value)) { throw 'Private path is not owned by the current user' }
 if ($Action -eq 'protect') {
+  $acl.SetOwner($sid)
   $acl.SetAccessRuleProtection($true,$false)
   foreach ($r in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($r) }
   $inherit=if($item.PSIsContainer){[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'}else{[Security.AccessControl.InheritanceFlags]::None}
