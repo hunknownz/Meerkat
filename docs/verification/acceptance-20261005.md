@@ -1,6 +1,13 @@
 # Acceptance on 2026-10-05
 
-Candidate: `0.4.0-beta.17`; source baseline: `0fa48a1`.
+Current candidate: `0.4.0-beta.18`; integration baseline: `64cf3b7`.
+[Current native/model acceptance](native-controls-beta18-20261005.md) records
+successful directions, follow-up, pause and resumed reviewed delivery. The
+changed beta.18 native receipt surface is pending after reload. Windows UI and
+public prerelease remain separate gates.
+
+The beta.17 installation/race audit below predates these paid exercises.
+Its historical remaining table describes that earlier inspection.
 
 ## Completed checks
 

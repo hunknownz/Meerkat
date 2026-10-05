@@ -91,3 +91,10 @@ in the original Session and queued follow-up delivery through the CLI. Pending
 input deferred final reporting, and querying its receipt did not resend it.
 These checks do not replace the native button scenario. See
 [the real-run record](verification/real-controls-20261005.md).
+
+Beta.17 real native instruction and follow-up clicks reached the original Pi
+Session and its developer candidate. A separate native pause preserved staged
+and unstaged changes, then resumed and delivered through review. Beta.18 fixes
+receipt visibility after Run completion and Task receipt labels. Current checks
+and remaining native reload evidence are in
+[the latest record](verification/native-controls-beta18-20261005.md).

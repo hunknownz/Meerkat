@@ -218,3 +218,20 @@ The fixture used no model or gateway request. It accepts the native control
 transport; real Pi/model execution controlled through the native panel still
 needs an end-to-end check. Prior real Pi/browser interaction is separate evidence.
 The original unknown paid Run remains untouched and the panel remains open.
+
+## Beta.17 real controls and beta.18 display repair (2026-10-05)
+
+After the user's reload, the expanded MCP App was accessible directly in Codex.
+Native instruction and follow-up buttons reached the same real Pi Session and
+its developer candidate. Native pause preserved staged/unstaged files; explicit
+checkpoint continuation reused the Session and finished reviewed delivery.
+These are paid executor/native UI results, not local protocol fixtures.
+
+That exercise exposed two display defects: an ended expanded Run disappeared
+before its receipt lookup finished, and follow-up/pause Task receipts were
+labeled as stop requests. Beta.18 fixes both and is installed; its Go/React
+resource and private-state preservation passed checks. Fresh host display of
+those fixes, native stop and post-end lookup remain pending after reload.
+Exact IDs, commits, screenshots, usage and Windows CI are in
+[the current record](verification/native-controls-beta18-20261005.md).
+The Windows device test is deferred; neither CI nor macOS display replaces it.

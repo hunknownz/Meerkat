@@ -44,3 +44,13 @@ metrics export. Real Pi/model pause, continuation and follow-up passed through
 the CLI; see [the current evidence](verification/real-controls-20261005.md).
 The combined real-executor native button scenario still needs its own evidence;
 earlier panel acceptance is not substituted.
+
+## Beta.18 acceptance follow-up
+
+Real native direction/follow-up delivery and native pause with same-session
+reviewed continuation passed on beta.17. Beta.18 fixes ended-Run receipt
+visibility and pause/follow-up labels; its installed resource is verified, while
+the changed native surface awaits reload. See
+[the current record](verification/native-controls-beta18-20261005.md).
+Windows Codex display is deferred to the user's device; public release and
+directory submission are separate from source installation.
