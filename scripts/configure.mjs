@@ -20,7 +20,7 @@ const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/;
 const APIS = ['openai-completions'];
 const CREDENTIAL = /(sk-|ghp_|gho_|github_pat_|AKIA|xox[abprs]-|AIza|bearer)/i;
 const FLAGS = { '--project-id': 'projectId', '--provider': 'provider', '--model': 'model', '--auth-env': 'authEnv',
-  '--data-dir': 'dataDir', '--base-url': 'baseUrl', '--api': 'api', '--pi-command': 'piCommand' };
+  '--data-dir': 'dataDir', '--base-url': 'baseUrl', '--api': 'api', '--pi-command': 'piCommand', '--pi-cli': 'piCLI' };
 
 export function parseArgs(argv) {
   const o = {};
@@ -61,6 +61,9 @@ export function validate(o, home = homedir()) {
       accessSync(pi, constants.X_OK);
     } catch { throw new Error('--pi-command is not an executable file'); }
   }
+  if(o.piCLI !== undefined) {
+    if(!o.piCommand || !isAbsolute(o.piCLI) || CREDENTIAL.test(o.piCLI) || !statSync(o.piCLI).isFile() || !['node','node.exe'].includes(pi.split(/[\\/]/).pop())) throw new Error('--pi-cli needs an absolute Pi CLI file and an explicit Node --pi-command');
+  }
   return { ...o, dataDir: resolve(dataDir), baseUrl, pi };
 }
 
@@ -87,7 +90,7 @@ export function configure(opts) {
   ensureDir(c.dataDir, false);
   ensureDir(profilesDir, true);
   absent(profile);
-  let piCommand = [...(opts.piCommand ? [c.pi] : managedPiCommand()), '--thinking', 'low'];
+  let piCommand = [...(opts.piCommand ? [c.pi, ...(c.piCLI ? [c.piCLI] : [])] : managedPiCommand()), '--thinking', 'low'];
   if (c.baseUrl) {
     ensureDir(join(c.dataDir, 'pi'), true);
     ensureDir(piDir, true);

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, delimiter, resolve } from 'node:path';
 import { installAll, options, hostPackage } from './install.mjs';
 import { ensurePrivateDir } from './lib/private.mjs';
+import { configure } from './configure.mjs';
 import { PI_VERSION, installExecutor } from './lib/executor-install.mjs';
 const base=mkdtempSync(join(process.platform==='darwin'?'/tmp':tmpdir(),'mk-i-'));
 let service, mcp;
@@ -39,7 +40,10 @@ try {
   const resources=await request(4,'resources/list');const uri=resources.resources.find(r=>r.uri.startsWith('ui://'))?.uri;if(!uri)throw Error('UI resource missing');
   const resource=await request(5,'resources/read',{uri});if(!resource.contents.some(c=>c.text?.includes('Agents')||c.text?.includes('<html')))throw Error('UI content missing');
   const executor=installExecutor(join(base,'executor'));if(executor.version!==PI_VERSION)throw Error('wrong Pi version');
-  console.log(JSON.stringify({os:process.platform,arch:process.arch,version,runtime:'passed',privateIPC:'passed',snapshot:'passed',idempotence:'passed',mcpResource:'passed',piVersion:executor.version,nativeDisplay:'not_verified',realModelTask:'not_verified'},null,2));
+  const configured=configure({projectId:'smoke',provider:'example',model:'text',authEnv:'EXAMPLE_MODEL_KEY',baseUrl:'https://example.invalid/v1',api:'openai-completions',dataDir,piCommand:executor.command[0],piCLI:executor.command[1]});
+  const probed=JSON.parse(execFileSync(bin,['doctor','--data-dir',dataDir,'--profile',configured.profile,'--probe-executor'],{encoding:'utf8',timeout:15000}));
+  if(!probed.ok||!probed.data.checks.some(c=>c.id==='executor.version'&&c.status==='ok'))throw Error('configured executor probe failed');
+  console.log(JSON.stringify({os:process.platform,arch:process.arch,version,runtime:'passed',privateIPC:'passed',snapshot:'passed',idempotence:'passed',mcpResource:'passed',piVersion:executor.version,configuration:'passed',nativeDisplay:'not_verified',realModelTask:'not_verified'},null,2));
 } finally {
   mcp?.stdin.end();mcp?.kill();service?.kill('SIGTERM');
   if(service)await new Promise(r=>{if(service.exitCode!==null){r();return;}service.once('exit',r);setTimeout(r,5000);});

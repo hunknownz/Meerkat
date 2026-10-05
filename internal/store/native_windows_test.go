@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"github.com/hunknownz/Meerkat/internal/platform"
+	"golang.org/x/sys/windows"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +18,18 @@ func TestNativeSQLiteBackupAndDiagnostics(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
+	for _, name := range []string{"", dbName, dbName + "-wal", dbName + "-shm"} {
+		path := filepath.Join(dir, name)
+		fi, e := os.Lstat(path)
+		if e != nil {
+			t.Log(name, e)
+			continue
+		}
+		sd, e := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+		if e == nil {
+			t.Log(name, sd.String(), "owned", platform.Owned(path, fi), "private", platform.Private(path, fi, 0o600))
+		}
+	}
 	d, e := InspectReadOnly(context.Background(), dir)
 	if e != nil || !d.Integrity || !d.ForeignKeys {
 		t.Fatalf("diagnostics %+v %v", d, e)
