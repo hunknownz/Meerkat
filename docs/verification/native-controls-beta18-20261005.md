@@ -46,6 +46,13 @@ were integrated into main with their author history preserved; integration HEAD
 is `64cf3b7915f5a05e18cdfaabc23a8bc2acad69bc`. This is local code delivery and
 repository integration, not independent QA, deployment or customer acceptance.
 
+The final model review listed plain-text digest reproduction as a gap. The
+coordinator recomputed the documented canonical `{sources,text}` SHA-256:
+`sha256:d7e7d1a3bb7035110b03c7e244eb36ced5b3ee2244dd616efd1e2447d2391cbb`
+matched the stored frozen Context exactly. A plain-text hash is a different
+representation. Native receipt/checkpoint evidence also closes the reviewer's
+repository-only visibility limits; the original review record is retained.
+
 ## Failure and repaired display behavior
 
 The earlier Task `428463fa-5154-4061-beeb-c17ed6ed5871` ended without
@@ -107,6 +114,7 @@ Screenshots are retained privately; no raw Session or profile is published.
 | --- | --- |
 | Native direction receipts (beta.17 label bug visible) | `10e0a13efbe2e271b859ffc1af12e9d493c9aa92096f67e0c18146daf344418d` |
 | Native pause queue acknowledgement | `6c886a0d4a680c078d13b2c7e899cd9194fc9a691502dd56e59cd390e1885a7c` |
+| Final native Task delivery | `a03fafbd87742bf38dc24a457aff6478d3d6032c59bd0eabf5294fbec1ad9f95` |
 | Original developer Session and consumed checkpoint | `a3b051f9c99666fe78f84a58a32c59fda61d5d3dad577ebc402a7603634d4120` |
 
 ## Remaining
