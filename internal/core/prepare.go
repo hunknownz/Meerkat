@@ -411,7 +411,9 @@ func inspectProfile(configFile, role string, expectedProject *string) (model.Pro
 	if err != nil {
 		return p, invalid("%s config not found", where)
 	}
-	if !fi.Mode().IsRegular() || !platform.Private(real, fi, 0o600) || fi.Size() > maxConfigFile {
+	// Unix profiles may be read-only; keep the existing user-only permission
+	// contract. Windows checks the current-user/SYSTEM ACL independently.
+	if !fi.Mode().IsRegular() || !platform.Private(real, fi, fi.Mode().Perm()&0o700) || fi.Size() > maxConfigFile {
 		return p, invalid("%s config must be a private regular file owned by the current user", where)
 	}
 	b, err := os.ReadFile(real)

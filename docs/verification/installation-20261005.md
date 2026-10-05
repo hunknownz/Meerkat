@@ -47,22 +47,23 @@ No paid model call is part of installation verification.
 
 ## Results
 
-- [Native installation CI at `19fb2ae`](https://github.com/hunknownz/Meerkat/actions/runs/37269202798)
+- [Native installation CI at `ba6febc`](https://github.com/hunknownz/Meerkat/actions/runs/37270159027)
   passed on Windows and macos-14. Windows exercised private ACL/reparse checks,
   secured pipe ownership/half-close, Job Object descendant termination, SQLite
   diagnostics/backup/restore, PowerShell installation and private download of
   Node/Go with those toolchains absent. The missing-toolchain step took about
-  four minutes on that Runner; it is a manual opt-in on main to limit routine CI.
+  seven minutes on this Runner; it is a manual opt-in on main to limit routine CI.
 - Clean installation exercised runtime, configuration, controller reuse, CLI
-  snapshot, stdio MCP tools/resource and Pi 0.99.1 on both OSs. Actual Pi made four
+  snapshot, installer-owned service startup, stdio MCP tools/resource and Pi
+  0.99.1 on both OSs. Actual Pi made four
   requests to a deterministic loopback fixture, wrote one scoped Git commit and
   submitted a report. MCP snapshot counts included that delivery. This is adapter
   evidence, not a remote model, reviewed workflow or native GUI acceptance.
-- Windows fixture candidate: `3eaa8d44db662361087b08603f04a06681bf8a92`;
-  macOS Runner candidate: `09ac77410a526b4bb62d93f9bf01a56e36addbf4`.
+- Windows fixture candidate: `51ce59e822b55b92688eb3023e8c03c3ac51f6a7`;
+  macOS Runner candidate: `161d3d8931836b77de4373daad17ae4e076b61a3`.
   Disposable repositories, databases and processes were removed. Fixture usage
   is synthetic; no paid provider call or user credential was used.
-- Local Node checks passed (69 before the linked-path regression was added);
+- Local Node checks passed (70, including the linked-path regression);
   frontend check/build and 38 tests passed. Store, server, executor and CLI race
   suites passed; core without race passed (134.849 s); vet passed. Full core race
   runs failed intermittently, first with a ThreadSanitizer child-runtime check,
