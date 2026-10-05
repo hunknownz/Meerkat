@@ -12,7 +12,7 @@ import { ensurePrivateDir, privatePath, protectNewFile } from '../scripts/lib/pr
 test('native Windows targets and executable names are explicit', () => {
   assert.deepEqual(selectTarget('win32', 'x64'), { os: 'windows', arch: 'amd64' });
   assert.deepEqual(selectTarget('win32', 'arm64'), { os: 'windows', arch: 'arm64' });
-  assert.ok(installedPath('runtime', '0.4.0-beta.17', selectTarget('win32', 'x64')).endsWith('meerkat.exe'));
+  assert.ok(installedPath('runtime', '0.4.0-beta.18', selectTarget('win32', 'x64')).endsWith('meerkat.exe'));
   assert.equal(selectTarget('freebsd', 'x64'), null);
 });
 test('install switches do not implicitly configure or execute a task', () => {

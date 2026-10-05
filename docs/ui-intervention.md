@@ -53,6 +53,10 @@ The MCP Apps panel uses app-only tools `send_run_instruction`,
 `queue_follow_up_from_ui`, `pause_run_from_ui`, `get_intervention_receipt` and `stop_run_from_ui` through the host bridge and
 the private Unix socket. No browser write token is included in MCP UI data.
 Instruction text is not echoed in model-visible tool results or public snapshots.
+An expanded Run remains visible after ending until you collapse it or select
+another Run. Receipt lookup stays available; new instructions, pause and stop
+are disabled. Ending does not increase the running count.
+
 Settings remain read-only in the Codex panel. The legacy CDP connector remains
 read-only. App-only visibility is host routing metadata, not authentication.
 

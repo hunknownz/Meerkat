@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ControlReceipt, Run } from './generated/workflow';
 import { ControlActionError, isUuid, newRequestId, type InterventionActions } from './transport';
-import { formatTime, short } from './model';
+import { formatTime, isActiveRun, short } from './model';
 
 type Entry = { id: string; status: 'pending' | 'unknown' | 'rejected'; receipt?: ControlReceipt };
 function saved(runId: string, kind: string): Entry | null {
@@ -104,7 +104,7 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
       <button className="btn" type="button" disabled={disabled || !!stop || run.stopRequested || !['starting','running','queued','pending'].includes(run.state)} onClick={() => void requestStop()}>停止运行</button>
       <span className="k small">{[...text].length} / 4000</span>
     </div>
-    {!canSend ? <p className="k small">{disabled ? '连接或状态未确认，暂不能发送。' : run.stopRequested || stop ? '已请求停止。' : pause ? '已请求暂停，等待核实检查点；不会接受新指令。' : '仅正在开发或精修、且会话身份已确认的 Agent 支持发送指令。'}</p> : null}
+    {!canSend ? <p className="k small">{disabled ? '连接或状态未确认，暂不能发送。' : !isActiveRun(run) ? '本次运行已结束，可查询原回执；不能发送新指令。' : run.stopRequested || stop ? '已请求停止。' : pause ? '已请求暂停，等待核实检查点；不会接受新指令。' : '仅正在开发或精修、且会话身份已确认的 Agent 支持发送指令。'}</p> : null}
     {[{ e: entry, target: 'entry' as const }, { e: pause, target: 'pause' as const }, { e: stop, target: 'stop' as const }].map(({ e, target }) => e ? <div className="control-note" role="status" key={target}>
       <span>{target==='stop'?'停止':target==='pause'?'暂停':e.receipt?.kind==='follow_up'?'后续指令':'指令'} · {looking === target ? '正在查询…' : label(e)}</span>
       <span className="k small">请求 <code>{short(e.id, 12)}</code>{e.receipt ? ` · ${formatTime(e.receipt.updatedAt)}` : ''}</span>

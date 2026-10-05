@@ -19,7 +19,7 @@ try {
   o.onServiceSpawn=child=>{service=child;};
   const installed=await installAll(o),bin=installed.runtime.path;
   const version=execFileSync(bin,['version'],{encoding:'utf8'}).trim();
-  if(version!=='0.4.0-beta.17')throw Error('wrong binary version');
+  if(version!=='0.4.0-beta.18')throw Error('wrong binary version');
   if(installed.service.state!=='started'||!service)throw Error('installer did not start the service');
   const ready=JSON.parse(readFileSync(join(dataDir,'installation-service.json'),'utf8'));
   const snapshot=JSON.parse(execFileSync(bin,['snapshot','--data-dir',dataDir],{encoding:'utf8',timeout:15000}));

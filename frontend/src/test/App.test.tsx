@@ -1,14 +1,54 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, type AppActions } from '../App';
-import { RUN_A, snapshot } from './fixtures';
+import { RUN_A, RUN_B, snapshot } from './fixtures';
+import type { ControlReceipt } from '../generated/workflow';
 import { validateEnvelope } from '../generated/validate';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); sessionStorage.clear(); });
 const actions = (over: Partial<AppActions> = {}): AppActions => ({ readonly: false, stop: vi.fn(async () => ({})), settings: vi.fn(async () => ({})), ...over });
 const view = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('App', () => {
+  it('retains an expanded ended Run through a pending reply and a read-only receipt lookup', async () => {
+    const s = snapshot();
+    s.tasks[0]!.sessions = [{id:RUN_B,role:'developer',executor:'pi',state:'running',activeRunId:RUN_A,lastSha:'a'.repeat(40),updatedAt:s.observedAt!}];
+    const receipt = (id: string): ControlReceipt => ({requestId:id,taskId:'t1',runId:RUN_A,sessionId:RUN_B,kind:'instruction',state:'acknowledged',disposition:'queued',reason:null,createdAt:s.observedAt!,updatedAt:s.observedAt!,runState:'succeeded',outcome:'succeeded'});
+    let finish!: (r: ControlReceipt) => void;
+    const send = vi.fn(() => new Promise<ControlReceipt>(resolve => { finish = resolve; }));
+    const lookup = vi.fn(async (id: string) => receipt(id));
+    const intervention = {send,receipt:lookup,followUp:vi.fn(),pause:vi.fn(),stop:vi.fn()};
+    const a = actions({readonly:true,intervention});
+    const v = render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={a} />);
+    fireEvent.click(screen.getByTestId('agent-row').querySelector('.row-btn')!);
+    fireEvent.change(screen.getByLabelText('指令'),{target:{value:'clarify receipt semantics'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送指令'}));
+    const id = sessionStorage.getItem(`meerkat-control:${RUN_A}:instruction`)!;
+    const ended = {...s,runs:s.runs.map(r=>r.id===RUN_A?{...r,state:'succeeded',endedAt:s.observedAt}:r),counts:{running:0,queued:0,unknown:0},tasks:s.tasks.map(t=>({...t,state:'delivered',sessions:[]}))};
+    v.rerender(<App snapshot={ended} legacyActive={[]} connected stale={null} actions={a} />);
+    expect(screen.getByText(/指令 · 正在提交/)).toBeTruthy();
+    expect(v.container.querySelector('.state-sum')!.textContent).toBe('运行中 0 · 排队 0 · 未知 0');
+    for (const name of ['发送指令','暂停并保留进度','停止运行']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { finish(receipt(id)); });
+    expect(screen.getByText('本次运行已结束，可查询原回执；不能发送新指令。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'查询回执'}));
+    await screen.findByText('查询完成，回执无变化。');
+    expect(lookup).toHaveBeenCalledWith(id); expect(send).toHaveBeenCalledTimes(1);
+    expect(intervention.stop).not.toHaveBeenCalled(); expect(intervention.pause).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('agent-row').querySelector('.row-btn')!);
+    expect(screen.queryByTestId('agent-row')).toBeNull();
+    expect(screen.getByText('当前没有工作流运行。')).toBeTruthy();
+  });
+
+  it('labels follow-up and pause receipts in task details without calling them stop requests', () => {
+    const s = snapshot();
+    s.tasks[0]!.controlReceipts = (['instruction','follow_up','pause','stop','wrap_up'] as const).map((kind,i)=>({requestId:`receipt-${i}`,taskId:'t1',runId:RUN_A,sessionId:RUN_B,kind,state:'acknowledged',disposition:'queued',reason:null,createdAt:s.observedAt!,updatedAt:s.observedAt!,runState:'running',outcome:null}));
+    render(<App snapshot={s} legacyActive={[]} connected stale={null} actions={actions({readonly:true})} />);
+    view('Tasks'); fireEvent.click(screen.getByText('Fix parser'));
+    const labels = [...screen.getByText('控制回执',{exact:true}).closest('details')!.querySelectorAll('.rt')].map(e=>e.textContent);
+    expect(labels).toEqual(['指令 · 执行器已接收','后续指令 · 执行器已接收','暂停 · 执行器已接收','停止 · 执行器已接收','收尾 · 执行器已接收']);
+  });
+
   it('shows monitor thresholds without inventing a remaining task cap', () => {
     const s=snapshot(); s.tasks[0]!.budget={mode:'monitor',maxTokens:100,maxWallSeconds:600,maxFixRounds:1};
     s.tasks[0]!.budgetEvidence={mode:'monitor',warning:true,authorizedTokens:100,availableTokens:null,confirmedTokens:150,reservedTokens:200,requests:2,pendingRequests:0,unknownRequests:1,overrun:false};

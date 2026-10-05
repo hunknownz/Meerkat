@@ -109,7 +109,9 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
   }, [openTask, settingsOpen]);
 
   const runs = snapshot?.runs ?? [];
-  const activeRuns = runs.filter((r) => isActiveRun(r) && inProject(taskOf(r)?.projectId));
+  // Keep the selected Run mounted when it ends, so pending replies and receipt
+  // lookups remain readable. Collapsing it removes it from this live list.
+  const visibleRuns = runs.filter((r) => (isActiveRun(r) || r.id === expanded) && inProject(taskOf(r)?.projectId));
   // Match the service: running/unknown count Runs; queued counts Tasks.
   // An absent or unknown server count remains unknown, even in a filtered view.
   const counts = project === 'all' ? snapshot?.counts : snapshot?.counts && {
@@ -200,7 +202,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
       <>
         {banner}
         <div className="sec-h"><b>Agents</b><span>当前任务与最近动作</span></div>
-        <div className="list">{activeRuns.length ? activeRuns.map(agentRow) : <div className="empty">当前没有工作流运行。</div>}</div>
+        <div className="list">{visibleRuns.length ? visibleRuns.map(agentRow) : <div className="empty">当前没有工作流运行。</div>}</div>
         {independent.length ? (
           <>
             <div className="sec-h"><b>独立运行，尚未关联任务</b><span>{independent.length} 个</span></div>
@@ -372,7 +374,7 @@ export function App({ snapshot, legacyActive, connected, stale, actions, initial
             {task.controlReceipts?.some(c => c.state === 'unknown' || c.runState === 'unknown') ? <p className="detail-alert" role="status">控制回执或运行结果未知，需核对原请求。</p> : null}
             {task.controlReceipts?.length ? <Disclosure title="控制回执"><div className="run-table">{task.controlReceipts.map(c => (
               <div className="run" key={c.requestId}>
-                <span className="rt">{c.kind === 'wrap_up' ? '收尾' : c.kind === 'instruction' ? '指令' : '停止'} · {{accepted:'已保存',sending:'发送中',acknowledged:'执行器已接收',rejected:'已拒绝',unknown:'结果未知',processed:'已处理'}[c.state]}</span>
+                <span className="rt">{{wrap_up:'收尾',instruction:'指令',follow_up:'后续指令',pause:'暂停',stop:'停止'}[c.kind]} · {{accepted:'已保存',sending:'发送中',acknowledged:'执行器已接收',rejected:'已拒绝',unknown:'结果未知',processed:'已处理'}[c.state]}</span>
                 <span className="rm">请求 <code>{short(c.requestId)}</code> · Run <code>{short(c.runId)}</code>{c.sessionId ? <> · Session <code>{short(c.sessionId)}</code></> : null} · {formatTime(c.updatedAt)}</span>
                 <span className="rm">{c.disposition ? `协议回执：${c.disposition === 'queued' ? '已入队' : '已处理'} · ` : ''}实际运行：{runLabel(c.runState)}{c.outcome ? ` · 结束结果：${runLabel(c.outcome)}` : ' · 结束结果尚未确认'}</span>
                 {c.reason ? <span className="rm">{{run_ended_before_send:'运行已结束，指令未发送',run_interrupted:'运行中断',contract_changed:'冻结任务或配置已变更',executor_refused:'执行器拒绝指令',wrap_up_already_requested:'本轮已请求收尾，未重复发送',protocol_reply_unknown:'协议回执未确认',controller_interrupted:'服务中断，保留未知且不重发',pause_requested: '已请求暂停', unsupported_control:'执行器不支持此指令'}[c.reason]}</span> : null}
