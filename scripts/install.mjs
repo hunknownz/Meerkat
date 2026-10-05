@@ -55,7 +55,7 @@ export async function ensureRuntime(o) {
   }
   return install({ version, target, runtime: o.runtime, artifactDir });
 }
-export async function ensureService(binary, dataDir) {
+export async function ensureService(binary, dataDir, onSpawn) {
   ensurePrivateDir(dataDir);
   const snapshot = () => { try { return JSON.parse(run(binary, ['snapshot', '--data-dir', dataDir])); } catch { return null; } };
   let diagnostic; try { diagnostic=JSON.parse(run(binary,['doctor','--data-dir',dataDir])); } catch(e) {try{diagnostic=JSON.parse(e.stdout.toString());}catch{}}
@@ -69,6 +69,7 @@ export async function ensureService(binary, dataDir) {
   const logPath = join(dataDir, `service-${stamp}.log`);
   const fd = openSync(logPath, 'wx', 0o600); protectNewFile(logPath);
   const child = spawn(binary, ['serve', '--data-dir', dataDir, '--port', '0'], { detached: true, windowsHide: true, stdio: ['ignore', fd, fd], shell: false });
+  onSpawn?.(child);
   closeSync(fd);
   let spawnError = null; child.on('error', (e) => { spawnError = e; });
   for (let i = 0; i < 100; i++) {
@@ -113,7 +114,7 @@ export async function installAll(o) {
   const binary = await ensureRuntime(o);
   const result = { runtime: { state: 'installed', ...binary }, executor: { state: 'not_installed' }, service: { state: 'not_started' }, host: { state: 'not_registered' }, configuration: 'needs_provider_model_and_auth_environment', realTask: 'not_verified', nativePanel: 'not_verified' };
   if (o.executor) result.executor = { state: 'installed', ...installExecutor() };
-  if (o.start) result.service = await ensureService(binary.path, o.dataDir);
+  if (o.start) result.service = await ensureService(binary.path, o.dataDir, o.onServiceSpawn);
   if (o.host) {
     const pack = hostPackage(o, binary.path);
     const codex = codexCommand(o.codex);

@@ -14,15 +14,14 @@ const base=mkdtempSync(join(process.platform==='darwin'?'/tmp':tmpdir(),'mk-i-')
 let service, mcp;
 try {
   const runtime=join(base,'runtime'),dataDir=join(base,'state with spaces # %');
-  const o=options(['--source','--no-host','--no-executor','--no-start','--runtime-dir',runtime,'--data-dir',dataDir]);
+  const o=options(['--source','--no-host','--no-executor','--runtime-dir',runtime,'--data-dir',dataDir]);
+  process.env.LOCAL_INSTALL_KEY='local-fixture';
+  o.onServiceSpawn=child=>{service=child;};
   const installed=await installAll(o),bin=installed.runtime.path;
   const version=execFileSync(bin,['version'],{encoding:'utf8'}).trim();
   if(version!=='0.4.0-beta.16')throw Error('wrong binary version');
-  ensurePrivateDir(dataDir);
-  service=spawn(bin,['serve','--data-dir',dataDir,'--port','0'],{env:{...process.env,LOCAL_INSTALL_KEY:'local-fixture'},stdio:['ignore','pipe','pipe'],shell:false});
-  let output='',errors='',ready;service.stdout.on('data',b=>output+=b);service.stderr.on('data',b=>errors+=b);
-  for(let i=0;i<200&&!ready;i++){if(service.exitCode!==null)throw Error(`service failed: ${errors}`);try{ready=JSON.parse(output);}catch{};if(!ready)await new Promise(r=>setTimeout(r,50));}
-  if(!ready)throw Error('service readiness timed out');
+  if(installed.service.state!=='started'||!service)throw Error('installer did not start the service');
+  const ready=JSON.parse(readFileSync(join(dataDir,'installation-service.json'),'utf8'));
   const snapshot=JSON.parse(execFileSync(bin,['snapshot','--data-dir',dataDir],{encoding:'utf8',timeout:15000}));
   if(!ready.ok||!snapshot.ok)throw Error('snapshot did not respond');
   const doctor=JSON.parse(execFileSync(bin,['doctor','--data-dir',dataDir],{encoding:'utf8',timeout:15000}));
