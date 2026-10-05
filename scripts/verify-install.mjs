@@ -8,7 +8,7 @@ import { join, delimiter, resolve } from 'node:path';
 import { installAll, options, hostPackage } from './install.mjs';
 import { ensurePrivateDir } from './lib/private.mjs';
 import { PI_VERSION, installExecutor } from './lib/executor-install.mjs';
-const base=mkdtempSync(join(tmpdir(),'meerkat-install-smoke-'));
+const base=mkdtempSync(join(process.platform==='darwin'?'/tmp':tmpdir(),'mk-i-'));
 let service, mcp;
 try {
   const runtime=join(base,'runtime'),dataDir=join(base,'state with spaces # %');
@@ -18,9 +18,9 @@ try {
   if(version!=='0.4.0-beta.16')throw Error('wrong binary version');
   ensurePrivateDir(dataDir);
   service=spawn(bin,['serve','--data-dir',dataDir,'--port','0'],{stdio:['ignore','pipe','pipe'],shell:false});
-  let output='',errors='';service.stdout.on('data',b=>output+=b);service.stderr.on('data',b=>errors+=b);
-  for(let i=0;i<200&&!output.includes('\n');i++){if(service.exitCode!==null)throw Error(`service failed: ${errors}`);await new Promise(r=>setTimeout(r,50));}
-  const ready=JSON.parse(output.split('\n')[0]);
+  let output='',errors='',ready;service.stdout.on('data',b=>output+=b);service.stderr.on('data',b=>errors+=b);
+  for(let i=0;i<200&&!ready;i++){if(service.exitCode!==null)throw Error(`service failed: ${errors}`);try{ready=JSON.parse(output);}catch{};if(!ready)await new Promise(r=>setTimeout(r,50));}
+  if(!ready)throw Error('service readiness timed out');
   const snapshot=JSON.parse(execFileSync(bin,['snapshot','--data-dir',dataDir],{encoding:'utf8',timeout:15000}));
   if(!ready.ok||!snapshot.ok)throw Error('snapshot did not respond');
   const doctor=JSON.parse(execFileSync(bin,['doctor','--data-dir',dataDir],{encoding:'utf8',timeout:15000}));

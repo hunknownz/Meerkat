@@ -59,7 +59,7 @@ export async function ensureService(binary, dataDir) {
   for (let i = 0; i < 100; i++) {
     if (spawnError || child.exitCode !== null) throw new Error('service could not start; use doctor and inspect the private startup log');
     let ready;
-    try { ready = JSON.parse(readFileSync(logPath, 'utf8').split('\n')[0]); } catch {}
+    try { ready = JSON.parse(readFileSync(logPath, 'utf8')); } catch {}
     if (ready?.ok && snapshot()?.ok) {
       const record = { ...ready, pid: child.pid, startedAt: new Date().toISOString(), logPath };
       const recordPath = join(dataDir, 'installation-service.json');
