@@ -131,7 +131,7 @@ export async function installAll(o) {
   }
   return result;
 }
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try { process.stdout.write(JSON.stringify(await installAll(options(process.argv.slice(2))), null, 2) + '\n'); }
   catch (e) { process.stderr.write(`meerkat install: ${e.message}\n`); process.exitCode = 1; }
 }

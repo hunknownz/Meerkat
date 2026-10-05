@@ -33,3 +33,12 @@ test('installer entry executes through a linked source path', () => {
     assert.equal(result.status,1);assert.match(result.stderr,/unknown or incomplete option/);
   } finally {rmSync(base,{recursive:true,force:true});}
 });
+
+test('installer modules can be imported by an Agent stdin script', () => {
+  const url=new URL('../scripts/install.mjs',import.meta.url).href;
+  const result=spawnSync(process.execPath,['--input-type=module','-'],{
+    input:`await import(${JSON.stringify(url)});`,encoding:'utf8',shell:false
+  });
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.stdout,'');
+});
