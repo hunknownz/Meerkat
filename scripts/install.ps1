@@ -38,15 +38,22 @@ if(-not $nodeOK){
 }else{$nodePath=$node.Source}
 $goCommand=Get-Command go -ErrorAction SilentlyContinue
 $goOK=$false
-if($goCommand){$goVersion=(& $goCommand.Source version);if($goVersion -match 'go(\d+)\.(\d+)'){$goOK=([int]$Matches[1] -gt 1 -or ([int]$Matches[1] -eq 1 -and [int]$Matches[2] -ge 26))}}
+if($goCommand){
+  $previousToolchain=$env:GOTOOLCHAIN
+  try {$env:GOTOOLCHAIN='local';$goVersion=(& $goCommand.Source version)}
+  finally {$env:GOTOOLCHAIN=$previousToolchain}
+  if($goVersion -match 'go(\d+)\.(\d+)\.(\d+)(?:\s|$)'){
+    $goOK=([int]$Matches[1] -gt 1 -or ([int]$Matches[1] -eq 1 -and ([int]$Matches[2] -gt 26 -or ([int]$Matches[2] -eq 26 -and [int]$Matches[3] -ge 8))))
+  }
+}
 if(-not $goOK){
   Private-Dir $tools
   $arch=if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64'){'arm64'}else{'amd64'}
-  $release=(Invoke-RestMethod 'https://go.dev/dl/?mode=json&include=all' -TimeoutSec 60 | Where-Object {$_.version -eq 'go1.26.0'} | Select-Object -First 1)
+  $release=(Invoke-RestMethod 'https://go.dev/dl/?mode=json&include=all' -TimeoutSec 60 | Where-Object {$_.version -eq 'go1.26.8'} | Select-Object -First 1)
   $file=$release.files | Where-Object {$_.os -eq 'windows' -and $_.arch -eq $arch -and $_.kind -eq 'archive'} | Select-Object -First 1
-  if(-not $file){throw 'Go 1.26.0 download unavailable'}
+  if(-not $file){throw 'Go 1.26.8 download unavailable'}
   $archive=Join-Path $tools $file.filename; Download-Verified "https://go.dev/dl/$($file.filename)" $archive $file.sha256
-  $goDir=Join-Path $tools 'go1.26.0';Private-Dir $goDir
+  $goDir=Join-Path $tools 'go1.26.8';Private-Dir $goDir
   Expand-Archive -LiteralPath $archive -DestinationPath $goDir -Force;Remove-Item -LiteralPath $archive
   $env:PATH="$(Join-Path $goDir 'go\bin');$env:PATH"
 }

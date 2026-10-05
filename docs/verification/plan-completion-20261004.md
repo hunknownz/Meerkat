@@ -171,3 +171,10 @@ children; unknown Run controls were disabled. See
 [the follow-up record](native-controls-20261004.md). No provider request was made.
 This closes the host transport checks, while the combined real Pi/model native
 control scenario remains pending. The original unknown paid Run stays untouched.
+
+## Acceptance follow-up on 2026-10-05
+
+See [current acceptance](acceptance-20261005.md). The full race suite passed on
+Go 1.26.8; prior Darwin fork failures were diagnosed without relaxing gates. A
+new user screenshot verifies global entry/display. Real native controls, current
+resource reload, Windows host and public distribution remain separate gates.

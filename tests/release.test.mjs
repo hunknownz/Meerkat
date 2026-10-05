@@ -12,7 +12,7 @@ import {
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(REPO, 'scripts', 'build-release.mjs');
-const VERSION = '0.4.0-beta.16';
+const VERSION = '0.4.0-beta.17';
 const readJSON = (rel) => JSON.parse(readFileSync(join(REPO, rel), 'utf8'));
 
 function git(cwd, ...args) {
@@ -72,8 +72,8 @@ test('metadata helpers validate and sort', () => {
     { file: artifactName(VERSION, 'linux', 'amd64'), os: 'linux', arch: 'amd64', sha256: 'b'.repeat(64) },
     { file: artifactName(VERSION, 'darwin', 'arm64'), os: 'darwin', arch: 'arm64', sha256: 'c'.repeat(64) },
   ];
-  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.16_linux_amd64');
-  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.16_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.16_linux_amd64\n`);
+  assert.equal(arts[0].file, 'meerkat_0.4.0-beta.17_linux_amd64');
+  assert.equal(checksumsText(arts), `${'c'.repeat(64)}  meerkat_0.4.0-beta.17_darwin_arm64\n${'b'.repeat(64)}  meerkat_0.4.0-beta.17_linux_amd64\n`);
   const meta = releaseMetadata(VERSION, sha, arts);
   assert.equal(meta.name, 'meerkat');
   assert.deepEqual(meta.artifacts.map((a) => a.os), ['darwin', 'linux']);
@@ -120,7 +120,7 @@ test('repeated --platform builds only the selected subset', () => {
     const r = release(root, env, '--platform', 'linux/arm64');
     assert.equal(r.status, 0, r.stderr);
     const meta = JSON.parse(readFileSync(join(root, '.dist', 'releases', VERSION, 'release.json'), 'utf8'));
-    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.16_linux_arm64']);
+    assert.deepEqual(meta.artifacts.map((a) => a.file), ['meerkat_0.4.0-beta.17_linux_arm64']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

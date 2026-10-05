@@ -164,7 +164,14 @@ func pausedTask(t *testing.T, e *env) model.Task {
 	})
 	r := e.exec(task.ID)
 	if r.Tasks[0].State != model.TaskPaused {
-		t.Fatalf("checkpoint was not saved: %+v", r)
+		st := e.state()
+		var events []model.RunEvent
+		for _, run := range st.Runs {
+			if run.TaskID == task.ID {
+				events = append(events, run.Events...)
+			}
+		}
+		t.Fatalf("checkpoint was not saved: state=%s reason=%s events=%+v", r.Tasks[0].State, deref(r.Tasks[0].StateReason), events)
 	}
 	return task
 }
@@ -278,6 +285,27 @@ func TestCheckpointUnsafeOrUnknownWorkNeverBecomesResumable(t *testing.T) {
 			cp, err := e.st.CheckpointsForTask(task.ID)
 			if err != nil || len(cp) != 0 {
 				t.Fatal(cp, err)
+			}
+			if kind == "scope" {
+				found := false
+				for _, run := range e.state().Runs {
+					for _, event := range run.Events {
+						if event.Type == "checkpoint" && event.Summary == "rejected_capture_scope_or_file" {
+							found = true
+						}
+					}
+				}
+				if !found {
+					t.Fatal("missing safe checkpoint rejection reason")
+				}
+				snapshot, err := e.c.Snapshot()
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, _ := json.Marshal(snapshot)
+				if strings.Contains(string(raw), "outside.txt") || strings.Contains(string(raw), "PRIVATE CHECKPOINT WORK") {
+					t.Fatal("checkpoint diagnostics leaked rejected file evidence")
+				}
 			}
 			if _, err := e.c.Execute(context.Background(), []string{task.ID}, true, false); err == nil {
 				t.Fatal("dirty unknown work resumed")

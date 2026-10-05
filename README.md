@@ -8,7 +8,7 @@ Meerkat is a general tool. Projects supply their own requirements, private profi
 
 | Layer | Technology |
 | --- | --- |
-| Scheduler, state machine, CLI and local service | Go 1.26, standard library |
+| Scheduler, state machine, CLI and local service | Go 1.26.8+, standard library |
 | State, history, metrics and receipts | SQLite, modernc.org/sqlite, WAL and foreign keys |
 | Agents / Tasks / Usage | React 19, TypeScript 7, Vite 8 |
 | Live updates | HTTP snapshot and SSE |
@@ -50,7 +50,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 Ask your AI Agent: **“安装 https://github.com/hunknownz/Meerkat”**.
 The repository provides [AI installation instructions](INSTALL.md) and native
-bootstrap scripts. Meerkat `0.4.0-beta.16` targets macOS, Linux and native Windows
+bootstrap scripts. Meerkat `0.4.0-beta.17` targets macOS, Linux and native Windows
 on amd64/arm64. See the [verification status](docs/verification/installation-20261005.md)
 for what has actually been tested; a Windows build is not Windows host acceptance.
 
@@ -141,7 +141,7 @@ The plugin supplies `meerkat:get-started`, `meerkat:delegate` and `meerkat:workf
 
 ## Development and evidence
 
-Contributors need Go 1.26 and the frontend toolchain (`cd frontend && npm ci`). `node scripts/build.mjs` builds `bin/meerkat`; `node scripts/build-release.mjs` builds release binaries from a `git archive` of clean HEAD.
+Contributors need Go 1.26.8+ and the frontend toolchain (`cd frontend && npm ci`). `node scripts/build.mjs` builds `bin/meerkat`; `node scripts/build-release.mjs` builds release binaries from a `git archive` of clean HEAD. Earlier Go 1.26 patches can crash child processes under the macOS race detector ([Go issue 79804](https://github.com/golang/go/issues/79804)).
 
 ```sh
 go test -race ./...

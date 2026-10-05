@@ -1,6 +1,6 @@
 {
   "name": "meerkat",
-  "version": "0.4.0-beta.16",
+  "version": "0.4.0-beta.17",
   "description": "Coordinate local development, review and polish with frozen tasks, private history and a live agent monitor.",
   "author": {
     "name": "hunknownz"

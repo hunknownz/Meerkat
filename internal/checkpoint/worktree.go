@@ -25,6 +25,20 @@ const maxFiles = 512
 
 var ErrUnverifiable = errors.New("checkpoint: worktree evidence is unverifiable")
 
+// Failure exposes a static reason without file names, contents or Git stderr.
+type Failure struct{ Code string }
+
+func (e *Failure) Error() string { return ErrUnverifiable.Error() + ": " + e.Code }
+func (e *Failure) Unwrap() error { return ErrUnverifiable }
+
+func FailureCode(err error) string {
+	var f *Failure
+	if errors.As(err, &f) {
+		return f.Code
+	}
+	return "unverifiable"
+}
+
 type File struct {
 	Path    string `json:"path"`
 	Mode    uint32 `json:"mode"`
@@ -70,8 +84,15 @@ func git(wt string, args ...string) (string, error) {
 	c.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C")
 	out := &boundedBuffer{limit: MaxBytes}
 	c.Stdout = out
-	if c.Run() != nil {
-		return "", ErrUnverifiable
+	if e := c.Run(); e != nil {
+		code := "git_failed"
+		var x *exec.ExitError
+		if ctx.Err() != nil {
+			code = "git_timeout"
+		} else if errors.As(e, &x) && x.ExitCode() < 0 {
+			code = "git_signaled"
+		}
+		return "", &Failure{Code: code}
 	}
 	return out.String(), nil
 }
@@ -83,7 +104,11 @@ func inScope(p string, scope []string) bool {
 // the index separately from working bytes. Symlinks, merge conflicts and large
 // captures require manual intervention. Untracked ignored files are excluded.
 func Capture(wt string, scope []string) (Snapshot, []byte, error) {
-	fail := func() (Snapshot, []byte, error) { return Snapshot{}, nil, ErrUnverifiable }
+	stage := "path"
+	fail := func() (Snapshot, []byte, error) { return Snapshot{}, nil, &Failure{Code: stage} }
+	gitFail := func(err error) (Snapshot, []byte, error) {
+		return Snapshot{}, nil, &Failure{Code: stage + "_" + FailureCode(err)}
+	}
 	real, e := filepath.EvalSymlinks(wt)
 	if e != nil || real != wt {
 		return fail()
@@ -92,33 +117,42 @@ func Capture(wt string, scope []string) (Snapshot, []byte, error) {
 	for _, v := range []struct {
 		dst  *string
 		args []string
+		code string
 	}{
-		{&s.Head, []string{"rev-parse", "HEAD"}},
-		{&s.Branch, []string{"symbolic-ref", "-q", "HEAD"}},
-		{&s.GitDir, []string{"rev-parse", "--absolute-git-dir"}},
-		{&s.CommonDir, []string{"rev-parse", "--path-format=absolute", "--git-common-dir"}},
+		{&s.Head, []string{"rev-parse", "HEAD"}, "head"},
+		{&s.Branch, []string{"symbolic-ref", "-q", "HEAD"}, "branch"},
+		{&s.GitDir, []string{"rev-parse", "--absolute-git-dir"}, "git_dir"},
+		{&s.CommonDir, []string{"rev-parse", "--path-format=absolute", "--git-common-dir"}, "common_dir"},
 	} {
+		stage = v.code
 		raw, e := git(wt, v.args...)
 		if e != nil {
-			return fail()
+			return gitFail(e)
 		}
 		*v.dst = strings.TrimSpace(raw)
 	}
+	stage = "linked_worktree"
 	if s.GitDir == s.CommonDir || !strings.HasPrefix(s.Branch, "refs/heads/") {
 		return fail()
 	}
 	s.Branch = strings.TrimPrefix(s.Branch, "refs/heads/")
-	if x, e := git(wt, "ls-files", "--unmerged", "-z"); e != nil || x != "" {
+	stage = "unmerged"
+	if x, e := git(wt, "ls-files", "--unmerged", "-z"); e != nil {
+		return gitFail(e)
+	} else if x != "" {
 		return fail()
 	}
+	stage = "status"
 	s.Status, e = git(wt, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
 	if e != nil {
-		return fail()
+		return gitFail(e)
 	}
+	stage = "index"
 	s.IndexPatch, e = git(wt, "diff", "--cached", "--binary", "--no-renames", "--no-ext-diff", "--no-textconv")
 	if e != nil {
-		return fail()
+		return gitFail(e)
 	}
+	stage = "root"
 	root, e := os.OpenRoot(wt)
 	if e != nil {
 		return fail()
@@ -129,6 +163,7 @@ func Capture(wt string, scope []string) (Snapshot, []byte, error) {
 		if entry == "" {
 			continue
 		}
+		stage = "scope_or_file"
 		if len(entry) < 4 || entry[2] != ' ' || len(s.Files) >= maxFiles {
 			return fail()
 		}
@@ -162,6 +197,7 @@ func Capture(wt string, scope []string) (Snapshot, []byte, error) {
 		}
 		s.Files = append(s.Files, v)
 	}
+	stage = "encoding"
 	b, e := json.Marshal(s)
 	if e != nil || len(b) > MaxBytes {
 		return fail()
@@ -171,8 +207,11 @@ func Capture(wt string, scope []string) (Snapshot, []byte, error) {
 
 func Verify(wt string, b Binding) error {
 	_, raw, e := Capture(wt, b.Scope)
-	if e != nil || Digest(raw) != b.Digest {
-		return ErrUnverifiable
+	if e != nil {
+		return e
+	}
+	if Digest(raw) != b.Digest {
+		return &Failure{Code: "digest_changed"}
 	}
 	return nil
 }

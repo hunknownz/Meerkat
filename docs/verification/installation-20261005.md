@@ -1,6 +1,6 @@
 # Installation and remaining plan checks
 
-Candidate: `0.4.0-beta.16`. Baseline: `136179d`. This audit updates status in the
+Candidate: `0.4.0-beta.17` (current audit); beta.16 installation evidence is retained. Baseline: `136179d`. This audit updates status in the
 [earlier plan checklist](plan-completion-20261004.md). Historical evidence remains.
 
 ## Implemented
@@ -26,7 +26,7 @@ installation, private dependencies and a portable MCP host package.
 | Real model + native controls + final reviewed delivery | Incomplete | Fresh bounded task, original Session directions, exact SHA review |
 | Windows Codex native display | No evidence | Real Windows host; CI is not GUI acceptance |
 | Public binary release | Unpublished | Authorized tag/assets with checksums/source metadata |
-| Full core race regression | Not green | Intermittent checkpoint fixture failures need diagnosis; focused retries passed |
+| Full core race regression | Passed with Go 1.26.8 | Earlier failures diagnosed as the Go Darwin race fork regression; see [current acceptance](acceptance-20261005.md) |
 
 The live database contains unresolved historical runs/requests. Preserve states
 and budget reservations; do not reuse them for exercises or automatically replay.
@@ -99,3 +99,10 @@ No paid model call is part of installation verification.
   update explicitly set those three private directories to 0700. The bootstrap
   continues to reject unsafe existing paths instead of silently changing them.
 - No paid model call, Issue write, tag or release was performed in this update.
+
+## Current acceptance follow-up
+
+The user supplied a new genuine Codex global-entry/panel screenshot. Full race
+checks passed after updating the Go patch; [the current audit](acceptance-20261005.md)
+records the diagnosis and remaining native/device/distribution gates. Earlier
+beta.16 installation checks do not certify the new package.

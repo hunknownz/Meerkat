@@ -71,19 +71,22 @@ func checkpointHeadOK(t model.Task, base, head string) bool {
 
 func (c *Core) captureCheckpoint(st *model.State, t model.Task, ss model.Session, runID, base string, s step) (*model.Checkpoint, error) {
 	snap, raw, e := checkpoint.Capture(t.Worktree, t.Scope)
-	if e != nil || snap.Branch != deref(t.Branch) || !checkpointHeadOK(t, base, snap.Head) {
-		return nil, invalid("checkpoint worktree is unverifiable")
+	if e != nil {
+		return nil, &checkpoint.Failure{Code: "capture_" + checkpoint.FailureCode(e)}
 	}
-	if checkpoint.Verify(t.Worktree, checkpoint.Binding{Digest: checkpoint.Digest(raw), Scope: t.Scope}) != nil {
-		return nil, invalid("worktree changed during checkpoint")
+	if snap.Branch != deref(t.Branch) || !checkpointHeadOK(t, base, snap.Head) {
+		return nil, &checkpoint.Failure{Code: "head_or_branch"}
+	}
+	if e := checkpoint.Verify(t.Worktree, checkpoint.Binding{Digest: checkpoint.Digest(raw), Scope: t.Scope}); e != nil {
+		return nil, &checkpoint.Failure{Code: "verify_" + checkpoint.FailureCode(e)}
 	}
 	fresh, e := c.st.Read()
 	if e != nil {
-		return nil, e
+		return nil, &checkpoint.Failure{Code: "state_read"}
 	}
 	current := findTask(fresh, t.ID)
 	if current == nil || taskContract(fresh, *current) != ss.ContractDigest {
-		return nil, invalid("checkpoint task changed")
+		return nil, &checkpoint.Failure{Code: "contract_changed"}
 	}
 	run := findRun(fresh, runID)
 	seq := 0
@@ -94,7 +97,7 @@ func (c *Core) captureCheckpoint(st *model.State, t model.Task, ss model.Session
 		Role: s.role, Purpose: s.purpose, Worktree: t.Worktree, BaselineSHA: base, HeadSHA: snap.Head, Branch: snap.Branch, FileDigest: checkpoint.Digest(raw), FileCount: len(snap.Files), LastEventSeq: seq, State: "saved", CreatedAt: now()}
 	cp.FileRef = store.CheckpointFileRef(cp.ID)
 	if e := c.st.WriteCheckpointFile(cp, raw); e != nil {
-		return nil, e
+		return nil, &checkpoint.Failure{Code: "evidence_write"}
 	}
 	return &cp, nil
 }

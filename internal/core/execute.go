@@ -945,11 +945,14 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		}
 	}
 	var saved []model.Checkpoint
+	var checkpointFailure string
 	partial := cat == executor.CatPauseRequested || cat == executor.CatTokenLimit || cat == executor.CatWallTimeout || wrapRequested.Load() && slices.Contains([]string{executor.CatReportMissing, executor.CatDirty, executor.CatNoCommit}, cat)
 	if partial && cause == nil && ss != nil && sessionKnown && budgetKnown && !budgetOverrun && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil && s.role != "reviewer" {
 		if cp, e := c.captureCheckpoint(st, t, *ss, runID, roleBase, s); e == nil {
 			saved = append(saved, *cp)
 			stopped = true
+		} else {
+			checkpointFailure = checkpoint.FailureCode(e)
 		}
 	}
 	t2 := now()
@@ -987,6 +990,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		sm := summaryOf(*r)
 		sm.BaselineSha = base
 		if !ok {
+			if checkpointFailure != "" {
+				pushEvent(r, "checkpoint", "rejected_"+checkpointFailure)
+			}
 			r.State = model.RunFailed
 			tt.State = model.TaskFailed
 			if stopped {

@@ -32,23 +32,24 @@ if [ -z "$MEERKAT_NODE" ] || ! "$MEERKAT_NODE" -e 'const [a,b]=process.versions.
 fi
 MEERKAT_GO_OK=false
 if command -v go >/dev/null 2>&1; then
-  MEERKAT_GO_VERSION=$(go version | awk '{print $3}')
+  MEERKAT_GO_VERSION=$(GOTOOLCHAIN=local go version | awk '{print $3}')
   MEERKAT_GO_MAJOR=$(printf '%s' "$MEERKAT_GO_VERSION" | sed -E 's/^go([0-9]+)\.([0-9]+).*/\1/')
   MEERKAT_GO_MINOR=$(printf '%s' "$MEERKAT_GO_VERSION" | sed -E 's/^go([0-9]+)\.([0-9]+).*/\2/')
-  case "$MEERKAT_GO_MAJOR:$MEERKAT_GO_MINOR" in *[!0-9:]*|'') ;; *)
-    if [ "$MEERKAT_GO_MAJOR" -gt 1 ] || { [ "$MEERKAT_GO_MAJOR" -eq 1 ] && [ "$MEERKAT_GO_MINOR" -ge 26 ]; }; then MEERKAT_GO_OK=true; fi;;
+  MEERKAT_GO_PATCH=$(printf '%s' "$MEERKAT_GO_VERSION" | sed -E 's/^go[0-9]+\.[0-9]+\.([0-9]+)$/\1/')
+  case "$MEERKAT_GO_MAJOR:$MEERKAT_GO_MINOR:$MEERKAT_GO_PATCH" in *[!0-9:]*|'') ;; *)
+    if [ "$MEERKAT_GO_MAJOR" -gt 1 ] || { [ "$MEERKAT_GO_MAJOR" -eq 1 ] && { [ "$MEERKAT_GO_MINOR" -gt 26 ] || { [ "$MEERKAT_GO_MINOR" -eq 26 ] && [ "$MEERKAT_GO_PATCH" -ge 8 ]; }; }; }; then MEERKAT_GO_OK=true; fi;;
   esac
 fi
 if [ "$MEERKAT_GO_OK" = false ]; then
   private_dir "$HOME/.meerkat"; private_dir "$MEERKAT_TOOLS_DIR"
   MEERKAT_META=$(curl -fsSL --max-time 60 'https://go.dev/dl/?mode=json&include=all')
-  MEERKAT_GO_INFO=$(printf '%s' "$MEERKAT_META" | "$MEERKAT_NODE" --input-type=module -e 'let s="";for await(const c of process.stdin)s+=c;const r=JSON.parse(s).find(r=>r.version==="go1.26.0");const f=r?.files.find(f=>f.os===process.argv[1]&&f.arch===process.argv[2]&&f.kind==="archive");if(!f)throw Error("Go download unavailable");console.log(f.filename+" "+f.sha256)' "$MEERKAT_TARGET" "$MEERKAT_ARCH")
+  MEERKAT_GO_INFO=$(printf '%s' "$MEERKAT_META" | "$MEERKAT_NODE" --input-type=module -e 'let s="";for await(const c of process.stdin)s+=c;const r=JSON.parse(s).find(r=>r.version==="go1.26.8");const f=r?.files.find(f=>f.os===process.argv[1]&&f.arch===process.argv[2]&&f.kind==="archive");if(!f)throw Error("Go download unavailable");console.log(f.filename+" "+f.sha256)' "$MEERKAT_TARGET" "$MEERKAT_ARCH")
   MEERKAT_FILE=${MEERKAT_GO_INFO% *}; MEERKAT_HASH=${MEERKAT_GO_INFO#* }; MEERKAT_ARCHIVE="$MEERKAT_TOOLS_DIR/$MEERKAT_FILE"
   curl -fsSL --max-time 600 "https://go.dev/dl/$MEERKAT_FILE" -o "$MEERKAT_ARCHIVE"
   [ "$(checksum "$MEERKAT_ARCHIVE")" = "$MEERKAT_HASH" ] || { rm -f "$MEERKAT_ARCHIVE"; echo 'Go checksum mismatch' >&2; exit 1; }
-  private_dir "$MEERKAT_TOOLS_DIR/go1.26.0"
-  tar -xzf "$MEERKAT_ARCHIVE" -C "$MEERKAT_TOOLS_DIR/go1.26.0"; rm -f "$MEERKAT_ARCHIVE"
-  PATH="$MEERKAT_TOOLS_DIR/go1.26.0/go/bin:$PATH"
+  private_dir "$MEERKAT_TOOLS_DIR/go1.26.8"
+  tar -xzf "$MEERKAT_ARCHIVE" -C "$MEERKAT_TOOLS_DIR/go1.26.8"; rm -f "$MEERKAT_ARCHIVE"
+  PATH="$MEERKAT_TOOLS_DIR/go1.26.8/go/bin:$PATH"
 fi
 PATH="$(dirname "$MEERKAT_NODE"):$PATH"; export PATH
 exec "$MEERKAT_NODE" "$MEERKAT_SOURCE_DIR/scripts/install.mjs" "$@"

@@ -7,7 +7,7 @@ setup task; it does not authorize a paid model call or an Issue update.
 1. Detect the OS and architecture, find Git, Node and the user's Codex CLI. Use
    native Windows; do not introduce WSL. The supported runtime targets are
    macOS, Linux and Windows on amd64/arm64. Verify the Node version is at least
-   22.19. The source fallback needs Go 1.26+ and the OS's `tar`.
+   22.19. The source fallback needs Go 1.26.8+ and the OS's `tar`.
 2. Clone `https://github.com/hunknownz/Meerkat.git` into a user-owned directory.
    Read its root `AGENTS.md` and this file. Record `git rev-parse HEAD`. Reuse a
    checkout only when its remote matches and it is clean. Never reset user work.
@@ -17,7 +17,7 @@ setup task; it does not authorize a paid model call or an Issue update.
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
    ```
 
-   This installs missing Node 22 and Go 1.26.0 privately using official HTTPS
+   This installs missing Node 22 and Go 1.26.8 privately using official HTTPS
    downloads and published SHA-256 checksums. It does not require WSL or an
    administrator install. Git and Codex must already be available; find the
    Codex CLI bundled with the desktop app if `codex` is not on PATH.
