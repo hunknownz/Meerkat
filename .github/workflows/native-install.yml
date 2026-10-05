@@ -4,6 +4,11 @@ on:
     branches: [main, codex/native-install-20261005]
     paths: ['internal/**', 'scripts/**', 'tests/**', 'go.*', '.mcp.json', '.codex-plugin/**', '.github/workflows/native-install.yml']
   workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: Exercise downloads with Node and Go absent
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -34,7 +39,7 @@ jobs:
         shell: powershell
         run: ./scripts/install.ps1 -Source -NoHost -NoExecutor -NoStart -DataDir "$env:RUNNER_TEMP\meerkat-bootstrap-state" -RuntimeDir "$env:RUNNER_TEMP\meerkat-bootstrap-runtime"
       - name: Windows missing toolchains bootstrap
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && (github.ref != 'refs/heads/main' || inputs.bootstrap)
         shell: powershell
         run: |
           $gitBin=Split-Path (Get-Command git).Source -Parent

@@ -2,17 +2,17 @@
 // User-authorized bootstrap, never invoked as an installation hook. No task is
 // prepared or executed here; scheduling and state remain in Go/SQLite.
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, openSync, closeSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, openSync, closeSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { install } from './setup.mjs';
 import { buildRelease } from './build-release.mjs';
 import { SOURCE_ROOT, installedPath, manifestVersion, runtimeDir, selectTarget } from './lib/go-cli.mjs';
 import { ensurePrivateDir, protectNewFile } from './lib/private.mjs';
 import { installExecutor } from './lib/executor-install.mjs';
 
-const run = (cmd, args, cwd = SOURCE_ROOT) => execFileSync(cmd, args, { cwd, shell: false, encoding: 'utf8', timeout: 600000, maxBuffer: 32 << 20 });
+const run = (cmd, args, cwd = SOURCE_ROOT) => execFileSync(cmd, args, { cwd, shell: false, stdio: ['ignore','pipe','pipe'], encoding: 'utf8', timeout: 600000, maxBuffer: 32 << 20 });
 export function codexCommand(explicit) {
   if (explicit) return explicit;
   if (process.env.MEERKAT_CODEX_COMMAND) return process.env.MEERKAT_CODEX_COMMAND;
@@ -38,6 +38,7 @@ export function options(argv) {
     o[key] = argv[++i];
   }
   for (const k of ['root', 'runtime', 'dataDir']) o[k] = resolve(o[k]);
+  o.root=realpathSync(o.root);
   return o;
 }
 export async function ensureRuntime(o) {
@@ -130,7 +131,7 @@ export async function installAll(o) {
   }
   return result;
 }
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try { process.stdout.write(JSON.stringify(await installAll(options(process.argv.slice(2))), null, 2) + '\n'); }
   catch (e) { process.stderr.write(`meerkat install: ${e.message}\n`); process.exitCode = 1; }
 }

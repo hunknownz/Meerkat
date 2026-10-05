@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { options, hostPackage } from '../scripts/install.mjs';
@@ -22,4 +24,12 @@ test('bootstrap private directories and files use the platform authority', () =>
   const base=mkdtempSync(join(tmpdir(),'mk-install-'));const dir=join(base,'private');
   try {ensurePrivateDir(dir);ensurePrivateDir(dir);const f=join(dir,'receipt.json');writeFileSync(f,'{}',{mode:0o600});protectNewFile(f);privatePath(f);privatePath(dir,{directory:true});}
   finally{rmSync(base,{recursive:true,force:true});}
+});
+test('installer entry executes through a linked source path', () => {
+  const base=mkdtempSync(join(tmpdir(),'mk-entry-')),link=join(base,'source');
+  try {
+    symlinkSync(fileURLToPath(new URL('..',import.meta.url)),link,process.platform==='win32'?'junction':'dir');
+    const result=spawnSync(process.execPath,[join(link,'scripts','install.mjs'),'--apply'],{encoding:'utf8',shell:false});
+    assert.equal(result.status,1);assert.match(result.stderr,/unknown or incomplete option/);
+  } finally {rmSync(base,{recursive:true,force:true});}
 });

@@ -10,7 +10,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync,
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -106,6 +106,7 @@ function assertSafeDir(path, label) {
 }
 
 export function buildRelease({ root, platforms }) {
+  root=realpathSync(root);
   const top = run('git', ['rev-parse', '--show-toplevel'], root).trim();
   if (resolve(top) !== resolve(root)) throw new Error(`--root must be the repository top level (${top})`);
   assertClean(root);
@@ -167,4 +168,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) main();
