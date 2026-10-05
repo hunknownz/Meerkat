@@ -47,12 +47,31 @@ func (c *Core) verifyCheckpoint(st *model.State, t model.Task, cp model.Checkpoi
 	if checkpoint.Verify(t.Worktree, checkpoint.Binding{Digest: cp.FileDigest, Scope: t.Scope}) != nil {
 		return invalid("checkpoint files, index, HEAD or worktree changed")
 	}
+	if expectedHead(st, t, pipelineOf(st, t.ID), cp.BaselineSHA) != cp.BaselineSHA || !checkpointHeadOK(t, cp.BaselineSHA, cp.HeadSHA) {
+		return invalid("checkpoint role baseline or committed scope changed")
+	}
 	return nil
+}
+
+// A partial role may contain one provisional commit. It stays unreviewed until
+// the complete role is checked against its original baseline after continuation.
+func checkpointHeadOK(t model.Task, base, head string) bool {
+	if !shaRE.MatchString(base) || !shaRE.MatchString(head) {
+		return false
+	}
+	if head == base {
+		return true
+	}
+	if !isAncestor(t.Worktree, base, head) || commitCount(t.Worktree, base, head) != 1 {
+		return false
+	}
+	paths := changedPaths(t.Worktree, base, head)
+	return paths != nil && len(paths) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !inScope(p, t.Scope) })
 }
 
 func (c *Core) captureCheckpoint(st *model.State, t model.Task, ss model.Session, runID, base string, s step) (*model.Checkpoint, error) {
 	snap, raw, e := checkpoint.Capture(t.Worktree, t.Scope)
-	if e != nil || snap.Head != base || snap.Branch != deref(t.Branch) {
+	if e != nil || snap.Branch != deref(t.Branch) || !checkpointHeadOK(t, base, snap.Head) {
 		return nil, invalid("checkpoint worktree is unverifiable")
 	}
 	if checkpoint.Verify(t.Worktree, checkpoint.Binding{Digest: checkpoint.Digest(raw), Scope: t.Scope}) != nil {

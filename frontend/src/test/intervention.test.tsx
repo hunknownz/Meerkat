@@ -66,6 +66,73 @@ it('MCP controls use app-only host tools and query a lost reply without replayin
 });
 
 
+it('unchanged successful lookup reports completion, stays queued and sends no write', async () => {
+  const a=actions();a.receipt=vi.fn(async id=>({...rc(id),kind:'follow_up' as const}));
+  render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+  fireEvent.change(screen.getByLabelText('指令生效时机'),{target:{value:'follow_up'}});
+  fireEvent.change(screen.getByLabelText('指令'),{target:{value:'finish after this turn'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/后续指令 · 已排队/);
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));
+  await screen.findByText('查询完成，回执无变化。');
+  expect(screen.getByText(/后续指令 · 已排队/)).toBeTruthy();
+  expect(screen.queryByText(/已处理/)).toBeNull();
+  expect(screen.queryByText('查询完成，回执已更新。')).toBeNull();
+  expect(a.followUp).toHaveBeenCalledTimes(1);expect(a.send).not.toHaveBeenCalled();
+  expect(a.pause).not.toHaveBeenCalled();expect(a.stop).not.toHaveBeenCalled();
+});
+
+it('in-flight lookup is visibly pending and a failure stays distinctly separate without writes', async () => {
+  const a=actions();render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+  fireEvent.change(screen.getByLabelText('指令'),{target:{value:'direction'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/指令 · 已排队/);
+  let reject!: (e: Error)=>void;
+  a.receipt=vi.fn(()=>new Promise<ControlReceipt>((_res,rej)=>{reject=rej}));
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));
+  await screen.findByText(/指令 · 正在查询…/);
+  expect(screen.queryByText('查询完成，回执无变化。')).toBeNull();
+  reject(new Error('unreachable'));
+  await screen.findByText('暂未查到有效回执。保留原请求，不会自动重发。');
+  expect(screen.getByText(/指令 · 已排队，等待 Agent 处理/)).toBeTruthy();
+  const id=sessionStorage.getItem(`meerkat-control:${RUN_A}:instruction`)!;
+  expect(a.receipt).toHaveBeenCalledWith(id);
+  expect(a.send).toHaveBeenCalledTimes(1);expect(a.pause).not.toHaveBeenCalled();expect(a.stop).not.toHaveBeenCalled();
+});
+
+it('a later lookup reports an updated receipt distinctly', async () => {
+  const a=actions();let advanced=false;
+  a.receipt=vi.fn(async (id:string)=>{if(advanced) return {...rc(id),state:'processed' as const,updatedAt:'2026-10-04T00:02:00Z'};return rc(id);});
+  render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+  fireEvent.change(screen.getByLabelText('指令'),{target:{value:'direction'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/指令 · 已排队/);
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));await screen.findByText('查询完成，回执无变化。');
+  advanced=true;
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));await screen.findByText('查询完成，回执已更新。');
+  expect(screen.getByText(/指令 · 已处理/)).toBeTruthy();
+  expect(a.receipt).toHaveBeenCalledTimes(2);
+  expect(a.send).toHaveBeenCalledTimes(1);expect(a.followUp).not.toHaveBeenCalled();
+  expect(a.pause).not.toHaveBeenCalled();expect(a.stop).not.toHaveBeenCalled();
+});
+
+it('a Run outcome change is visible without claiming that a queued instruction was delivered', async () => {
+  const a=actions();a.receipt=vi.fn(async id=>({...rc(id),runState:'stopped'}));
+  render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+  fireEvent.change(screen.getByLabelText('指令'),{target:{value:'direction'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/指令 · 已排队/);
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));await screen.findByText('查询完成，回执已更新。');
+  expect(screen.getByText(/指令 · 已排队/)).toBeTruthy();expect(screen.queryByText(/指令 · 已处理/)).toBeNull();
+  expect(a.send).toHaveBeenCalledTimes(1);expect(a.followUp).not.toHaveBeenCalled();
+});
+
+it('a receipt for another request is rejected without replacing the original queue state', async () => {
+  const a=actions();a.receipt=vi.fn(async()=>rc(RUN_B));
+  render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
+  fireEvent.change(screen.getByLabelText('指令'),{target:{value:'direction'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送指令'}));await screen.findByText(/指令 · 已排队/);
+  fireEvent.click(screen.getByRole('button',{name:'查询回执'}));
+  await screen.findByText('暂未查到有效回执。保留原请求，不会自动重发。');
+  expect(screen.getByText(/指令 · 已排队/)).toBeTruthy();expect(a.send).toHaveBeenCalledTimes(1);
+});
+
 it('queues follow-up after a turn and graceful pause closes new input without claiming completion',async()=>{
  const a=actions();render(<Intervention run={snapshot().runs[0]!} sessionId={RUN_B} actions={a} disabled={false} receipts={[]} />);
  fireEvent.change(screen.getByLabelText('指令生效时机'),{target:{value:'follow_up'}});

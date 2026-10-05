@@ -4,6 +4,7 @@ Meerkat is a general local agent tool. Keep client requirements, credentials, de
 
 - Go owns scheduling, state, process lifecycle and CLI. SQLite is the authority for state and history. React consumes the versioned snapshot contract. Node is limited to frontend tooling, executor CLIs and the thin desktop connector.
 - Keep scheduling independent of executor protocols. Pi is currently supported; do not advertise unimplemented adapters.
+- Delegation is optional per task. Honor the user's execution choice; use direct coordinator work, one delegated run or a full workflow according to isolation and review needs. Select executor/model through private role Profiles before preparation; see docs/execution.md.
 - Freeze each coding task's goal, scope, acceptance, Context and Profiles. Use a clean linked Git worktree for execution. Review the actual diff and meaningful checks before a scoped local commit.
 - Preserve unknown usage, fees and process identity. Never replace unknown with zero or replay an uncertain run automatically.
 - Local delivery, QA, human check, repository integration and deployment are separate states. Remote actions follow the user's actual authorization.

@@ -77,9 +77,12 @@ func TestPauseFollowUpChild(t *testing.T) {
 			emit(map[string]any{"type": "agent_start"})
 			emit(map[string]any{"type": "tool_execution_start", "toolName": "write", "toolCallId": "write-1"})
 			os.WriteFile("a.txt", []byte("saved partial work\n"), 0644)
+			if mode == "pause-committed" && exec.Command("git", "commit", "-qam", "provisional").Run() != nil {
+				os.Exit(4)
+			}
 			emit(map[string]any{"type": "tool_execution_end", "toolName": "write", "toolCallId": "write-1", "isError": false, "result": map[string]any{"content": []any{}}})
 		case "steer":
-			if mode != "pause" || q.Message != gracefulPauseMessage {
+			if (mode != "pause" && mode != "pause-committed") || q.Message != gracefulPauseMessage {
 				os.Exit(5)
 			}
 			response(q.ID, q.Type, map[string]string{"disposition": "queued"})
@@ -105,7 +108,7 @@ func TestPauseFollowUpChild(t *testing.T) {
 }
 
 func TestRPCGracefulPauseAndFollowUpWaitForKnownIdle(t *testing.T) {
-	for _, kind := range []string{"pause", "follow_up"} {
+	for _, kind := range []string{"pause", "pause-committed", "follow_up"} {
 		t.Run(kind, func(t *testing.T) {
 			e := setup(t)
 			req := rpcRequest(t, e, "unused")
@@ -119,14 +122,19 @@ func TestRPCGracefulPauseAndFollowUpWaitForKnownIdle(t *testing.T) {
 			if kind == "follow_up" {
 				msg = "finish the same bounded task"
 			}
-			ch <- RunControl{ID: "owned-control", Kind: kind, Message: msg}
+			controlKind := kind
+			if kind == "pause-committed" {
+				controlKind = "pause"
+			}
+			ch <- RunControl{ID: "owned-control", Kind: controlKind, Message: msg}
 			req.Controls = &ControlBinding{Messages: ch, Authority: a}
 			res, err := NewPi().Execute(context.Background(), req, nil, nil)
 			if res.Session == nil || !res.Session.Confirmed || !res.CheckpointSafe {
 				t.Fatal("unsafe session", res, err)
 			}
-			if kind == "pause" {
-				if category(err) != CatPauseRequested || res.Outcome != model.RunStopped || res.Committed || res.Clean {
+			if strings.HasPrefix(kind, "pause") {
+				committed := kind == "pause-committed"
+				if category(err) != CatPauseRequested || res.Outcome != model.RunStopped || res.Committed != committed || res.Clean != committed {
 					t.Fatal(res, err)
 				}
 			} else if err != nil || res.Outcome != model.RunSucceeded || !res.Committed || !res.Clean {

@@ -29,7 +29,7 @@ func validCheckpoint(c model.Checkpoint) error {
 		!digestRE.MatchString(c.SessionDigest) || !digestRE.MatchString(c.ContractDigest) || !digestRE.MatchString(c.ProfileDigest) || !digestRE.MatchString(c.FileDigest) ||
 		(c.Role != "developer" && c.Role != "polisher") || !filepath.IsAbs(c.Worktree) || c.FileRef != CheckpointFileRef(c.ID) ||
 		(c.Role == "developer" && c.Purpose != "implement" && c.Purpose != "fix") || (c.Role == "polisher" && c.Purpose != "polish") ||
-		!operationSHARE.MatchString(c.HeadSHA) || c.BaselineSHA != c.HeadSHA || c.Branch == "" || c.FileCount < 0 || c.FileCount > 512 || c.LastEventSeq < 0 || c.LastEventSeq > model.MaxRunEvents ||
+		!operationSHARE.MatchString(c.HeadSHA) || !operationSHARE.MatchString(c.BaselineSHA) || c.Branch == "" || c.FileCount < 0 || c.FileCount > 512 || c.LastEventSeq < 0 || c.LastEventSeq > model.MaxRunEvents ||
 		(c.State != "saved" && c.State != "consumed") || (c.State == "saved" && c.ResumedRunID != nil) || (c.State == "consumed" && (c.ResumedRunID == nil || !uuidRE.MatchString(*c.ResumedRunID))) {
 		return model.Invalidf("invalid checkpoint")
 	}

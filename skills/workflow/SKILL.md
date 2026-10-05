@@ -7,6 +7,13 @@ description: Coordinate bounded Meerkat task delivery through development, revie
 
 The coordinator owns requirements, key decisions, task boundaries and linked worktrees. Meerkat's Go service owns scheduling and execution processes. Roles use configured executors.
 
+Use this skill after choosing automated multi-role delivery. Honor explicit
+Direct, Delegate or Workflow requests; ordinary coordinator edits can be direct
+without dispatching a Task. Choose each role's private Profile before preparation;
+executor and model are separate choices, with Pi the current implemented adapter.
+See [execution choices](../../docs/execution.md). A direct takeover is separate
+coordinator work, not a synthetic Meerkat Run or an override of uncertain history.
+
 ## Prepare and deliver
 
 - Locate the plugin root relative to this skill (`../..`) and run commands as `node <root>/scripts/launch.mjs <command>` (written `meerkat <command>` below). An existing absolute binary (`MEERKAT_BIN`) is an acceptable fallback. Without a runtime or profile, follow [get started](../get-started/SKILL.md) and [install](../../docs/install.md).

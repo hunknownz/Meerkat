@@ -48,7 +48,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 ## Install (end users)
 
-Version `0.4.0-beta.14` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
+Version `0.4.0-beta.15` is a release candidate. Install from the GitHub marketplace and source now; tag-based binary downloads await publication. macOS/Linux on arm64/amd64; Windows is unsupported. Source setup needs Node 22, Git, Go 1.26+, Codex and Pi 0.99.1. Bundled frontend assets do not need rebuilding.
 
 ```sh
 codex plugin marketplace add hunknownz/Meerkat --ref main
@@ -56,7 +56,7 @@ codex plugin add meerkat@meerkat
 git clone https://github.com/hunknownz/Meerkat.git
 cd Meerkat
 node scripts/build-release.mjs
-node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.14
+node scripts/setup.mjs --artifact-dir .dist/releases/0.4.0-beta.15
 node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY
 export MY_PROVIDER_KEY=...        # in your own shell only
 node scripts/launch.mjs serve --port 47826
@@ -65,6 +65,10 @@ node scripts/launch.mjs serve --port 47826
 Then, in a new Codex chat, ask `打开 Meerkat 面板` (MCP Apps tool `open_monitor`). Full guide, diagnosis, update and uninstall: [docs/install.md](docs/install.md). Distribution: [docs/publishing.md](docs/publishing.md).
 
 ## Run tasks
+
+Choose [direct work, one delegation or a full workflow](docs/execution.md) for
+each task. Meerkat does not require Pi to write every edit. Delegated role
+Profiles select the executor and model independently; Pi is currently supported.
 
 The default private data directory is ~/.meerkat/. Use the same --data-dir for all commands when selecting another directory. Keep credentials in the environment inherited by the service; profiles contain references only. `launch.mjs` runs the installed binary and never builds or downloads.
 

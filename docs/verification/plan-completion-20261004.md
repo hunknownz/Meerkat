@@ -1,7 +1,8 @@
 # Plan status and verification — updated 2026-10-05
 
-Candidate: `0.4.0-beta.14`. Real-run evidence below was captured with beta.13;
-beta.14 packages the same verified behavior. Original design remains in
+Candidate: `0.4.0-beta.15`. Historical real-run evidence below was captured with
+beta.13 and beta.14. Beta.15 repairs receipt feedback and continuation after a
+scoped provisional commit; fresh native query feedback remains pending. Original design remains in
 [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
 The full plan is **not complete**. Real Pi/model pause, checkpoint continuation,
 queued follow-up, structured reporting and multi-role delivery passed. Fresh
@@ -18,14 +19,14 @@ See [the current real-run evidence](real-controls-20261005.md) and
 | 01 | Frozen contracts and separate execution/phase/delivery projections; model tests invalidate reviews after SHA changes. | Fresh host display of projections. |
 | 02–04 | Executor capabilities, private Pi RPC, persistent developer/fix sessions and independent reviews. | Unsupported executor adapters remain unavailable. |
 | 05–06 | Request reservations, one-time permits, raw usage, optional task token enforcement, per-Run/time/request bounds and explicit additions. | Reliable monetary ceilings; missing prices/fees remain unknown. |
-| 07–09 | Early wrap-up, verified dirty checkpoints, owned process lease, restart reconciliation and completed-step recovery. | A scoped provisional commit currently prevents partial checkpoint capture; repair is pending. Unknown processes/requests without evidence require investigation; no replay. |
+| 07–09 | Early wrap-up, verified dirty checkpoints, owned process lease, restart reconciliation and completed-step recovery. | Beta.15 supports one scoped provisional commit with exact saved HEAD, original role baseline and explicit same-session continuation; local checks are recorded in the repair evidence. Unknown processes/requests without evidence require investigation; no replay. |
 | 10 | Durable directions, wrap-up, independent pause, queued follow-up, stop and UUID receipts. Go seals new directions before final reporting; Pi drains pending input. Real pause/resume and follow-up delivery passed. | Fresh real Pi/model Codex button scenario. |
 | 11 | Dependencies, Worktree exclusion, global/project/Provider task caps; fairness and dynamic-cap tests. Bounded retry requires an attested pre-generation 429 rejection and a new permit. | The configured gateway has not been verified to supply that proof. Ordinary 429, 5xx, disconnects and unknown settlements do not retry. |
 | 12 | Development, exact-SHA review, bounded fixes, polish and re-review. | No claim of independent QA or customer acceptance. |
 | 13–14 | SQLite V12, generated TS/runtime validation, snapshots and SSE recovery. V10→V12 migration and V12 backup/restore parity passed. | Matching plugin/runtime and a reopened panel are required after a host surface change. |
-| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Receipt-query completion feedback has an unverified patch; native follow-up delivery remains pending. |
+| 15 | Simplified Agents/Tasks/Usage, directions, follow-up, pause, stop receipts, budget warnings and separate progress meanings. | Beta.15 adds visible pending, unchanged, updated and failed query feedback; fresh native query feedback and paid follow-up delivery remain pending. |
 | 16 | Issue source, drafts, delivery summaries and receipt deduplication. | External sends require the user's corresponding authorization. |
-| 17 | Updated workflow/delegate skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
+| 17 | Optional direct/delegate/workflow selection, updated skills and task input; delegate continuation already supported. | No automatic authorization or unknown-state override. |
 | 18 | Historical import, consistent backup/restore, controls, checkpoints, sessions and budget history. All 28 authority tables reconciled; relocated Issue bodies matched original bytes. | Live uncertain records remain unknown and are not replayed. |
 | 19 | Read-only doctor, pinned Pi protocol/version probes. | Static checks do not certify balance or provider availability. |
 | 20 | Repository marketplace, verified binary builder/installer, CLI/HTTP/MCP and standard panel. Installed beta.14 backend retains the real beta.13 workflow history below. | New native control scenario; public tag/release and directory submission are separate actions. |
@@ -47,6 +48,12 @@ See [the current real-run evidence](real-controls-20261005.md) and
   not introduce another writable state machine or imply deployment.
 
 ## Latest verification
+
+Beta.15 repair checks and execution choices are recorded in
+[the Codex repair evidence](controls-repair-20261005.md). No additional paid model
+request was made for these repairs. The native beta.14 failures and unknown
+settlements below remain part of the record.
+
 
 - Installed Pi 0.99.1 exercised the structured report tool for all three roles
   against a local fake model, including exact SHA/Context bindings and settled

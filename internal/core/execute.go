@@ -657,6 +657,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	capTok, capSec := min(int64(prof.Limits.MaxTokens), remTok), min(int64(prof.Limits.MaxWallSeconds), remSec)
 	f := inspect(t.Worktree)
 	base := ""
+	roleBase := ""
 	pre := ""
 	switch {
 	case f.Err != nil:
@@ -669,6 +670,9 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		pre = "dirty_worktree_preserved"
 	default:
 		base = expectedHead(st, t, p, f.Head)
+		if resumeCP != nil {
+			base = resumeCP.HeadSHA
+		}
 		if base == "" {
 			pre = "candidate_missing"
 			if !p.implemented {
@@ -685,6 +689,10 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	if resumeCP != nil && c.verifyCheckpoint(st, t, *resumeCP, s) != nil {
 		c.failTask(t.ID, model.TaskPaused, "checkpoint_mismatch", s.role)
 		return false
+	}
+	roleBase = base
+	if resumeCP != nil {
+		roleBase = resumeCP.BaselineSHA
 	}
 	ss, fresh, sessionErr := c.selectSession(st, t, prof, s.role, base)
 	if sessionErr != nil {
@@ -813,8 +821,12 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 		req.Controls = &executor.ControlBinding{Messages: l.controls, Authority: &controlAuthority{c: c, runID: runID}}
 	}
 	if resumeCP != nil {
+		req.RoleBaselineSHA = roleBase
 		req.Checkpoint = &checkpoint.Binding{Digest: resumeCP.FileDigest, Scope: slices.Clone(t.Scope)}
 		req.TaskBrief += "\nContinue the exact verified local checkpoint and this session's history. Preserve existing staged and unstaged work, inspect only what the task needs, and finish the original role contract. Past checks and incomplete work are not delivery. The original task allowance still applies."
+		if roleBase != base {
+			req.TaskBrief += "\nThe saved HEAD " + base + " is a provisional commit. The original role baseline is " + roleBase + ". Finish with exactly one in-scope commit from that original baseline; amend the provisional commit if changes are needed. Do not create a second commit. A report on the unchanged saved HEAD may complete the changed role; it is not a no-change decision relative to the original role baseline."
+		}
 	}
 	if budget.StageReserves != nil {
 		req.WrapUpTokens = min(budget.StageReserves.WrapUpTokens, capTok-1)
@@ -915,7 +927,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			stopped = true
 		}
 	} else {
-		changed, cat = verifyRole(s.role, t, base, after, xr)
+		changed, cat = verifyRoleFrom(s.role, t, base, roleBase, after, xr)
 		reason = cat
 	}
 	if !sessionKnown {
@@ -935,8 +947,8 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 	}
 	var saved []model.Checkpoint
 	partial := cat == executor.CatPauseRequested || cat == executor.CatTokenLimit || cat == executor.CatWallTimeout || wrapRequested.Load() && slices.Contains([]string{executor.CatReportMissing, executor.CatDirty, executor.CatNoCommit}, cat)
-	if partial && cause == nil && ss != nil && sessionKnown && budgetKnown && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil && s.role != "reviewer" && after.Head == base {
-		if cp, e := c.captureCheckpoint(st, t, *ss, runID, base, s); e == nil {
+	if partial && cause == nil && ss != nil && sessionKnown && budgetKnown && !budgetOverrun && xr.CheckpointSafe && xr.Usage.Tokens.Total != nil && s.role != "reviewer" {
+		if cp, e := c.captureCheckpoint(st, t, *ss, runID, roleBase, s); e == nil {
 			saved = append(saved, *cp)
 			stopped = true
 		}
@@ -1001,7 +1013,7 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 			sm.ChangedPaths = sm.ChangedPaths[:200]
 		}
 		if s.purpose == "implement" {
-			sm.StartSha = base
+			sm.StartSha = roleBase
 		}
 		sm.Verdict, sm.Decision = rep.Verdict, rep.Decision
 		sm.Report = &reportView{Summary: rep.Summary, Checks: rep.Checks, KnownGaps: rep.KnownGaps, Findings: rep.Findings}
@@ -1051,6 +1063,12 @@ func (c *Core) runRole(ctx context.Context, st *model.State, set model.Settings,
 
 // verifyRole checks the exact executor report against independently gathered Git facts.
 func verifyRole(role string, t model.Task, base string, f wtFacts, xr executor.Result) ([]string, string) {
+	return verifyRoleFrom(role, t, base, base, f, xr)
+}
+
+// Execution starts at the saved HEAD; scope and the one-commit rule cover the
+// whole role, including a provisional commit made before a verified checkpoint.
+func verifyRoleFrom(role string, t model.Task, base, roleBase string, f wtFacts, xr executor.Result) ([]string, string) {
 	rep := xr.Report
 	if rep == nil {
 		return nil, executor.CatReportMissing
@@ -1076,13 +1094,13 @@ func verifyRole(role string, t model.Task, base string, f wtFacts, xr executor.R
 	if rep.CandidateSHA != f.Head || xr.ResultSHA != f.Head || rep.ContextDigest == nil || *rep.ContextDigest != t.ContextRef.Digest {
 		return nil, executor.CatReportStale
 	}
-	changed := changedPaths(t.Worktree, base, f.Head)
+	changed := changedPaths(t.Worktree, roleBase, f.Head)
 	if changed == nil {
 		return nil, "git_unverifiable"
 	}
 	switch role {
 	case "reviewer":
-		if f.Head != base || len(changed) > 0 {
+		if f.Head != roleBase || len(changed) > 0 {
 			return nil, executor.CatReviewerMutation
 		}
 		if rep.Verdict != "pass" && rep.Verdict != "changes_requested" {
@@ -1091,7 +1109,7 @@ func verifyRole(role string, t model.Task, base string, f wtFacts, xr executor.R
 		return changed, ""
 	case "polisher":
 		if rep.Decision == "no_change" {
-			if f.Head != base {
+			if f.Head != roleBase {
 				return nil, executor.CatDecisionMismatch
 			}
 			return changed, ""
@@ -1104,10 +1122,10 @@ func verifyRole(role string, t model.Task, base string, f wtFacts, xr executor.R
 			return nil, executor.CatDecisionMismatch
 		}
 	}
-	if f.Head == base || !isAncestor(t.Worktree, base, f.Head) {
+	if f.Head == roleBase || !isAncestor(t.Worktree, roleBase, f.Head) {
 		return nil, executor.CatNoCommit
 	}
-	if commitCount(t.Worktree, base, f.Head) != 1 {
+	if commitCount(t.Worktree, roleBase, f.Head) != 1 {
 		return nil, "commit_count"
 	}
 	if slices.ContainsFunc(changed, func(p string) bool { return !inScope(p, t.Scope) }) {

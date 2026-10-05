@@ -1,6 +1,6 @@
 # Checkpoints and explicit continuation
 
-A confirmed budget stop can preserve incomplete developer or polisher work as a
+A confirmed budget stop or graceful pause can preserve incomplete developer or polisher work as a
 private checkpoint. The task becomes `paused`; the Run remains `stopped`. No
 candidate or passed review is created from incomplete work.
 
@@ -36,14 +36,26 @@ resets Git or overwrites files to make a checkpoint match.
 - The owned executor confirms idle shutdown and its process group is gone.
 - Tool starts/ends match and no failed or unresolved tool operation was observed.
 - Request usage is known; an unknown request result does not become a checkpoint.
-- The role's starting HEAD and branch remain unchanged. Only in-scope regular
-  files are included. Merge conflicts, symlinks and oversized captures are refused.
-- There was a token/time stop or an explicit budget wrap-up followed by incomplete
-  local work. User cancellation and controller crashes do not certify progress.
+- The branch remains unchanged. HEAD is the role baseline or exactly one
+  provisional commit descended from it, with all committed paths in scope.
+  Only in-scope regular files are captured; merge conflicts, symlinks and
+  oversized captures are refused.
+- There was a token/time stop, an explicit graceful pause or budget wrap-up
+  followed by incomplete local work. Immediate cancellation and controller
+  crashes do not certify progress.
 
 The archive records exact working bytes, file deletions/modes and the staged
 binary patch. Private SQLite records bind it to the task, Profile, Session, Run,
 usage and event position. Full execution history stays in the private Session.
+
+From beta.15, checkpoints retain the original role baseline separately from the
+saved execution HEAD. Continuation starts at that exact HEAD. Final scope and
+the one-commit rule still cover the complete role from its original baseline.
+A clean provisional commit can be reported without an extra commit; incomplete
+changes amend that unreviewed commit. Two commits, unrelated ancestry or an
+out-of-scope commit are refused. A changed polisher result requires a fresh review.
+Earlier runtimes cannot read these distinct-SHA checkpoints; use beta.15 or later
+to read or restore their backups. Existing equal-SHA checkpoints remain readable.
 Unreported completed/remaining steps or checks stay unknown; the saved files
 alone do not establish that a requirement has been met. Successful local tools
 do not certify remote or background effects.
@@ -64,4 +76,5 @@ restart; the consumed checkpoint is never replayed automatically.
 
 The Tasks detail shows the checkpoint ID, role, HEAD, file count, saved/consumed
 state and resumed Run. No file contents, private paths, provider session IDs or
-authority digests are included. The Codex monitor stays read-only.
+authority digests are included. Codex settings remain read-only; bounded human
+Run controls use the standard MCP host tools.

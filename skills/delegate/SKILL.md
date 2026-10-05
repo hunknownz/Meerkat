@@ -5,7 +5,17 @@ description: Delegate one bounded coding run through a configured Meerkat execut
 
 # Meerkat delegation
 
+Use this path after choosing one executor run. Meerkat is optional for individual
+edits: honor an explicit Direct, Delegate or Workflow choice, and otherwise use
+the task's isolation and review needs. A coordinator may implement directly;
+do not dispatch merely because the repository uses Meerkat. See
+[execution choices](../../docs/execution.md).
+
 The coordinator prepares a clean linked Git worktree on a task branch and a strict task JSON file outside it: goal, explicit paths, acceptance checks, Context and Profiles. See [task input](../workflow/references/task-input.md). The configured executor implements and makes one scoped local commit.
+
+Select the private developer Profile before preparation. Executor and model are
+separate choices; only Pi is currently implemented. Changed Profiles need a new
+bounded task, and uncertain requests must not trigger automatic paid fallback.
 
 1. Locate the plugin root relative to this skill (`../..`) and run commands as `node <root>/scripts/launch.mjs <command>`. An existing absolute `meerkat` binary (`MEERKAT_BIN`) is an acceptable fallback. If no runtime or profile exists, follow [get started](../get-started/SKILL.md) / [install](../../docs/install.md). Credentials stay in the profile's named environment variable.
 2. Run `launch.mjs run --input <task-json> --dry-run`.

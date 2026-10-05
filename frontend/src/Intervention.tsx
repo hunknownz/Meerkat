@@ -20,6 +20,8 @@ function label(entry: Entry): string {
   return { accepted: '已保存，等待发送', sending: '正在发送', rejected: '指令已拒绝', unknown: '发送结果未知', processed: '已处理' }[rc.state];
 }
 function unresolved(e: Entry | null) { return !!e && !['acknowledged', 'rejected', 'processed'].includes(e.receipt?.state ?? e.status); }
+/** Stable fingerprint of a read receipt; an identical read means the server has not moved the control. */
+function receiptKey(r: ControlReceipt): string { return JSON.stringify([r.kind, r.state, r.disposition, r.outcome, r.reason, r.runState, r.updatedAt]); }
 
 /** One bounded human control surface. Closing it never stops or replays a Run. */
 export function Intervention({ run, sessionId, actions, disabled, receipts }: {
@@ -32,6 +34,7 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
   const [entry, setEntry] = useState<Entry | null>(() => saved(run.id, 'instruction'));
   const [stop, setStop] = useState<Entry | null>(() => saved(run.id, 'stop'));
   const [querying, setQuerying] = useState(false);
+  const [looking, setLooking] = useState<null | 'entry' | 'stop' | 'pause'>(null);
   const [note, setNote] = useState('');
   const busy = useRef(false);
   const stopping = useRef(false);
@@ -73,15 +76,20 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
     catch(e){if(alive.current)setPause({id,status:e instanceof ControlActionError && e.outcome!=='unknown'?'rejected':'unknown'});}
     finally{pausing.current=false;}
   };
+  // Lookup is read-only: it never resends a direction, pause or stop request.
   const query = async (e: Entry, target: 'entry'|'stop'|'pause') => {
     if (querying) return;
-    setQuerying(true); setNote('');
+    const previous = e.receipt;
+    setQuerying(true); setLooking(target); setNote('');
     try {
       const rc = await actions.receipt(e.id);
-      if (rc.runId !== run.id) throw new Error('wrong run');
-      if (alive.current) (target==='stop'?setStop:target==='pause'?setPause:setEntry)({ id: e.id, status: 'unknown', receipt: rc });
+      if (rc.requestId !== e.id || rc.runId !== run.id || previous && (rc.kind !== previous.kind || rc.sessionId !== previous.sessionId)) throw new Error('wrong receipt');
+      if (alive.current) {
+        (target==='stop'?setStop:target==='pause'?setPause:setEntry)({ id: e.id, status: 'unknown', receipt: rc });
+        setNote(!previous ? '查询完成，已获取回执。' : receiptKey(previous) === receiptKey(rc) ? '查询完成，回执无变化。' : '查询完成，回执已更新。');
+      }
     } catch { if (alive.current) setNote('暂未查到有效回执。保留原请求，不会自动重发。'); }
-    finally { if (alive.current) setQuerying(false); }
+    finally { if (alive.current) { setQuerying(false); setLooking(null); } }
   };
   return <section className="intervention" aria-label="Agent 干预">
     <div className="inline-actions"><label className="instruction-label" htmlFor={`instruction-${run.id}`}>指令</label>
@@ -98,7 +106,7 @@ export function Intervention({ run, sessionId, actions, disabled, receipts }: {
     </div>
     {!canSend ? <p className="k small">{disabled ? '连接或状态未确认，暂不能发送。' : run.stopRequested || stop ? '已请求停止。' : pause ? '已请求暂停，等待核实检查点；不会接受新指令。' : '仅正在开发或精修、且会话身份已确认的 Agent 支持发送指令。'}</p> : null}
     {[{ e: entry, target: 'entry' as const }, { e: pause, target: 'pause' as const }, { e: stop, target: 'stop' as const }].map(({ e, target }) => e ? <div className="control-note" role="status" key={target}>
-      <span>{target==='stop'?'停止':target==='pause'?'暂停':e.receipt?.kind==='follow_up'?'后续指令':'指令'} · {label(e)}</span>
+      <span>{target==='stop'?'停止':target==='pause'?'暂停':e.receipt?.kind==='follow_up'?'后续指令':'指令'} · {looking === target ? '正在查询…' : label(e)}</span>
       <span className="k small">请求 <code>{short(e.id, 12)}</code>{e.receipt ? ` · ${formatTime(e.receipt.updatedAt)}` : ''}</span>
       <button className="btn" type="button" disabled={querying || e.status === 'pending' && !e.receipt} onClick={() => void query(e, target)}>查询回执</button>
     </div> : null)}

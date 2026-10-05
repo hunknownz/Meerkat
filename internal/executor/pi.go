@@ -79,12 +79,12 @@ func gitOut(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 type prepared struct {
-	worktree, branch, baseline, report string
-	argv                               []string
-	env                                []string
-	tokens                             int64
-	wall                               time.Duration
-	prompt                             string
+	worktree, branch, baseline, roleBaseline, report string
+	argv                                             []string
+	env                                              []string
+	tokens                                           int64
+	wall                                             time.Duration
+	prompt                                           string
 }
 
 func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
@@ -150,6 +150,30 @@ func (p *Pi) prepare(ctx context.Context, req Request) (*prepared, error) {
 	}
 	if out.baseline, err = gitOut(ctx, wt, "rev-parse", "HEAD"); err != nil || out.baseline != req.ExpectedSHA {
 		return nil, invalid("worktree HEAD does not match expected sha")
+	}
+	out.roleBaseline = out.baseline
+	if req.RoleBaselineSHA != "" {
+		if !shaRE.MatchString(req.RoleBaselineSHA) || req.Checkpoint == nil || req.Role == "reviewer" {
+			return nil, invalid("role baseline requires a verified coding checkpoint")
+		}
+		out.roleBaseline = req.RoleBaselineSHA
+		if out.roleBaseline != out.baseline {
+			if exec.CommandContext(ctx, "git", "-C", wt, "merge-base", "--is-ancestor", out.roleBaseline, out.baseline).Run() != nil {
+				return nil, invalid("checkpoint role baseline is not an ancestor")
+			}
+			count, e := gitOut(ctx, wt, "rev-list", "--count", out.roleBaseline+".."+out.baseline)
+			paths, pe := gitOut(ctx, wt, "diff", "--name-only", "--no-renames", "-z", out.roleBaseline, out.baseline)
+			if e != nil || pe != nil || count != "1" || paths == "" {
+				return nil, invalid("checkpoint must contain one scoped provisional commit")
+			}
+			for _, path := range strings.Split(strings.TrimSuffix(paths, "\x00"), "\x00") {
+				if !slices.ContainsFunc(req.Checkpoint.Scope, func(scope string) bool {
+					return path == scope || strings.HasPrefix(path, strings.TrimSuffix(scope, "/")+"/")
+				}) {
+					return nil, invalid("checkpoint commit is outside task scope")
+				}
+			}
+		}
 	}
 	if out.report, err = checkReportPath(req.ReportPath, wt); err != nil {
 		return nil, err
@@ -248,6 +272,9 @@ func buildPrompt(req Request, wt, report string, instr [][2]string) string {
 	parts = append(parts, roleHeader[req.Role]...)
 	if req.Checkpoint != nil {
 		parts = append(parts, "This is an explicit continuation of your saved session, not a new task. Keep the prior investigation and plan; do not repeat repository discovery or reread unchanged files already present in that history. Verify the saved working changes, then implement the remaining scope using targeted reads and batched edits/checks. All previous usage remains charged to this task.")
+		if req.RoleBaselineSHA != "" && req.RoleBaselineSHA != req.ExpectedSHA {
+			parts = append(parts, "The saved HEAD is a provisional commit after the original role baseline "+req.RoleBaselineSHA+". Complete that one scoped commit; amend it if necessary, never add a second commit. Report decision changed even if no further edits are needed: the role has already changed the original baseline.")
+		}
 	}
 	parts = append(parts, "Do not push, open PRs, merge, deploy, create branches or worktrees, or touch production systems. Never print secrets.",
 		"", "## Task", strings.TrimSpace(req.TaskBrief))
@@ -467,8 +494,8 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	branch, _ := gitOut(gctx, wt, "symbolic-ref", "--short", "-q", "HEAD")
 	st, serr := gitOut(gctx, wt, "status", "--porcelain")
 	res.ResultSHA, res.Clean = head, serr == nil && st == ""
-	if herr == nil && head != pp.baseline {
-		res.Committed = exec.CommandContext(gctx, "git", "-C", wt, "merge-base", "--is-ancestor", pp.baseline, head).Run() == nil
+	if herr == nil && head != pp.roleBaseline {
+		res.Committed = exec.CommandContext(gctx, "git", "-C", wt, "merge-base", "--is-ancestor", pp.roleBaseline, head).Run() == nil
 	}
 	rep, repCat := readReport(pp.report, req.Role)
 	if rep != nil {
@@ -512,7 +539,7 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	case branch != pp.branch:
 		set(CatBranchChanged)
 	case req.Role == "polisher" && rep != nil && rep.Decision == "no_change":
-		if head != pp.baseline {
+		if head != pp.roleBaseline {
 			set(CatDecisionMismatch)
 		} else if !res.Clean {
 			set(CatDirty)
@@ -528,7 +555,7 @@ func (p *Pi) Execute(ctx context.Context, req Request, onEvent func(model.RunEve
 	if rep != nil && req.Role != "reviewer" && (rep.Decision == "changed") != res.Committed {
 		set(CatDecisionMismatch)
 	}
-	if o.pauseRequested && head == pp.baseline && (cat == CatNoCommit || cat == CatDirty || cat == CatReportMissing) {
+	if o.pauseRequested && (cat == CatNoCommit || cat == CatDirty || cat == CatReportMissing) {
 		cat = CatPauseRequested
 	}
 	if repCat == "" {

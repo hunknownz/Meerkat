@@ -24,6 +24,12 @@ func TestInstalledPiCheckpointContinuation(t *testing.T) {
 	if binary == "" {
 		t.Skip("installed Pi loopback probe opt in")
 	}
+	for _, mode := range []string{"dirty", "committed", "committed-dirty"} {
+		t.Run(mode, func(t *testing.T) { installedPiContinuation(t, binary, mode) })
+	}
+}
+
+func installedPiContinuation(t *testing.T, binary, mode string) {
 	e := setup(t)
 	var mu sync.Mutex
 	phase, hits := 1, 0
@@ -43,10 +49,25 @@ func TestInstalledPiCheckpointContinuation(t *testing.T) {
 		finish := "stop"
 		if n == 1 {
 			name, args := "write", map[string]any{"path": "a.txt", "content": "preserved checkpoint work\n"}
+			q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
+			if p == 1 && mode != "dirty" {
+				name = "bash"
+				command := "printf 'preserved checkpoint work\\n' > a.txt && git commit -qam 'provisional'"
+				if mode == "committed-dirty" {
+					command += " && printf 'retained dirty work\\n' >> a.txt"
+				}
+				args = map[string]any{"command": command}
+			}
 			if p == 2 {
 				name = "bash"
-				q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-				command := "git commit -qam 'continue checkpoint' && printf '{\"candidateSha\":\"%s\",\"contextDigest\":\"sha256:abc\",\"summary\":\"continued\",\"checks\":[],\"knownGaps\":[],\"decision\":\"changed\"}' \"$(git rev-parse HEAD)\" > " + q(e.report)
+				prefix := "git commit -qam 'continue checkpoint' && "
+				if mode == "committed" {
+					prefix = ""
+				}
+				if mode == "committed-dirty" {
+					prefix = "git commit --amend -qam 'continue checkpoint' && "
+				}
+				command := prefix + "printf '{\"candidateSha\":\"%s\",\"contextDigest\":\"sha256:abc\",\"summary\":\"continued\",\"checks\":[],\"knownGaps\":[],\"decision\":\"changed\"}' \"$(git rev-parse HEAD)\" > " + q(e.report)
 				args = map[string]any{"command": command}
 			}
 			argBytes, _ := json.Marshal(args)
@@ -77,7 +98,7 @@ func TestInstalledPiCheckpointContinuation(t *testing.T) {
 	b.ProviderID, b.Digest = snap.ProviderID, snap.Digest
 	req.Session, req.Budget = &b, &probeBudget{denyAfter: 1}
 	first, err := p.Execute(context.Background(), req, nil, nil)
-	if category(err) != CatTokenLimit || first.Session == nil || !first.Session.Confirmed || !first.CheckpointSafe || first.Clean || first.Committed {
+	if category(err) != CatTokenLimit || first.Session == nil || !first.Session.Confirmed || !first.CheckpointSafe || first.Clean != (mode == "committed") || first.Committed != (mode != "dirty") {
 		t.Fatalf("unsafe pause: category=%s session=%+v safe=%v", first.Category, first.Session, first.CheckpointSafe)
 	}
 	_, raw, err = checkpoint.Capture(e.wt, []string{"a.txt"})
@@ -85,6 +106,7 @@ func TestInstalledPiCheckpointContinuation(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.Digest = first.Session.Digest
+	req.ExpectedSHA, req.RoleBaselineSHA = first.ResultSHA, e.sha
 	req.Checkpoint = &checkpoint.Binding{Digest: checkpoint.Digest(raw), Scope: []string{"a.txt"}}
 	req.RemainingTokens -= *first.Usage.Tokens.Total
 	req.Budget = &probeBudget{denyAfter: 8}
@@ -95,10 +117,73 @@ func TestInstalledPiCheckpointContinuation(t *testing.T) {
 	if err != nil || !second.Committed || !second.Clean || second.Report == nil || second.Session == nil || !second.Session.Confirmed || second.Session.ID != first.Session.ID {
 		t.Fatalf("continuation failed: category=%s error=%v", second.Category, err)
 	}
-	if run(t, e.wt, "show", "HEAD:a.txt") != "preserved checkpoint work" {
+	want := "preserved checkpoint work"
+	if mode == "committed-dirty" {
+		want += "\nretained dirty work"
+	}
+	if run(t, e.wt, "show", "HEAD:a.txt") != want {
 		t.Fatal("partial work lost")
+	}
+	if second.BaselineSHA != first.ResultSHA || (mode == "committed" && second.ResultSHA != first.ResultSHA) || (mode == "committed-dirty" && second.ResultSHA == first.ResultSHA) {
+		t.Fatal("continuation baseline or commit identity incorrect")
 	}
 	if run(t, e.wt, "rev-list", "--count", e.sha+"..HEAD") != "1" {
 		t.Fatal("wrong delivery commit count")
+	}
+}
+
+func TestCheckpointRoleBaselineBinding(t *testing.T) {
+	for _, mode := range []string{"clean", "dirty", "second-commit", "outside-scope", "missing-checkpoint", "unrelated", "reviewer", "invalid-sha"} {
+		t.Run(mode, func(t *testing.T) {
+			e := setup(t)
+			os.WriteFile(filepath.Join(e.wt, "a.txt"), []byte("provisional\n"), 0644)
+			run(t, e.wt, "commit", "-qam", "provisional")
+			switch mode {
+			case "dirty":
+				os.WriteFile(filepath.Join(e.wt, "a.txt"), []byte("dirty\n"), 0644)
+			case "second-commit":
+				os.WriteFile(filepath.Join(e.wt, "a.txt"), []byte("second\n"), 0644)
+				run(t, e.wt, "commit", "-qam", "second")
+			case "outside-scope":
+				os.WriteFile(filepath.Join(e.wt, "AGENTS.md"), []byte("changed\n"), 0644)
+				run(t, e.wt, "commit", "--amend", "-qam", "outside scope")
+			}
+			_, raw, err := checkpoint.Capture(e.wt, []string{"a.txt"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := NewPi()
+			b := SessionBinding{ID: "30000000-0000-4000-8000-000000000003", File: filepath.Join(e.dir, "history.jsonl"), Worktree: e.wt}
+			snap, err := p.InitializeSession(b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b.ProviderID, b.Digest = snap.ProviderID, snap.Digest
+			req := e.req("developer", "unused")
+			req.Session, req.RoleBaselineSHA, req.ExpectedSHA = &b, e.sha, run(t, e.wt, "rev-parse", "HEAD")
+			req.Checkpoint = &checkpoint.Binding{Digest: checkpoint.Digest(raw), Scope: []string{"a.txt"}}
+			switch mode {
+			case "missing-checkpoint":
+				req.Checkpoint = nil
+			case "unrelated":
+				req.RoleBaselineSHA = strings.Repeat("f", 40)
+			case "reviewer":
+				req.Role, req.Profile.Role = "reviewer", "reviewer"
+			case "invalid-sha":
+				req.RoleBaselineSHA = "invalid"
+			}
+			_, err = p.prepare(context.Background(), req)
+			if mode == "clean" || mode == "dirty" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				prompt := buildPrompt(req, e.wt, e.report, nil)
+				if !strings.Contains(prompt, "amend it if necessary") {
+					t.Fatal("missing provisional commit contract")
+				}
+			} else if category(err) != CatInvalidRequest {
+				t.Fatal("invalid continuation accepted", err)
+			}
+		})
 	}
 }

@@ -78,6 +78,7 @@ type Request struct {
 	TaskBrief       string
 	ReportPath      string // absolute, outside the worktree, new file in a private directory
 	ExpectedSHA     string // HEAD the step must start from
+	RoleBaselineSHA string // original role baseline; may differ only for a verified checkpoint continuation
 	ContextDigest   string // digest the report must bind to ("" means null)
 	RemainingTokens int64
 	RemainingWall   time.Duration
