@@ -17,6 +17,7 @@ export async function installationTask(binary, base, dataDir, executor) {
   git(['worktree','add','-b','codex/install-fixture',worktree]);
   let requests=0;
   const http=createServer(async(req,res)=>{
+    try {
     let raw='';for await(const part of req)raw+=part;
     const body=JSON.parse(raw),n=++requests;
     assert.ok(body.tools.some(t=>t.function.name==='meerkat_report'));
@@ -33,6 +34,7 @@ export async function installationTask(binary, base, dataDir, executor) {
     }
     res.writeHead(200,{'Content-Type':'text/event-stream'});
     res.end(`data: ${JSON.stringify({id:`install-${n}`,object:'chat.completion.chunk',model:'text',choices:[{index:0,delta,finish_reason:finish}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15,prompt_tokens_details:{cached_tokens:0}}})}\n\ndata: [DONE]\n\n`);
+    } catch {res.writeHead(500);res.end('Invalid installation fixture request');}
   });
   await new Promise(r=>http.listen(0,'127.0.0.1',r));
   try{
