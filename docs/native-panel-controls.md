@@ -5,7 +5,7 @@ often confused: receipts, delivery, checkpoints, and process exit.
 
 ## Sessions, agents and runs
 
-- Queued follow-ups stay in the original session.
+- Queued follow-ups stay in the original Session.
 - End-of-turn follow-ups queue in the original Session that produced them.
 - Expand the current owned running Agent to issue further controls.
 - Instructions attached to the current tool take effect after that tool
@@ -22,6 +22,7 @@ often confused: receipts, delivery, checkpoints, and process exit.
 
 Control receipts do not prove delivery. A protocol receipt only acknowledges
 that a control was accepted; it does not prove resulting code delivery.
+
 - Do not claim an exercise passed merely from a receipt.
 
 ## Pause acknowledgement is not a checkpoint
