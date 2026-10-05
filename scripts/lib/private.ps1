@@ -1,5 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$Path, [ValidateSet('check','protect')][string]$Action='check')
 $ErrorActionPreference='Stop'
+# Do not inherit PowerShell 7 module paths when launched in Windows PowerShell
+# 5.1 (or user modules for this permissions helper).
+$env:PSModulePath=Join-Path $PSHOME 'Modules'
 $item=Get-Item -LiteralPath $Path -Force
 if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse points are refused' }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()

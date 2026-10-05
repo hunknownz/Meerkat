@@ -12,7 +12,7 @@ Meerkat is a general tool. Projects supply their own requirements, private profi
 | State, history, metrics and receipts | SQLite, modernc.org/sqlite, WAL and foreign keys |
 | Agents / Tasks / Usage | React 19, TypeScript 7, Vite 8 |
 | Live updates | HTTP snapshot and SSE |
-| Coordinator commands | Private Unix socket |
+| Coordinator commands | Private Unix socket; secured named pipe on Windows |
 | Execution | Executor interface → Pi CLI → configured provider |
 | Codex display | MCP Apps `open_monitor` (standard host adapter); optional legacy CDP adapter |
 
@@ -137,7 +137,7 @@ Metrics include Project, Task, Run, Role, Executor, Model and available change I
 
 ## Codex plugin
 
-The plugin supplies the skills `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server whose MCP Apps tool `open_monitor` opens the monitor (global or per-thread entrypoint). The real Codex MCP Apps panel was [verified on 2026-10-03](docs/codex-ui-acceptance.md), including Agents / Tasks / Usage and disabled writes in beta.8. The new beta.9 human controls require separate host acceptance. Hosts without MCP Apps use `snapshot`. The legacy CDP adapter is optional and not used by default, see [desktop adapter](desktop/README.md); it does not modify the Codex application bundle.
+The plugin supplies `meerkat:get-started`, `meerkat:delegate` and `meerkat:workflow`, plus a local stdio MCP server. Its MCP Apps tool `open_monitor` opens the monitor through a global or per-chat entrypoint. The standard [Codex panel](docs/codex-ui-acceptance.md) and later [pause, checkpoint continuation and stop controls](docs/verification/native-controls-20261005.md) have host evidence. Current receipt feedback and native direction/follow-up delivery still need fresh acceptance; see [current verification](docs/verification/installation-20261005.md). Hosts without MCP Apps use `snapshot`. The [legacy CDP adapter](desktop/README.md) is optional and disabled by default.
 
 ## Development and evidence
 

@@ -1,5 +1,6 @@
 param([switch]$NoHost,[switch]$NoExecutor,[switch]$NoStart,[switch]$Source,[string]$DataDir,[string]$RuntimeDir,[string]$ArtifactDir)
 $ErrorActionPreference='Stop'
+$env:PSModulePath=Join-Path $PSHOME 'Modules'
 # Native Windows bootstrap. Installs missing toolchains privately, not system
 # services, WSL or global npm packages. No provider/model request is made.
 $root=Split-Path $PSScriptRoot -Parent
@@ -34,7 +35,10 @@ if(-not $nodeOK){
   Expand-Archive -LiteralPath $archive -DestinationPath $tools -Force;Remove-Item -LiteralPath $archive
   $nodePath=Join-Path $tools "$($name.Substring(0,$name.Length-4))\node.exe"
 }else{$nodePath=$node.Source}
-if(-not (Get-Command go -ErrorAction SilentlyContinue)){
+$goCommand=Get-Command go -ErrorAction SilentlyContinue
+$goOK=$false
+if($goCommand){$goVersion=(& $goCommand.Source version);if($goVersion -match 'go(\d+)\.(\d+)'){$goOK=([int]$Matches[1] -gt 1 -or ([int]$Matches[1] -eq 1 -and [int]$Matches[2] -ge 26))}}
+if(-not $goOK){
   Private-Dir $tools
   $arch=if([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64'){'arm64'}else{'amd64'}
   $release=(Invoke-RestMethod 'https://go.dev/dl/?mode=json&include=all' | Where-Object {$_.version -eq 'go1.26.0'} | Select-Object -First 1)

@@ -1,7 +1,7 @@
 {
   "name": "meerkat",
   "version": "0.4.0-beta.16",
-  "description": "Meerkat coordinates bounded local task delivery: Codex prepares worktrees and frozen context, a configured execution adapter runs developer, reviewer and polisher roles, and a standard MCP Apps monitor shows local agent runs.",
+  "description": "Coordinate local development, review and polish with frozen tasks, private history and a live agent monitor.",
   "author": {
     "name": "hunknownz"
   },
@@ -13,12 +13,12 @@
   "interface": {
     "displayName": "Meerkat",
     "shortDescription": "Coordinate bounded development, review and polish runs with a live agent monitor.",
-    "longDescription": "Meerkat is a generic local plugin. Codex coordinates: it turns an Issue or local requirement into a bounded task with frozen shared context and prepares a linked Git worktree. A deterministic local controller then runs the managed workflow through the configured execution adapter: a developer run commits, a reviewer run reviews the exact candidate, bounded fixes follow, a polisher run makes optional small changes, and the reviewer rechecks. Task token caps are optional; per-Run limits, time and fix-round bounds apply; history and usage stay in private SQLite storage; nothing is pushed, merged or deployed, and a delivered commit is a locally AI-reviewed commit, not QA, acceptance or deployment. The bundled stdio MCP server exposes a standard MCP Apps monitor of tasks, runs, local agents and usage; the beta.8 standard Codex MCP Apps display was verified on 2026-10-03; new pause and follow-up controls await separate host acceptance. A loopback browser monitor shows the same view and accepts bounded human instructions, follow-ups, pause and stop requests and future-run settings. Skills: meerkat:workflow (multi-role delivery) and meerkat:delegate (one bounded run). Current limitation: only the Pi CLI execution adapter is supported; other executors are not available.",
+    "longDescription": "Choose direct coordinator work, one delegated run or a development/review/polish workflow. Delegated tasks use frozen context, profiles and linked Git worktrees. The current executor is Pi. Go owns scheduling and process control; SQLite stores history and measured usage. The standard MCP Apps panel shows Agents, Tasks and Usage, with bounded instructions, pause, follow-up, receipt queries and stop controls. Delivery is a locally reviewed commit; QA, human acceptance and deployment are separate. See repository verification records for current host and installation evidence.",
     "developerName": "hunknownz",
     "category": "Productivity",
     "capabilities": [],
     "logo": "./assets/meerkat.png",
     "composerIcon": "./assets/meerkat.png",
-    "defaultPrompt": "Turn this requirement into a bounded Meerkat task: prepare a linked worktree and frozen context, run the managed flow, and report the delivered local commit with checks and known gaps."
+    "defaultPrompt": "Choose a suitable execution path for this requirement: direct coordinator work, one bounded delegated run, or a full Meerkat workflow. For delegation, freeze the scope, context and profiles, prepare a linked worktree, then report the local commit, checks and known gaps."
   }
 }
