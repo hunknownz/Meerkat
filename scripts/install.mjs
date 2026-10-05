@@ -50,7 +50,7 @@ export async function ensureRuntime(o) {
     catch (e) { if (e.status !== 404) throw e; }
   }
   if (!artifactDir) {
-    try { run('go', ['version'], o.root); } catch { throw new Error('Go 1.26+ is required while public binaries are unavailable. Follow INSTALL.md to install it, then rerun; existing history is preserved.'); }
+    try { run('go', ['version'], o.root); } catch { throw new Error('Go 1.26.8+ is required while public binaries are unavailable. Follow INSTALL.md to install it, then rerun; existing history is preserved.'); }
     const release = buildRelease({ root: o.root, platforms: [target] });
     artifactDir = release.target;
   }

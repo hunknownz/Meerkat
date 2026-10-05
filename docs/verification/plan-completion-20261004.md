@@ -1,6 +1,6 @@
 # Plan status and verification — updated 2026-10-05
 
-Candidate: `0.4.0-beta.16`. Installation and native Windows results are in
+Candidate: `0.4.0-beta.17`. Earlier installation and native Windows results are in
 [the current installation audit](installation-20261005.md). Historical real-run evidence below was captured with
 beta.13 and beta.14. Beta.15 repairs receipt feedback and continuation after a
 scoped provisional commit; fresh native query feedback remains pending. Original design remains in
