@@ -86,6 +86,14 @@ Pi version/configuration probe and a local simulated delivery task passed. That
 task exercised four local fixture requests; it did not call ZenMux or establish
 paid-model/native UI acceptance. The original backup/runtime are retained.
 
+Native Windows and macOS installation CI passed at integration commit
+`0576a02e0b62334128660bf6c006bc886888b6ac`:
+[run 37400364068](https://github.com/hunknownz/Meerkat/actions/runs/37400364068).
+This is installation/runtime evidence; the real Windows Codex device check
+remains deferred. A later native automation inventory call also timed out, so
+it supplies no beta.19 host acceptance. No additional local renderer crash
+sidecar was found during the repair; that absence does not establish stability.
+
 ## Remaining acceptance
 
 - Reload the real Codex host and check the changed native transport, views,
