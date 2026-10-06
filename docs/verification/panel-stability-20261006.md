@@ -1,8 +1,8 @@
 # Native panel stability — 2026-10-06
 
-Candidate: `0.4.0-beta.19`. The refresh repair is implemented and locally
-verified. The reported native renderer crash is **not yet resolved by evidence**.
-Native reload and longer observation remain open.
+Candidate: `0.4.0-beta.19`. The refresh repair is implemented, installed and
+locally verified. The reported native renderer crash is **not yet resolved by
+evidence**. Native reload and longer observation remain open.
 
 ## Incident and limits
 
@@ -59,9 +59,35 @@ No history is truncated and no new writable state or model call is introduced.
 Raw measurements and incident material remain in private maintainer evidence.
 No paid provider request was made for this repair.
 
+## Installed verification
+
+Implementation commit: `07d85618b7c03de8abd3b1f7a56744829aaba4ea`.
+Codex lists beta.19 as installed and enabled. The matching live runtime has
+SHA-256 `974ce38d27ece6d974b47f196c1312beb919695a4b7d4a69669cde79460d1cd5`.
+The actual cached stdio launcher discovered 23 tools, including the conditional
+read schema, and loaded the exact committed MCP App HTML. Resource SHA-256:
+`3677a9dc2140d86a3f67703fa9ac99308900564bec55b9e3604aace307728f51`.
+
+Against the upgraded live daemon, the installed launcher returned all 44 Tasks /
+75 Runs. Twenty unchanged replies measured 588–591 bytes, advanced freshness
+and recovered full history on revision mismatch. Installed protocol checks do
+not establish that an already open host panel loaded the new resource.
+
+The confirmed idle beta.18 owner exited before backup and cutover. A consistent
+backup and fresh beta.19 restore passed integrity/foreign-key checks. All 27
+non-lease authority tables matched exactly before and after the live cutover,
+including history, usage, controls, budgets and sessions. Credential references
+were reused; historical unknown state remained unknown. Doctor confirms healthy
+service/storage and still blocks uncertain historical execution. No override or
+automatic replay was applied.
+
+Disposable macOS installation, service reuse, private IPC, cached MCP resource,
+Pi version/configuration probe and a local simulated delivery task passed. That
+task exercised four local fixture requests; it did not call ZenMux or establish
+paid-model/native UI acceptance. The original backup/runtime are retained.
+
 ## Remaining acceptance
 
-- Install and verify the exact beta.19 runtime, MCP resource and existing history.
 - Reload the real Codex host and check the changed native transport, views,
   freshness and retained read-only/control boundaries.
 - Observe the real native panel over time and investigate any recurring crash.

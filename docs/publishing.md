@@ -61,7 +61,7 @@ directory submission are separate from source installation.
 
 A subsequent native renderer crash reopens the long-running host stability gate.
 Beta.19 reduces repeated snapshot traffic and handles hidden-panel refresh and
-teardown. Local tests and real-history measurements pass; installed/native reload
-and sustained observation are still required. See the
+teardown. Local tests, installed runtime/resource, history parity and real-history
+measurements pass; native reload and sustained observation are still required. See the
 [stability record](verification/panel-stability-20261006.md). The crash cause is
 unresolved; this candidate is not a verified crash resolution.

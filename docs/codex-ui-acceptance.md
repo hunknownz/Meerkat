@@ -249,6 +249,7 @@ remains recorded, but it does not establish long-running stability.
 
 Beta.19 reduces unchanged history traffic using revision-based snapshots, slows
 confirmed idle polling and suspends hidden-panel refresh. Local protocol,
-lifecycle and real-history measurements passed. Exact installed/native reload
-and longer observation remain open; see the
+lifecycle and real-history measurements passed. Exact installed runtime/resource
+and authority parity also passed. Native reload and longer observation remain
+open; see the
 [stability record](verification/panel-stability-20261006.md).
