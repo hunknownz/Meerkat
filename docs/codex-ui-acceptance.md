@@ -239,3 +239,16 @@ were disabled and collapsing the ended card preserved truthful running counts.
 Exact IDs, commits, screenshots, usage and Windows CI are in
 [the current record](verification/native-controls-beta18-20261005.md).
 The Windows device test is deferred; neither CI nor macOS display replaces it.
+
+## Beta.19 stability repair (2026-10-06)
+
+The user reported another native gray panel after beta.18's functional checks.
+The renderer crash cause is unresolved. Reopening briefly restored native DOM
+access; later automation timed out again. The prior functional acceptance
+remains recorded, but it does not establish long-running stability.
+
+Beta.19 reduces unchanged history traffic using revision-based snapshots, slows
+confirmed idle polling and suspends hidden-panel refresh. Local protocol,
+lifecycle and real-history measurements passed. Exact installed/native reload
+and longer observation remain open; see the
+[stability record](verification/panel-stability-20261006.md).

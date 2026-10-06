@@ -18,8 +18,10 @@ export interface McpBridge {
 }
 
 export interface McpTransportOptions {
-  /** Polling interval for app-only get_monitor_snapshot (default 4 s). */
+  /** Active polling interval for app-only get_monitor_snapshot (default 4 s). */
   pollMs?: number;
+  /** Idle polling interval (default 15 s, never shorter than the active interval). */
+  idlePollMs?: number;
   /** Bound for every host tool call (default 3 s). */
   timeoutMs?: number;
   /** Wait for the initial open_monitor result after connecting before requesting a snapshot (default 1.5 s). */
@@ -71,6 +73,7 @@ export class McpTransport implements Transport {
   };
   #bridge: McpBridge;
   #pollMs: number;
+  #idlePollMs: number;
   #timeoutMs: number;
   #initialWaitMs: number;
   #listeners = new Set<Listener>();
@@ -78,6 +81,8 @@ export class McpTransport implements Transport {
   #stale: string | null = null;
   #connected = false;
   #closed = false;
+  #visible = true;
+  #revision: string | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #inflight: Promise<SnapshotUpdate> | null = null;
   #pending = new Set<AbortController>();
@@ -85,6 +90,7 @@ export class McpTransport implements Transport {
   constructor(bridge: McpBridge, opts: McpTransportOptions = {}) {
     this.#bridge = bridge;
     this.#pollMs = opts.pollMs ?? 4000;
+    this.#idlePollMs = Math.max(this.#pollMs, opts.idlePollMs ?? 15000);
     this.#timeoutMs = opts.timeoutMs ?? 3000;
     this.#initialWaitMs = opts.initialWaitMs ?? 1500;
   }
@@ -95,20 +101,30 @@ export class McpTransport implements Transport {
   pushToolResult(result: unknown): void {
     if (this.#closed) return;
     try {
-      this.#accept(parseToolResult(result));
+      this.#accept(this.#consume(result));
     } catch (e) {
+      this.#revision = null;
       this.markStale(errText(e, '快照无效'));
       return;
     }
     // A fresh result counts as the latest refresh; push the next poll back a full interval.
-    if (this.#timer !== null) this.#schedule(this.#pollMs);
+    if (this.#timer !== null) this.#schedule(this.#interval());
   }
 
   /** Called once the SDK handshake (ui/initialize) has completed; polling may start. */
   setConnected(): void {
     if (this.#closed || this.#connected) return;
     this.#connected = true;
-    if (this.#listeners.size) this.#schedule(this.#last ? this.#pollMs : this.#initialWaitMs);
+    if (this.#listeners.size) this.#schedule(this.#last ? this.#interval() : this.#initialWaitMs);
+  }
+
+  /** Hiding a panel suspends refresh only. Agent processes and controls are owned by the daemon. */
+  setVisible(visible: boolean): void {
+    if (this.#closed || this.#visible === visible) return;
+    this.#visible = visible;
+    this.#clearTimer();
+    this.markStale(visible ? '正在重新确认状态。' : '面板已隐藏；显示后重新确认状态。');
+    if (visible && this.#connected && this.#listeners.size) this.#schedule(0);
   }
 
   /** Host disconnect / bridge error: keep last data, mark stale; the next successful refresh recovers. */
@@ -122,7 +138,8 @@ export class McpTransport implements Transport {
     if (this.#closed) return Promise.reject(new Error('已关闭'));
     if (!this.#connected) return Promise.reject(new Error('尚未连接宿主'));
     if (this.#inflight) return this.#inflight;
-    const p = this.#call().finally(() => { if (this.#inflight === p) this.#inflight = null; });
+    const p = this.#call().catch((e: unknown) => { this.#revision = null; throw e; })
+      .finally(() => { if (this.#inflight === p) this.#inflight = null; });
     this.#inflight = p;
     return p.then((u) => { this.#accept(u); return u; });
   }
@@ -133,7 +150,7 @@ export class McpTransport implements Transport {
     this.#listeners.add(l);
     if (this.#last) onUpdate(this.#last);
     if (this.#stale) onStale(this.#stale);
-    if (this.#connected && this.#timer === null) this.#schedule(this.#last ? this.#pollMs : this.#initialWaitMs);
+    if (this.#connected && this.#timer === null) this.#schedule(this.#last ? this.#interval() : this.#initialWaitMs);
     return () => {
       if (!this.#listeners.delete(l)) return;
       if (!this.#listeners.size) this.#clearTimer();
@@ -152,6 +169,8 @@ export class McpTransport implements Transport {
     for (const c of this.#pending) c.abort(new Error('已关闭'));
     this.#pending.clear();
     this.#inflight = null;
+    this.#revision = null;
+    this.#last = null;
   }
 
   #accept(u: SnapshotUpdate): void {
@@ -162,7 +181,50 @@ export class McpTransport implements Transport {
   }
 
   #call(): Promise<SnapshotUpdate> {
-    return this.#tool(SNAPSHOT_TOOL, {}).then(parseToolResult);
+    const args = this.#revision ? { sinceRevision: this.#revision } : {};
+    return this.#tool(SNAPSHOT_TOOL, args).then((r) => this.#consume(r));
+  }
+
+  #consume(result: unknown): SnapshotUpdate {
+    const r = result as McpToolResult | undefined;
+    const meta = r?._meta;
+    const revision = meta?.snapshotRevision;
+    const validRevision = typeof revision === 'string' && /^[0-9a-f]{64}$/.test(revision);
+    if (meta?.snapshotUnchanged === true) {
+      if (r?.isError || !validRevision || revision !== this.#revision || !this.#last || meta.snapshot !== undefined) {
+        throw new Error('快照版本未确认；需要重新读取完整状态。');
+      }
+      const observedAt = meta.observedAt;
+      const previousObservedAt = this.#last.snapshot.observedAt;
+      if (typeof observedAt !== 'string' || observedAt.length > 64 || !Number.isFinite(Date.parse(observedAt)) ||
+          (typeof previousObservedAt === 'string' && Date.parse(observedAt) < Date.parse(previousObservedAt))) {
+        throw new Error('快照刷新时间无效。');
+      }
+      const controller = meta.controller as SnapshotUpdate['snapshot']['controller'];
+      if (controller !== undefined && (!controller || typeof controller !== 'object' ||
+          typeof controller.state !== 'string' ||
+          !['running', 'idle', 'unknown'].includes(controller.state) ||
+          Object.keys(controller).some((k) => k !== 'state' && k !== 'heartbeatAt') ||
+          (controller.heartbeatAt != null && (typeof controller.heartbeatAt !== 'string' ||
+            controller.heartbeatAt.length > 64 || !Number.isFinite(Date.parse(controller.heartbeatAt)))))) {
+        throw new Error('宿主心跳无效。');
+      }
+      if (controller?.state !== this.#last.snapshot.controller?.state) {
+        throw new Error('宿主状态改变；需要重新读取完整状态。');
+      }
+      // Reuse already validated history references; only freshness changes.
+      return { ...this.#last, snapshot: { ...this.#last.snapshot, observedAt, controller } };
+    }
+    const update = parseToolResult(result);
+    if (revision !== undefined && !validRevision) throw new Error('快照版本无效。');
+    this.#revision = validRevision ? revision as string : null;
+    return update;
+  }
+
+  #interval(): number {
+    const counts = this.#last?.snapshot.counts;
+    return counts?.running === 0 && counts.queued === 0 && this.#last?.snapshot.controller?.state === 'idle'
+      ? this.#idlePollMs : this.#pollMs;
   }
 
   async #control(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -197,15 +259,15 @@ export class McpTransport implements Transport {
 
   #poll(): void {
     this.#timer = null;
-    if (this.#closed || !this.#connected || !this.#listeners.size) return;
+    if (this.#closed || !this.#visible || !this.#connected || !this.#listeners.size) return;
     this.read()
       .catch((e: unknown) => { this.markStale(errText(e, '读取失败')); })
-      .finally(() => { if (!this.#closed && this.#listeners.size && this.#timer === null) this.#schedule(this.#pollMs); });
+      .finally(() => { if (!this.#closed && this.#listeners.size && this.#timer === null) this.#schedule(this.#interval()); });
   }
 
   #schedule(ms: number): void {
     this.#clearTimer();
-    if (this.#closed) return;
+    if (this.#closed || !this.#visible) return;
     this.#timer = setTimeout(() => this.#poll(), ms);
   }
 

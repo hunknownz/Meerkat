@@ -50,7 +50,7 @@ Delivered means a locally AI-reviewed commit. Human effect checks, independent Q
 
 Ask your AI Agent: **“安装 https://github.com/hunknownz/Meerkat”**.
 The repository provides [AI installation instructions](INSTALL.md) and native
-bootstrap scripts. Meerkat `0.4.0-beta.18` targets macOS, Linux and native Windows
+bootstrap scripts. Meerkat `0.4.0-beta.19` targets macOS, Linux and native Windows
 on amd64/arm64. See the [verification status](docs/verification/installation-20261005.md)
 for what has actually been tested; a Windows build is not Windows host acceptance.
 

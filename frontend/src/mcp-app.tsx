@@ -12,7 +12,7 @@ export interface McpMonitor { destroy(): void }
 
 /** Boots the monitor in `container`. Handlers are registered before the SDK `ui/initialize` handshake. */
 export function startMcpMonitor(container: Element): McpMonitor {
-  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.18' });
+  const app = new McpApp({ name: 'Meerkat', version: '0.4.0-beta.19' });
   const bridge: McpBridge = {
     callServerTool: (params, options) => app.callServerTool(params, options) as Promise<McpToolResult>,
   };
@@ -20,6 +20,7 @@ export function startMcpMonitor(container: Element): McpMonitor {
   let theme: Theme = preferredTheme();
   let handle: MountHandle | null = null;
   let destroyed = false;
+  const visibilityChanged = () => { transport.setVisible(document.visibilityState !== 'hidden'); };
 
   const render = () => {
     if (destroyed) return;
@@ -39,6 +40,7 @@ export function startMcpMonitor(container: Element): McpMonitor {
     handle?.destroy();
     handle = null;
     window.removeEventListener('pagehide', destroy);
+    document.removeEventListener('visibilitychange', visibilityChanged);
   };
 
   app.ontoolresult = (result) => { if (!destroyed) transport.pushToolResult(result); };
@@ -51,6 +53,8 @@ export function startMcpMonitor(container: Element): McpMonitor {
     return {};
   };
   window.addEventListener('pagehide', destroy);
+  document.addEventListener('visibilitychange', visibilityChanged);
+  visibilityChanged();
 
   render();
   app.connect().then(

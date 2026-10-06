@@ -1,6 +1,6 @@
 # Install and first use
 
-Meerkat `0.4.0-beta.18` is maintained by [hunknownz](https://github.com/hunknownz/Meerkat).
+Meerkat `0.4.0-beta.19` is maintained by [hunknownz](https://github.com/hunknownz/Meerkat).
 GitHub installation does not require OpenAI directory review. Public binary assets
 are a separate release; source installation works without those assets.
 

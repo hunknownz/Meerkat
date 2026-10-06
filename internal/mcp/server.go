@@ -7,7 +7,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -395,7 +397,7 @@ func (s *Server) toolList() []any {
 			"name":        ToolGetSnapshot,
 			"title":       "Refresh Meerkat agent monitor",
 			"description": "Refresh the read-only public Meerkat snapshot for the monitor app.",
-			"inputSchema": emptySchema(),
+			"inputSchema": snapshotReadSchema(),
 			"annotations": readOnly,
 			"_meta": map[string]any{
 				"ui": map[string]any{"resourceUri": MonitorURI, "visibility": []string{"app"}},
@@ -491,13 +493,46 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		}
 		return s.controlTool(ctx, p.Name, p.Arguments)
 	}
+	var sinceRevision string
 	if a := bytes.TrimSpace(p.Arguments); len(a) > 0 && string(a) != "null" {
-		var m map[string]json.RawMessage
-		if json.Unmarshal(a, &m) != nil || len(m) != 0 {
-			return nil, invalidParams("tool takes no arguments")
+		if p.Name == ToolGetSnapshot {
+			var args map[string]json.RawMessage
+			if json.Unmarshal(a, &args) != nil || len(args) > 1 {
+				return nil, invalidParams("invalid snapshot revision")
+			}
+			for key, value := range args {
+				if key != "sinceRevision" || json.Unmarshal(value, &sinceRevision) != nil || !validRevision(sinceRevision) {
+					return nil, invalidParams("invalid snapshot revision")
+				}
+			}
+		} else {
+			var m map[string]json.RawMessage
+			if json.Unmarshal(a, &m) != nil || len(m) != 0 {
+				return nil, invalidParams("tool takes no arguments")
+			}
 		}
 	}
-	return s.snapshotResult(ctx), nil
+	return s.snapshotResult(ctx, sinceRevision), nil
+}
+
+func snapshotReadSchema() map[string]any {
+	schema := emptySchema()
+	schema["properties"] = map[string]any{
+		"sinceRevision": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$", "maxLength": 64},
+	}
+	return schema
+}
+
+func validRevision(v string) bool {
+	if len(v) != 64 {
+		return false
+	}
+	for _, c := range v {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func toolError(text string) map[string]any {
@@ -527,7 +562,7 @@ type counts struct {
 	Unknown    int `json:"unknown"`
 }
 
-func (s *Server) snapshotResult(ctx context.Context) map[string]any {
+func (s *Server) snapshotResult(ctx context.Context, sinceRevision string) map[string]any {
 	if s.Snapshot == nil {
 		return toolError(unavailable)
 	}
@@ -545,6 +580,27 @@ func (s *Server) snapshotResult(ctx context.Context) map[string]any {
 		return toolError("Meerkat daemon returned an unreadable snapshot.")
 	}
 	stripPrivate(raw)
+	// Observation time and lease heartbeat alone do not invalidate history.
+	// Freshness still travels in every small unchanged response; all other state
+	// (including controls, usage and controller state) participates in the digest.
+	state := make(map[string]json.RawMessage, len(raw))
+	for k, v := range raw {
+		state[k] = v
+	}
+	delete(state, "observedAt")
+	if ctrl, ok := state["controller"]; ok {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(ctrl, &fields) == nil {
+			delete(fields, "heartbeatAt")
+			state["controller"], _ = json.Marshal(fields)
+		}
+	}
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		return toolError("Meerkat daemon returned an unreadable snapshot.")
+	}
+	digest := sha256.Sum256(stateBytes)
+	revision := hex.EncodeToString(digest[:])
 	var snap struct {
 		SchemaVersion int               `json:"schemaVersion"`
 		ObservedAt    string            `json:"observedAt"`
@@ -578,13 +634,20 @@ func (s *Server) snapshotResult(ctx context.Context) map[string]any {
 	}
 	text := fmt.Sprintf("Meerkat monitor: %d tasks, %d runs (%d running, %d queued, %d unknown).",
 		sum.Counts.Tasks, sum.Counts.Runs, sum.Counts.Running, sum.Counts.Queued, sum.Counts.Unknown)
+	meta := map[string]any{"snapshotRevision": revision, "legacyActive": []any{}}
+	if sinceRevision != "" && sinceRevision == revision {
+		meta["snapshotUnchanged"] = true
+		meta["observedAt"] = obs
+		if ctrl, ok := raw["controller"]; ok {
+			meta["controller"] = ctrl
+		}
+	} else {
+		meta["snapshot"] = json.RawMessage(clean)
+	}
 	return map[string]any{
 		"content":           []any{map[string]any{"type": "text", "text": text}},
 		"structuredContent": sum,
-		"_meta": map[string]any{
-			"snapshot":     json.RawMessage(clean),
-			"legacyActive": []any{},
-		},
+		"_meta":             meta,
 	}
 }
 

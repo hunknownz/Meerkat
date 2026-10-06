@@ -1,13 +1,16 @@
 # Plan status and verification — updated 2026-10-06
 
-Candidate: `0.4.0-beta.18`. The [current native/model record](native-controls-beta18-20261005.md)
+Candidate: `0.4.0-beta.19`. The [current native/model record](native-controls-beta18-20261005.md)
 verifies two native directions in one Pi Session, reviewed delivery, native pause,
 exact staged/unstaged checkpoint preservation and explicit same-session recovery.
 Beta.18 repairs disappearing Run cards and incorrect receipt labels, and is
 installed. After Codex reload, the changed native display, real Pi stop and
 post-end receipt query passed on 2026-10-06. Windows Codex UI is deferred to the
 user's device test; public prerelease/tag needs explicit maintainer authorization. The full plan
-remains open for those gates. GitHub source installation is available.
+remains open for those gates. A subsequent reported renderer crash also reopens
+native long-running stability. Beta.19 implements a measured refresh-pressure
+repair; installed/native reload and observation remain pending in the
+[stability record](panel-stability-20261006.md). GitHub source installation is available.
 
 Original design: [session, budget and coordination](../../design/session-budget-coordination-20261003.md).
 Missing fees, unknown historical requests and unsupported adapters remain

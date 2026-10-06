@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -237,7 +238,11 @@ func TestToolsListMetadata(t *testing.T) {
 			t.Fatalf("annotations %v", ann)
 		}
 		sch := m["inputSchema"].(map[string]any)
-		if sch["type"] != "object" || len(sch["properties"].(map[string]any)) != 0 || sch["additionalProperties"] != false {
+		wantProperties := 0
+		if m["name"] == ToolGetSnapshot {
+			wantProperties = 1
+		}
+		if sch["type"] != "object" || len(sch["properties"].(map[string]any)) != wantProperties || sch["additionalProperties"] != false {
 			t.Fatalf("schema %v", sch)
 		}
 		if m["_meta"].(map[string]any)["ui"].(map[string]any)["resourceUri"] != MonitorURI {
@@ -356,6 +361,79 @@ func TestToolCallSnapshot(t *testing.T) {
 	}
 	if s.calls.Load() != 2 {
 		t.Fatal("calls")
+	}
+}
+
+func TestConditionalSnapshotPreservesHistoryAndFreshness(t *testing.T) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(fakeSnap), &raw); err != nil {
+		t.Fatal(err)
+	}
+	raw["controller"] = json.RawMessage(`{"state":"idle","heartbeatAt":"2025-01-02T03:04:05Z"}`)
+	// A large historical field must be returned once, never repeated just for a heartbeat.
+	raw["historyFixture"], _ = json.Marshal(strings.Repeat("preserved-history-", 12000))
+	s := start(t, func(context.Context) (server.Response, error) {
+		b, err := json.Marshal(raw)
+		return server.Response{OK: err == nil, Data: b}, err
+	})
+	s.init()
+	read := func(args string) map[string]any {
+		return s.rpc(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_monitor_snapshot","arguments":` + args + `}}`)["result"].(map[string]any)
+	}
+	first := read(`{}`)
+	meta := first["_meta"].(map[string]any)
+	revision := meta["snapshotRevision"].(string)
+	if !validRevision(revision) || meta["snapshot"] == nil {
+		t.Fatal(meta)
+	}
+	full, _ := json.Marshal(first)
+	raw["observedAt"] = json.RawMessage(`"2025-01-02T03:04:10Z"`)
+	raw["controller"] = json.RawMessage(`{"state":"idle","heartbeatAt":"2025-01-02T03:04:09Z"}`)
+	unchanged := read(`{"sinceRevision":"` + revision + `"}`)
+	m := unchanged["_meta"].(map[string]any)
+	small, _ := json.Marshal(unchanged)
+	if m["snapshot"] != nil || m["snapshotUnchanged"] != true || m["snapshotRevision"] != revision || m["observedAt"] != "2025-01-02T03:04:10Z" {
+		t.Fatal(m)
+	}
+	if len(small) > 1500 || len(full) < 200000 || bytes.Contains(small, []byte("preserved-history")) {
+		t.Fatalf("full=%d unchanged=%d", len(full), len(small))
+	}
+	if m["controller"].(map[string]any)["heartbeatAt"] != "2025-01-02T03:04:09Z" {
+		t.Fatal(m)
+	}
+	// Legacy readers still receive the complete snapshot. An incorrect revision also recovers fully.
+	for _, args := range []string{`{}`, `{"sinceRevision":"` + strings.Repeat("f", 64) + `"}`} {
+		if read(args)["_meta"].(map[string]any)["snapshot"] == nil {
+			t.Fatal("missing recovery snapshot")
+		}
+	}
+	// A real change must invalidate the revision, even if counts have not changed.
+	raw["historyFixture"], _ = json.Marshal("changed-review-or-control")
+	changed := read(`{"sinceRevision":"` + revision + `"}`)["_meta"].(map[string]any)
+	if changed["snapshot"] == nil || changed["snapshotRevision"] == revision || changed["snapshotUnchanged"] == true {
+		t.Fatal(changed)
+	}
+	next := changed["snapshotRevision"].(string)
+	raw["controller"] = json.RawMessage(`{"state":"unknown","heartbeatAt":null}`)
+	if read(`{"sinceRevision":"` + next + `"}`)["_meta"].(map[string]any)["snapshot"] == nil {
+		t.Fatal("controller change hidden")
+	}
+}
+
+func TestConditionalSnapshotRejectsInvalidArguments(t *testing.T) {
+	s := start(t, okSnap)
+	s.init()
+	for _, args := range []string{`{"sinceRevision":null}`, `{"sinceRevision":""}`, `{"sinceRevision":"short"}`, `{"sinceRevision":"` + strings.Repeat("A", 64) + `"}`, `{"other":true}`, `[]`} {
+		r := s.rpc(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_monitor_snapshot","arguments":` + args + `}}`)
+		if r["error"] == nil {
+			t.Fatalf("accepted %s", args)
+		}
+	}
+	if s.calls.Load() != 0 {
+		t.Fatal("invalid input reached daemon")
+	}
+	if s.rpc(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"open_monitor","arguments":{"sinceRevision":"` + strings.Repeat("a", 64) + `"}}}`)["error"] == nil {
+		t.Fatal("open_monitor accepted revision")
 	}
 }
 

@@ -1,6 +1,6 @@
 # Publishing
 
-Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.18`.
+Meerkat has two independent distribution paths. Only the first is used for `0.4.0-beta.19`.
 
 ## GitHub repository (current)
 
@@ -12,7 +12,7 @@ Meerkat has two independent distribution paths. Only the first is used for `0.4.
   `node scripts/build-release.mjs` from a clean committed HEAD. The builder exports
   `git archive <HEAD>` into a fresh temporary directory, so untracked or ignored files cannot affect
   the binaries, and records that SHA as `sourceSha`.
-- Tag `v0.4.0-beta.18` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
+- Tag `v0.4.0-beta.19` and publish a GitHub prerelease by hand, with explicit maintainer authorization.
   Until then, use the documented source build in [install](install.md); no
   nonexistent release download is required for the repository installation.
 
@@ -56,3 +56,12 @@ and showed unchanged-query feedback without resending. See
 [the current record](verification/native-controls-beta18-20261005.md).
 Windows Codex display is deferred to the user's device; public release and
 directory submission are separate from source installation.
+
+## Beta.19 stability repair
+
+A subsequent native renderer crash reopens the long-running host stability gate.
+Beta.19 reduces repeated snapshot traffic and handles hidden-panel refresh and
+teardown. Local tests and real-history measurements pass; installed/native reload
+and sustained observation are still required. See the
+[stability record](verification/panel-stability-20261006.md). The crash cause is
+unresolved; this candidate is not a verified crash resolution.
