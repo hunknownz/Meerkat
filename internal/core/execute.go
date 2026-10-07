@@ -368,6 +368,9 @@ func (c *Core) validateSelection(st *model.State, set model.Settings, ids []stri
 			}
 		}
 		for _, role := range model.Roles {
+			if t.Origin == OriginDelegate && role != "developer" && t.ProfileIDs[role] == "" {
+				continue
+			}
 			if _, why := c.verifiedProfile(st, set, *t, role); why != "" {
 				return nil, nil, invalid("task %s profile is not usable (%s)", role, why)
 			}

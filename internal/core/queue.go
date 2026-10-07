@@ -510,11 +510,14 @@ func (c *Core) finishMember(opID, taskID, why string, blocked bool) error {
 	})
 }
 
-// Reserve every frozen role provider for the whole task; a role transition
-// cannot silently oversubscribe a provider. This is a task cap, not a key quota.
+// Workflow reserves every frozen role provider for the whole task; Delegate
+// reserves only the developer it executes. This is a task cap, not a key quota.
 func taskProviders(st *model.State, t model.Task) []string {
 	out := []string{}
-	for _, id := range t.ProfileIDs {
+	for role, id := range t.ProfileIDs {
+		if t.Origin == OriginDelegate && role != "developer" {
+			continue
+		}
 		for _, p := range st.Profiles {
 			if p.ID == id && !slices.Contains(out, p.Provider) {
 				out = append(out, p.Provider)

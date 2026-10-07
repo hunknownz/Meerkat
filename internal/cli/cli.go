@@ -60,12 +60,13 @@ Via daemon:
   issue update --task ID [--apply]           prepare update; post only with --apply
   mcp                                        MCP stdio: read-only monitor plus model control tools
 Offline:
+  profile list                              discover safe managed execution Profile names; no default chosen
   issue read --url URL --output FILE         read an Issue into an untrusted source file
   migrate   --from DIR [--run-root DIR]... [--backup FILE]
   backup    --output FILE
   restore   --backup FILE --to NEWDIR        restore into a fresh directory only
   export    [--format json|csv] [--output FILE]
-  doctor [--profile /absolute/private/profile.json] [--probe-executor]
+  doctor [--profile NAME|/absolute/private/profile.json] [--probe-executor]
   version | help
 `
 
@@ -99,7 +100,7 @@ func Run(env Env, args []string) int {
 		return ExitOK
 	}
 	run, found := commands[cmd]
-	if cmd == "issue" || cmd == "budget" || cmd == "recovery" || cmd == "control" {
+	if cmd == "issue" || cmd == "budget" || cmd == "recovery" || cmd == "control" || cmd == "profile" {
 		if len(rest) == 0 {
 			return usageFail(env, cmd+" requires a subcommand")
 		}
@@ -140,6 +141,7 @@ func init() {
 		"restore":           cmdRestore,
 		"export":            cmdExport,
 		"doctor":            cmdDoctor,
+		"profile list":      cmdProfileList,
 		"mcp":               cmdMCP,
 		"budget propose":    cmdBudgetPropose,
 		"budget apply":      cmdBudgetApply,

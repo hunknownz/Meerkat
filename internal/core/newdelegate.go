@@ -46,7 +46,7 @@ type DryRun struct {
 // state only to check dependencies/context versions and never writes, reads keys or spawns processes.
 func (c *Core) DryPrepare(raw []byte) (DryRun, error) {
 	var out DryRun
-	v, err := c.validateInput(raw)
+	v, err := c.validateInputFor(raw, true)
 	if err != nil {
 		return out, err
 	}

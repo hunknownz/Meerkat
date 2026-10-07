@@ -102,6 +102,8 @@ test('withDataDir inserts after the command, skips version/help, rejects relativ
   assert.deepEqual(withDataDir(['version'], env), ['version']);
   assert.deepEqual(withDataDir(['snapshot', '--data-dir', '/e'], env), ['snapshot', '--data-dir', '/e']);
   assert.deepEqual(withDataDir(['snapshot'], {}), ['snapshot']);
+  assert.deepEqual(withDataDir(['profile', 'list'], env), ['profile', 'list', '--data-dir', '/d']);
+  assert.deepEqual(withDataDir(['control', 'receipt', '--request-id', 'id'], env), ['control', 'receipt', '--data-dir', '/d', '--request-id', 'id']);
   assert.throws(() => withDataDir(['snapshot'], { MEERKAT_DATA_DIR: 'rel' }), /absolute/);
 });
 

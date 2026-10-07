@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SECRET = 'sk-test-value-that-must-never-appear-0123456789';
 const base = ['--project-id', 'demo', '--provider', 'acme', '--model', 'acme-large-1', '--auth-env', 'ACME_API_KEY'];
+const shared = ['--profile-id', 'shared-pi', ...base.slice(2)];
 
 function run(args, home) {
   const r = spawnSync(process.execPath, [join(root, 'scripts/configure.mjs'), ...args],
@@ -17,6 +18,36 @@ function run(args, home) {
   return r;
 }
 const tmp = () => mkdtempSync(join(tmpdir(), 'mk-conf-'));
+
+test('reusable Profile is named independently and keeps provider configuration outside projects', () => {
+  const home = tmp();
+  try {
+    const r = run([...shared, '--base-url', 'https://llm.example.test/v1', '--api', 'openai-completions'], home);
+    assert.equal(r.status, 0, r.stderr);
+    const file = join(home, '.meerkat', 'profiles', 'shared-pi.json');
+    const profile = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(Object.hasOwn(profile, 'projectId'), false);
+    assert.equal(profile.provider, 'acme');
+    assert.equal(profile.authEnv, 'ACME_API_KEY');
+    assert.equal(profile.piCommand[1], `PI_CODING_AGENT_DIR=${join(home, '.meerkat', 'pi', 'shared-pi')}`);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    assert.deepEqual(profile.instructions, []);
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /sk-test-value/);
+    const before = readFileSync(file, 'utf8');
+    assert.equal(run(shared, home).status, 1);
+    assert.equal(readFileSync(file, 'utf8'), before, 'migration must use a new Profile path');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test('explicit project binding remains supported with an independent Profile name', () => {
+  const home = tmp();
+  try {
+    const r = run([...shared, '--project-id', 'demo'], home);
+    assert.equal(r.status, 0, r.stderr);
+    const profile = JSON.parse(readFileSync(join(home, '.meerkat', 'profiles', 'shared-pi.json'), 'utf8'));
+    assert.equal(profile.projectId, 'demo');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
 
 test('writes a strict private profile with references only (provider config mode)', () => {
   const home = tmp();
@@ -104,6 +135,9 @@ test('refuses symlinked or shared directories', () => {
 test('rejects keys, unsafe names, partial or unsafe endpoints and shell commands', () => {
   const home = tmp();
   const bad = [
+    [[...base.slice(2)], /profile-id/],
+    [['--profile-id', 'Invalid!', ...base.slice(2)], /profile-id/],
+    [[...shared, '--profile-id', 'again'], /repeated/],
     [['--project-id', 'Demo!', ...base.slice(2)], /project-id/],
     [[...base.slice(0, -1), SECRET], /auth-env/],
     [[...base.slice(0, -1), 'acme_api_key'], /auth-env/],

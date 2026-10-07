@@ -11,11 +11,19 @@ the task's isolation and review needs. A coordinator may implement directly;
 do not dispatch merely because the repository uses Meerkat. See
 [execution choices](../../docs/execution.md).
 
-The coordinator prepares a clean linked Git worktree on a task branch and a strict task JSON file outside it: goal, explicit paths, acceptance checks, Context and Profiles. See [task input](../workflow/references/task-input.md). The configured executor implements and makes one scoped local commit.
+The coordinator prepares a clean linked Git worktree on a task branch and strict task JSON: project identity, goal, explicit paths, acceptance checks, necessary Context, budget and the developer Profile. See [task input](../workflow/references/task-input.md). Default to `--input -` via stdin; the frozen contract is saved in the plugin's private SQLite data-dir. If a staging file is needed, use private `<data-dir>/inputs/<unique-id>.json`; keep it outside the entire customer project tree, including any outer directory around a nested Git repository. The configured executor implements and makes one scoped local commit.
 
 Select the private developer Profile before preparation. Executor and model are
 separate choices; only Pi is currently implemented. Changed Profiles need a new
 bounded task, and uncertain requests must not trigger automatic paid fallback.
+Run `profile list` for read-only names/model/limits/binding metadata. Reuse a
+generic Profile without `projectId` across projects; select its managed name or
+private absolute path in `profiles.developer`. Delegate needs only that role;
+legacy three-role inputs remain compatible. Legacy project-bound configs still require a matching
+task project. Missing execution configuration is a setup/selection problem,
+not a requirement to create a customer-specific Profile. Keep the customer's
+business/role contract in curated task Context. Do not write Meerkat routing,
+Profile references, credentials or forced Pi flows into customer repositories.
 
 1. Locate the plugin root relative to this skill (`../..`) and run commands as `node <root>/scripts/launch.mjs <command>`. An existing absolute `meerkat` binary (`MEERKAT_BIN`) is an acceptable fallback. If no runtime or profile exists, follow [get started](../get-started/SKILL.md) / [install](../../docs/install.md). Credentials stay in the profile's named environment variable.
 2. Run `launch.mjs run --input <task-json> --dry-run`.

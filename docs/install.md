@@ -52,12 +52,21 @@ Installation makes no model call and does not choose a provider. Only Pi is
 implemented; direct coordinator work is also an [execution choice](execution.md).
 
 ```sh
-node scripts/configure.mjs --project-id example --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY --base-url https://provider.example/v1 --api openai-completions
+node scripts/configure.mjs --profile-id shared-pi --provider PROVIDER --model MODEL --auth-env MY_PROVIDER_KEY --base-url https://provider.example/v1 --api openai-completions
 ```
 
 The profile/model files hold the credential variable name, never the value.
 Installed Pi uses a Node/CLI array on both OSs; Go sets its isolated directory
 without a system `env` executable. Existing profiles are not overwritten.
+This creates `~/.meerkat/profiles/shared-pi.json` without a project binding.
+Discover safe names with `launch.mjs profile list`. Choose `shared-pi` (or its
+absolute path) for each desired role in any task's `profiles`; the
+task supplies its own project, repository, worktree and Context. The private Pi
+directory holds provider settings, while Go allocates separate task sessions.
+`--project-id example` remains an optional binding; using it alone keeps the
+legacy `profiles/example.json` behavior. See [migration](execution.md#reusable-execution-profiles)
+before replacing any config used by frozen tasks. Setup does not write Meerkat
+requirements, skills or credentials into customer repositories.
 Overrides: `--data-dir`, `--pi-command`. Pi's native provider configuration can be
 used without `--base-url`/`--api`; the budget bridge still requires Pi 0.99.1 text
 HTTP SSE with `openai-completions`.
@@ -68,6 +77,7 @@ Foreground startup and version-only diagnostics:
 
 ```sh
 node scripts/launch.mjs serve --port 47826
+node scripts/launch.mjs profile list
 node scripts/launch.mjs doctor --profile /absolute/private/profile.json --probe-executor
 ```
 

@@ -160,8 +160,11 @@ type ProfileLimits struct {
 // Profile is a frozen, private executor profile snapshot. AuthEnv is an environment variable NAME,
 // never a credential value. Never expose Profile publicly; use Public().
 type Profile struct {
-	ID           string        `json:"id"`
-	ProjectID    string        `json:"projectId"`
+	ID        string `json:"id"`
+	ProjectID string `json:"projectId"`
+	// Reusable marks an unbound source config. ProjectID still owns this frozen
+	// task snapshot; omitted on legacy snapshots to preserve their contracts.
+	Reusable     bool          `json:"reusable,omitempty"`
 	Role         string        `json:"role"`
 	Executor     string        `json:"executor,omitempty"`
 	Provider     string        `json:"provider"`

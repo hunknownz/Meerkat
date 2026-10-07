@@ -372,9 +372,9 @@ func normContext(c *ContextInput) (model.Context, error) {
 	return model.Context{ID: c.ID, Version: c.Version, Text: text, Sources: sources, Digest: ContextDigest(text, sources)}, nil
 }
 
-// profileConfig is the private profile config file format (scripts/run.mjs loadConfig plus optional executor).
+// profileConfig holds private execution settings and an optional legacy project binding.
 type profileConfig struct {
-	ProjectID    string               `json:"projectId"`
+	ProjectID    json.RawMessage      `json:"projectId"`
 	Executor     string               `json:"executor"`
 	Provider     string               `json:"provider"`
 	Model        string               `json:"model"`
@@ -386,9 +386,13 @@ type profileConfig struct {
 
 var authEnvRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`)
 
-// freezeProfile reads a private absolute config file and returns the frozen profile with its digest.
+// freezeProfile reads a private config and returns a project-owned frozen snapshot.
 func freezeProfile(configFile, role, projectID string) (model.Profile, error) {
-	return inspectProfile(configFile, role, &projectID)
+	p, err := inspectProfile(configFile, role, &projectID)
+	if err == nil {
+		p.ProjectID = projectID
+	}
+	return p, err
 }
 
 // InspectProfile validates one explicit private config without creating a Task
@@ -405,7 +409,7 @@ func inspectProfile(configFile, role string, expectedProject *string) (model.Pro
 	}
 	real, err := filepath.EvalSymlinks(configFile)
 	if err != nil {
-		return p, invalid("%s config not found", where)
+		return p, invalid("%s config not found; select an existing execution Profile or configure a reusable one", where)
 	}
 	fi, err := os.Stat(real)
 	if err != nil {
@@ -424,11 +428,14 @@ func inspectProfile(configFile, role string, expectedProject *string) (model.Pro
 	if err := json.Unmarshal(b, &c); err != nil {
 		return p, invalid("%s config is not valid JSON", where)
 	}
-	if expectedProject != nil && c.ProjectID != *expectedProject {
-		return p, invalid("%s config projectId does not match project.id", where)
-	}
-	if !plainRE.MatchString(c.ProjectID) || model.LooksLikeCredential(c.ProjectID) {
-		return p, invalid("%s config projectId must be a plain name", where)
+	projectID := ""
+	if len(c.ProjectID) != 0 {
+		if json.Unmarshal(c.ProjectID, &projectID) != nil || !plainRE.MatchString(projectID) || model.LooksLikeCredential(projectID) {
+			return p, invalid("%s config projectId must be a plain name", where)
+		}
+		if expectedProject != nil && projectID != *expectedProject {
+			return p, invalid("%s config projectId does not match project.id; select a reusable Profile without projectId for cross-project work", where)
+		}
 	}
 	if c.Executor == "" {
 		c.Executor = "pi"
@@ -476,14 +483,18 @@ func inspectProfile(configFile, role string, expectedProject *string) (model.Pro
 	if lim.MaxWallSeconds < 1 || lim.MaxWallSeconds > maxProfileWall || lim.MaxTokens < 1 || lim.MaxTokens > maxProfileTokens {
 		return p, invalid("%s limits out of range", where)
 	}
-	p = model.Profile{ProjectID: c.ProjectID, Role: role, Executor: c.Executor, Provider: c.Provider, Model: c.Model, AuthEnv: c.AuthEnv,
+	p = model.Profile{ProjectID: projectID, Reusable: len(c.ProjectID) == 0, Role: role, Executor: c.Executor, Provider: c.Provider, Model: c.Model, AuthEnv: c.AuthEnv,
 		Instructions: slices.Clone(c.Instructions), Limits: lim, PiCommand: cmd, ConfigFile: real}
 	p.ConfigDigest = profileDigest(p)
 	return p, nil
 }
 
 func profileDigest(p model.Profile) string {
-	return "sha256:" + sha(canonical(toAny(map[string]any{"projectId": p.ProjectID, "executor": p.Executor, "provider": p.Provider,
+	projectID := p.ProjectID
+	if p.Reusable {
+		projectID = ""
+	}
+	return "sha256:" + sha(canonical(toAny(map[string]any{"projectId": projectID, "executor": p.Executor, "provider": p.Provider,
 		"model": p.Model, "authEnv": p.AuthEnv, "instructions": p.Instructions, "limits": p.Limits, "piCommand": p.PiCommand})))
 }
 
@@ -564,6 +575,10 @@ func (c *Core) Prepare(raw []byte) (model.Task, error) { return c.prepare(raw, m
 
 // validateInput performs every pure prepare check (files, Git, executors); no keys, processes or DB writes.
 func (c *Core) validateInput(raw []byte) (validated, error) {
+	return c.validateInputFor(raw, false)
+}
+
+func (c *Core) validateInputFor(raw []byte, delegate bool) (validated, error) {
 	var in Input
 	var task validated
 	if err := decodeStrict(raw, &in, MaxInput); err != nil {
@@ -643,8 +658,12 @@ func (c *Core) validateInput(raw []byte) (validated, error) {
 	for _, role := range model.Roles {
 		cf, ok := in.Profiles[role]
 		if !ok {
+			if delegate && role != "developer" {
+				continue
+			}
 			return task, invalid("profiles.%s is required", role)
 		}
+		cf = ResolveProfileReference(c.st.DataDir(), cf)
 		p, err := freezeProfile(cf, role, projectID)
 		if err != nil {
 			return task, err
@@ -685,7 +704,7 @@ func checkRefs(st *model.State, v validated) (model.ContextRef, error) {
 
 func (c *Core) prepare(raw []byte, origin string) (model.Task, error) {
 	var task model.Task
-	v, err := c.validateInput(raw)
+	v, err := c.validateInputFor(raw, origin == OriginDelegate)
 	if err != nil {
 		return task, err
 	}
@@ -707,7 +726,10 @@ func (c *Core) prepare(raw []byte, origin string) (model.Task, error) {
 		}
 		ids := map[string]string{}
 		for _, role := range model.Roles {
-			f := frozen[role]
+			f, selected := frozen[role]
+			if !selected {
+				continue
+			}
 			i := slices.IndexFunc(st.Profiles, func(p model.Profile) bool {
 				return p.ProjectID == projectID && p.Role == role && p.ConfigDigest == f.ConfigDigest && p.ConfigFile == f.ConfigFile
 			})

@@ -92,7 +92,7 @@ export function withDataDir(args, env = process.env) {
   if (!dir || args.length === 0 || ['help', '-h', '--help', 'version', '--version', '-v'].includes(args[0])) return args;
   if (args.some((a) => a === '--data-dir' || a.startsWith('--data-dir='))) return args;
   if (!isAbsolute(dir)) throw new Error('MEERKAT_DATA_DIR must be an absolute path');
-  const head = args[0] === 'issue' && args.length > 1 ? 2 : 1;
+  const head = ['issue', 'profile', 'budget', 'recovery', 'control'].includes(args[0]) && args.length > 1 ? 2 : 1;
   return [...args.slice(0, head), '--data-dir', dir, ...args.slice(head)];
 }
 

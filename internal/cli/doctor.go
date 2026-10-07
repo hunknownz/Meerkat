@@ -87,7 +87,7 @@ func cmdDoctor(env Env, args []string) (int, error) {
 	if *profile == "" {
 		add("executor.profile", "not_checked", "No profile was selected; executor, model and credentials were not inspected.", "Supply --profile /absolute/private/profile.json to check one profile.")
 	} else {
-		p, e := core.InspectProfile(*profile)
+		p, e := core.InspectProfile(core.ResolveProfileReference(dir, *profile))
 		if e != nil {
 			add("executor.profile", "blocked", "The selected profile failed the same private-file/config validation used by prepare.", "Check the absolute path, private ownership, config fields and limits.")
 		} else {

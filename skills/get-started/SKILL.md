@@ -15,8 +15,12 @@ skill (`../..`) and read [INSTALL.md](../../INSTALL.md), then [install](../../do
 2. Read the installation result. Reuse the matching controller; preserve another
    marketplace or service version for explicit idle backup/update. Complete
    reported registration with the actual Codex executable.
-3. Reuse a private Profile, or obtain project ID, provider, model, endpoint and
-   credential environment-variable **name**. Run `configure.mjs`. Only Pi is
+3. Run `launch.mjs profile list` for safe, read-only managed Profile names,
+   model/limits and project binding metadata. Reuse a private execution Profile,
+   or obtain a neutral Profile ID, provider,
+   model, endpoint and credential environment-variable **name**. Run
+   `configure.mjs --profile-id <id> ...` without `--project-id` for cross-project
+   reuse. A legacy bound Profile remains valid only for its own project. Only Pi is
    implemented; the bridge needs Pi 0.99.1 text HTTP SSE/openai-completions.
 4. Let the user set the key in the service environment. Never request, print or
    store it. An earlier keyless service needs a deliberate idle restart.
@@ -31,3 +35,8 @@ Report runtime, service, registration, configuration, real task and native
 display separately. Installation does not authorize a paid task. Select
 [direct work, delegation or workflow](../../docs/execution.md) after setup.
 Remote actions require the user's authorization.
+
+Keep setup private to the plugin/service. Do not add Meerkat invocation rules,
+Profile references, credentials or required Pi workflows to customer AGENTS,
+skills or application configuration. Project identity and necessary business
+contracts arrive through each explicitly chosen task input.

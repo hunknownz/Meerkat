@@ -2,7 +2,7 @@
 
 Local agent delivery for Git projects. A coordinator defines the task and prepares a linked worktree. Meerkat runs development, review, bounded fixes, polish and final review, then records local delivery and actual usage.
 
-Meerkat is a general tool. Projects supply their own requirements, private profiles and repository paths. The first executor is Pi; the scheduler depends on a generic Executor interface.
+Meerkat is a general tool. Tasks supply project identity, requirements and repository paths; private execution Profiles can be reused across projects. The first executor is Pi; the scheduler depends on a generic Executor interface.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ flowchart LR
 
 | Term | Meaning |
 | --- | --- |
-| Project | A registered Git repository and its private profiles. |
+| Project | Task ownership, registered Git repositories and project concurrency. |
 | Task | One bounded goal, explicit paths, acceptance checks, dependencies and budget. |
 | Operation | A durable dispatch receipt for selected tasks; completion records their outcomes, not code acceptance. |
 | Context | Curated decisions and source references, frozen by version and digest. It is not a shared chat transcript. |

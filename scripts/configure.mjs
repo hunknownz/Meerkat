@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Write a private Pi executor profile that stores only provider/model/authEnv references, never a key.
 //
-// Usage: node scripts/configure.mjs --project-id SLUG --provider ID --model ID --auth-env ENV
+// Usage: node scripts/configure.mjs --profile-id SLUG --provider ID --model ID --auth-env ENV
+//          [--project-id SLUG] (optional legacy project binding)
 //          [--data-dir DIR] [--base-url URL] [--api openai-completions] [--pi-command ABS]
 // Writes <data-dir>/profiles/<slug>.json (default data dir ~/.meerkat). With --base-url/--api it also writes an
-// isolated Pi agent directory <data-dir>/pi/<slug>/models.json whose apiKey is the literal "${ENV}" reference.
+// private Pi provider directory <data-dir>/pi/<slug>/models.json whose apiKey is the literal "${ENV}" reference.
+// Task worktrees, context and sessions are supplied/isolated by Go, not by this directory.
 // The API key itself stays in the inherited service environment; this script never reads it.
 import { ensurePrivateDir, privatePath, protectNewFile } from './lib/private.mjs';
 import { managedPiCommand } from './lib/executor-install.mjs';
@@ -19,7 +21,7 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/;
 const APIS = ['openai-completions'];
 const CREDENTIAL = /(sk-|ghp_|gho_|github_pat_|AKIA|xox[abprs]-|AIza|bearer)/i;
-const FLAGS = { '--project-id': 'projectId', '--provider': 'provider', '--model': 'model', '--auth-env': 'authEnv',
+const FLAGS = { '--profile-id': 'profileId', '--project-id': 'projectId', '--provider': 'provider', '--model': 'model', '--auth-env': 'authEnv',
   '--data-dir': 'dataDir', '--base-url': 'baseUrl', '--api': 'api', '--pi-command': 'piCommand', '--pi-cli': 'piCLI' };
 
 export function parseArgs(argv) {
@@ -33,7 +35,9 @@ export function parseArgs(argv) {
 }
 
 export function validate(o, home = homedir()) {
-  if (!SLUG.test(o.projectId ?? '')) throw new Error('--project-id must be a lowercase slug (max 63)');
+  if (o.projectId !== undefined && !SLUG.test(o.projectId)) throw new Error('--project-id must be a lowercase slug (max 63)');
+  const profileId = o.profileId ?? o.projectId;
+  if (!SLUG.test(profileId ?? '')) throw new Error('--profile-id must be a lowercase slug (max 63); --project-id alone remains a legacy bound Profile');
   if (!PROVIDER.test(o.provider ?? '') || CREDENTIAL.test(o.provider)) throw new Error('--provider must be a plain name');
   if (!MODEL.test(o.model ?? '') || CREDENTIAL.test(o.model)) throw new Error('--model must be a plain model id');
   if (!ENV_NAME.test(o.authEnv ?? '') || CREDENTIAL.test(o.authEnv)) throw new Error('--auth-env must be an environment variable NAME (e.g. MY_PROVIDER_KEY), not a key');
@@ -64,7 +68,7 @@ export function validate(o, home = homedir()) {
   if(o.piCLI !== undefined) {
     if(!o.piCommand || !isAbsolute(o.piCLI) || CREDENTIAL.test(o.piCLI) || !statSync(o.piCLI).isFile() || !['node','node.exe'].includes(pi.split(/[\\/]/).pop())) throw new Error('--pi-cli needs an absolute Pi CLI file and an explicit Node --pi-command');
   }
-  return { ...o, dataDir: resolve(dataDir), baseUrl, pi };
+  return { ...o, profileId, dataDir: resolve(dataDir), baseUrl, pi };
 }
 
 // Existing directories must be plain directories owned by the user; private ones must also be 0700.
@@ -84,8 +88,8 @@ function writePrivate(file, value) {
 export function configure(opts) {
   const c = validate(opts);
   const profilesDir = join(c.dataDir, 'profiles');
-  const profile = join(profilesDir, `${c.projectId}.json`);
-  const piDir = join(c.dataDir, 'pi', c.projectId);
+  const profile = join(profilesDir, `${c.profileId}.json`);
+  const piDir = join(c.dataDir, 'pi', c.profileId);
   const models = join(piDir, 'models.json');
   ensureDir(c.dataDir, false);
   ensureDir(profilesDir, true);
@@ -102,7 +106,8 @@ export function configure(opts) {
     piCommand = ['env', `PI_CODING_AGENT_DIR=${piDir}`, ...piCommand];
   }
   writePrivate(profile, {
-    projectId: c.projectId, executor: 'pi', provider: c.provider, model: c.model, authEnv: c.authEnv,
+    ...(c.projectId !== undefined ? { projectId: c.projectId } : {}),
+    executor: 'pi', provider: c.provider, model: c.model, authEnv: c.authEnv,
     piCommand, instructions: [], limits: { maxTokens: 500000, maxWallSeconds: 600 },
   });
   return { profile, authEnv: c.authEnv };
